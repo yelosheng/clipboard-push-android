@@ -13,7 +13,7 @@ echo 正在启动客户端...
 echo 服务器地址: 请检查 config.json
 echo.
 
-start "Clipboard Man Client - Minimized" /min cmd /c "python clipboard_man_client.py"
+start "Clipboard Man Client - Minimized to SysTray" /min cmd /c "python clipboard_man_client.py"
 
 if errorlevel 1 (
     echo.
