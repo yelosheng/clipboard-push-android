@@ -346,14 +346,6 @@ fun MainNavigation(
                 serverAddress = serverAddress,
                 useHttps = useHttps,
                 messages = messages,
-                onConnectClick = {
-                    if (serverAddress.isNotBlank()) {
-                        onStartService()
-                    }
-                },
-                onDisconnectClick = {
-                    onStopService()
-                },
                 onSettingsClick = {
                     navController.navigate("settings")
                 },
@@ -370,6 +362,15 @@ fun MainNavigation(
                 fileHandleMode = fileHandleMode,
                 autoConnect = autoConnect,
                 maxHistoryCount = maxHistoryCount,
+                connectionState = connectionState,
+                onConnectClick = {
+                    if (serverAddress.isNotBlank()) {
+                        onStartService()
+                    }
+                },
+                onDisconnectClick = {
+                    onStopService()
+                },
                 onServerAddressChange = { viewModel.saveServerAddress(it) },
                 onUseHttpsChange = { viewModel.saveUseHttps(it) },
                 onFileHandleModeChange = { viewModel.saveFileHandleMode(it) },

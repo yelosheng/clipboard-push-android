@@ -51,8 +51,6 @@ fun HomeScreen(
     serverAddress: String,
     useHttps: Boolean,
     messages: List<PushMessage>,
-    onConnectClick: () -> Unit,
-    onDisconnectClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onMessageClick: (PushMessage) -> Unit,
     onDeleteMessages: (Set<String>) -> Unit = {},

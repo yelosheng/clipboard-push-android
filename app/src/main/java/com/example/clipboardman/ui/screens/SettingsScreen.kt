@@ -14,7 +14,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.dp
+import com.example.clipboardman.data.model.ConnectionState
 import com.example.clipboardman.data.repository.SettingsRepository
+import com.example.clipboardman.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -23,7 +26,11 @@ fun SettingsScreen(
     useHttps: Boolean,
     fileHandleMode: Int,
     autoConnect: Boolean,
+
     maxHistoryCount: Int,
+    connectionState: ConnectionState,
+    onConnectClick: () -> Unit,
+    onDisconnectClick: () -> Unit,
     onServerAddressChange: (String) -> Unit,
     onUseHttpsChange: (Boolean) -> Unit,
     onFileHandleModeChange: (Int) -> Unit,
@@ -108,6 +115,50 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // 连接状态和按钮
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val statusText = when (connectionState) {
+                            ConnectionState.CONNECTED -> "已连接"
+                            ConnectionState.CONNECTING -> "连接中..."
+                            ConnectionState.DISCONNECTED -> "未连接"
+                            ConnectionState.ERROR -> "连接错误"
+                        }
+                        val statusColor = when (connectionState) {
+                            ConnectionState.CONNECTED -> Green500
+                            ConnectionState.CONNECTING -> Orange500
+                            ConnectionState.ERROR -> Red500
+                            ConnectionState.DISCONNECTED -> Grey500
+                        }
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "当前状态: $statusText",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = statusColor
+                            )
+                        }
+
+                        Button(
+                            onClick = {
+                                when (connectionState) {
+                                    ConnectionState.CONNECTED, ConnectionState.CONNECTING -> onDisconnectClick()
+                                    else -> onConnectClick()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (connectionState == ConnectionState.CONNECTED || connectionState == ConnectionState.CONNECTING) Red500 else MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            Text(if (connectionState == ConnectionState.CONNECTED || connectionState == ConnectionState.CONNECTING) "断开" else "连接")
+                        }
+                    }
                 }
             }
 
