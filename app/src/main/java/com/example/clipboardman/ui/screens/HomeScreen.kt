@@ -14,10 +14,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.example.clipboardman.data.model.ConnectionState
 import com.example.clipboardman.data.model.PushMessage
 import com.example.clipboardman.ui.theme.*
@@ -35,6 +39,13 @@ fun HomeScreen(
     onSettingsClick: () -> Unit,
     onMessageClick: (PushMessage) -> Unit
 ) {
+    // 构建基础URL
+    val baseUrl = remember(serverAddress) {
+        if (serverAddress.isBlank()) ""
+        else if (serverAddress.startsWith("http")) serverAddress
+        else "http://$serverAddress"
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -96,6 +107,7 @@ fun HomeScreen(
                     items(messages, key = { it.id }) { message ->
                         MessageItem(
                             message = message,
+                            baseUrl = baseUrl,
                             onClick = { onMessageClick(message) }
                         )
                     }
@@ -195,8 +207,11 @@ fun ConnectionStatusBar(
 @Composable
 fun MessageItem(
     message: PushMessage,
+    baseUrl: String,
     onClick: () -> Unit
 ) {
+    val isImage = message.type == PushMessage.TYPE_IMAGE
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -257,17 +272,46 @@ fun MessageItem(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // 消息内容
-            Text(
-                text = message.content ?: message.fileName ?: message.fileUrl ?: "",
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 4,
-                overflow = TextOverflow.Ellipsis
-            )
+            // 图片缩略图
+            if (isImage && message.fileUrl != null && baseUrl.isNotBlank()) {
+                val imageUrl = "$baseUrl${message.fileUrl}"
 
-            // 文件信息
-            if (message.isFileType && message.fileName != null) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(imageUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = message.fileName,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 200.dp)
+                        .clip(RoundedCornerShape(8.dp)),
+                    contentScale = ContentScale.Crop
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 文件名
+                Text(
+                    text = message.fileName ?: "",
+                    fontSize = 12.sp,
+                    color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            } else {
+                // 文本或其他类型的消息内容
+                Text(
+                    text = message.content ?: message.fileName ?: message.fileUrl ?: "",
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            // 文件大小信息
+            if (message.isFileType && message.fileSize != null && message.fileSize > 0) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = formatFileSize(message.fileSize),
