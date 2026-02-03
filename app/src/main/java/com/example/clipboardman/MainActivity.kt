@@ -26,9 +26,16 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.net.Uri
 import android.widget.Toast
+import androidx.core.content.FileProvider
 import com.example.clipboardman.data.model.ConnectionState
 import com.example.clipboardman.data.model.PushMessage
-import com.example.clipboardman.data.repository.SettingsRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.io.File
 import com.example.clipboardman.service.ClipboardService
 import com.example.clipboardman.ui.screens.HomeScreen
 import com.example.clipboardman.ui.screens.SettingsScreen
@@ -184,19 +191,67 @@ class MainActivity : ComponentActivity() {
     private fun openFileWithSystem(message: PushMessage, serverAddress: String) {
         val baseUrl = if (serverAddress.startsWith("http")) serverAddress else "http://$serverAddress"
         val fileUrl = "$baseUrl${message.fileUrl}"
+        val fileName = message.fileName ?: "file"
         val mimeType = message.mimeType ?: "*/*"
 
+        Toast.makeText(this, "正在下载...", Toast.LENGTH_SHORT).show()
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                // 下载文件到缓存目录
+                val client = OkHttpClient()
+                val request = Request.Builder().url(fileUrl).build()
+                val response = client.newCall(request).execute()
+
+                if (!response.isSuccessful) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@MainActivity, "下载失败", Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+
+                // 保存到缓存目录
+                val cacheDir = File(cacheDir, "shared_files")
+                cacheDir.mkdirs()
+                val localFile = File(cacheDir, fileName)
+
+                response.body?.byteStream()?.use { input ->
+                    localFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+
+                withContext(Dispatchers.Main) {
+                    openLocalFile(localFile, mimeType, message.type)
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "打开失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun openLocalFile(file: File, mimeType: String, messageType: String) {
         try {
+            val uri = FileProvider.getUriForFile(
+                this,
+                "${packageName}.fileprovider",
+                file
+            )
+
             val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(Uri.parse(fileUrl), mimeType)
+                setDataAndType(uri, mimeType)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            val chooserTitle = when {
-                message.type == PushMessage.TYPE_IMAGE -> "选择图片查看器"
-                message.type == PushMessage.TYPE_VIDEO -> "选择视频播放器"
-                message.type == PushMessage.TYPE_AUDIO -> "选择音频播放器"
+
+            val chooserTitle = when (messageType) {
+                PushMessage.TYPE_IMAGE -> "选择图片查看器"
+                PushMessage.TYPE_VIDEO -> "选择视频播放器"
+                PushMessage.TYPE_AUDIO -> "选择音频播放器"
                 else -> "选择打开方式"
             }
+
             val chooser = Intent.createChooser(intent, chooserTitle)
             startActivity(chooser)
         } catch (e: Exception) {
