@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.animation.animateColorAsState
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
@@ -110,7 +111,7 @@ fun HomeScreen(
                                 selectedMessageIds = if (selectedMessageIds.size == messages.size) {
                                     emptySet()
                                 } else {
-                                    messages.map { it.id }.toSet()
+                                    messages.map { it.safeId }.toSet()
                                 }
                             }
                         ) {
@@ -224,20 +225,20 @@ fun HomeScreen(
                 ) {
                     itemsIndexed(
                         items = messages,
-                        key = { _, message -> message.id }
+                        key = { _, message -> message.safeId }
                     ) { _, message ->
                         SwipeableMessageItem(
                             message = message,
                             baseUrl = baseUrl,
                             isSelectionMode = isSelectionMode,
-                            isSelected = selectedMessageIds.contains(message.id),
+                            isSelected = selectedMessageIds.contains(message.safeId),
                             onClick = {
                                 if (isSelectionMode) {
                                     // 选择模式下切换选中状态
-                                    selectedMessageIds = if (message.id in selectedMessageIds) {
-                                        selectedMessageIds - message.id
+                                    selectedMessageIds = if (message.safeId in selectedMessageIds) {
+                                        selectedMessageIds - message.safeId
                                     } else {
-                                        selectedMessageIds + message.id
+                                        selectedMessageIds + message.safeId
                                     }
                                 } else {
                                     // 普通模式下执行点击操作
@@ -247,10 +248,10 @@ fun HomeScreen(
                             onLongClick = {
                                 // 长按进入选择模式并选中当前项
                                 isSelectionMode = true
-                                selectedMessageIds = setOf(message.id)
+                                selectedMessageIds = setOf(message.safeId)
                             },
                             onDelete = {
-                                onDeleteMessages(setOf(message.id))
+                                onDeleteMessages(setOf(message.safeId))
                             }
                         )
                     }
@@ -286,7 +287,16 @@ fun SwipeableMessageItem(
     val density = LocalDensity.current
     val actionWidth = 80.dp
     val actionWidthPx = with(density) { actionWidth.toPx() }
-    val offsetX = remember { Animatable(0f) }
+
+    // 使用普通状态跟踪实际偏移（同步更新）
+    var currentOffset by remember { mutableFloatStateOf(0f) }
+    // 动画控制器（用于释放后的动画）
+    val animatedOffset = remember { Animatable(0f) }
+    // 是否正在拖动
+    var isDragging by remember { mutableStateOf(false) }
+    // 显示用的偏移量
+    val displayOffset = if (isDragging) currentOffset else animatedOffset.value
+
     val scope = rememberCoroutineScope()
 
     Box(
@@ -297,11 +307,12 @@ fun SwipeableMessageItem(
         Box(
             modifier = Modifier
                 .width(actionWidth)
-                .fillMaxHeight() // 高度会跟随父容器（由前景 Card 决定）
+                .fillMaxHeight()
                 .background(Red500, RoundedCornerShape(12.dp))
                 .clickable {
                     onDelete()
-                    scope.launch { offsetX.snapTo(0f) }
+                    currentOffset = 0f
+                    scope.launch { animatedOffset.snapTo(0f) }
                 },
             contentAlignment = Alignment.Center
         ) {
@@ -325,22 +336,37 @@ fun SwipeableMessageItem(
         // 前景内容
         Box(
             modifier = Modifier
-                .offset { IntOffset(offsetX.value.roundToInt(), 0) }
+                .offset { IntOffset(displayOffset.roundToInt(), 0) }
                 .draggable(
-                    orientation = androidx.compose.foundation.gestures.Orientation.Horizontal,
-                    state = androidx.compose.foundation.gestures.rememberDraggableState { delta ->
-                        scope.launch {
-                            val targetValue = (offsetX.value + delta).coerceIn(-actionWidthPx, 0f)
-                            offsetX.snapTo(targetValue)
-                        }
+                    orientation = Orientation.Horizontal,
+                    state = rememberDraggableState { delta ->
+                        // 同步更新，不用 launch
+                        currentOffset = (currentOffset + delta).coerceIn(-actionWidthPx, 0f)
                     },
-                    onDragStopped = {
-                        if (offsetX.value < -actionWidthPx / 2) {
-                            // 超过一半，展开
-                            scope.launch { offsetX.animateTo(-actionWidthPx) }
-                        } else {
-                            // 否则收回
-                            scope.launch { offsetX.animateTo(0f) }
+                    onDragStarted = {
+                        isDragging = true
+                    },
+                    onDragStopped = { velocity ->
+                        scope.launch {
+                            // 根据当前位置和滑动速度决定目标位置
+                            val target = when {
+                                // 快速向左滑动，展开
+                                velocity < -500f -> -actionWidthPx
+                                // 快速向右滑动，收回
+                                velocity > 500f -> 0f
+                                // 超过一半，展开
+                                currentOffset < -actionWidthPx / 2 -> -actionWidthPx
+                                // 否则收回
+                                else -> 0f
+                            }
+                            // 先同步动画器到当前位置
+                            animatedOffset.snapTo(currentOffset)
+                            // 切换到动画模式
+                            isDragging = false
+                            // 执行动画
+                            animatedOffset.animateTo(target)
+                            // 更新当前偏移
+                            currentOffset = target
                         }
                     }
                 )
@@ -351,9 +377,12 @@ fun SwipeableMessageItem(
                 isSelectionMode = isSelectionMode,
                 isSelected = isSelected,
                 onClick = {
-                    if (offsetX.value < -10f) {
+                    if (displayOffset < -10f) {
                         // 如果已展开，点击则收回
-                        scope.launch { offsetX.animateTo(0f) }
+                        scope.launch {
+                            animatedOffset.animateTo(0f)
+                            currentOffset = 0f
+                        }
                     } else {
                         onClick()
                     }

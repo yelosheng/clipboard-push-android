@@ -246,30 +246,47 @@ class ClipboardService : Service() {
      * 处理收到的消息
      */
     private fun handleMessage(message: PushMessage) {
-        Log.d(TAG, "Handling message: type=${message.type}, content=${message.content?.take(50)}")
+        try {
+            Log.d(TAG, "Handling message: type=${message.type}, content=${message.content?.take(50)}")
 
-        // 保存到内存历史记录
-        synchronized(messageHistory) {
-            messageHistory.add(0, message)
-            if (messageHistory.size > maxMessages) {
-                messageHistory.removeAt(messageHistory.size - 1)
+            // 保存到内存历史记录
+            synchronized(messageHistory) {
+                messageHistory.add(0, message)
+                if (messageHistory.size > maxMessages) {
+                    messageHistory.removeAt(messageHistory.size - 1)
+                }
             }
-        }
 
-        // 持久化到本地存储
-        serviceScope.launch {
-            val currentMessages = getMessageHistory()
-            messageRepository.saveMessages(currentMessages)
-        }
-
-        // 通知 UI 更新消息列表
-        onMessageReceived?.invoke(message)
-
-        serviceScope.launch {
-            when {
-                message.isTextType -> handleTextMessage(message)
-                message.isFileType -> handleFileMessage(message)
+            // 持久化到本地存储
+            serviceScope.launch {
+                try {
+                    val currentMessages = getMessageHistory()
+                    messageRepository.saveMessages(currentMessages)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to save messages: ${e.message}", e)
+                }
             }
+
+            // 通知 UI 更新消息列表
+            try {
+                onMessageReceived?.invoke(message)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to notify UI: ${e.message}", e)
+            }
+
+            // 处理消息内容（剪贴板、文件下载等）
+            serviceScope.launch {
+                try {
+                    when {
+                        message.isTextType -> handleTextMessage(message)
+                        message.isFileType -> handleFileMessage(message)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to handle message content: ${e.message}", e)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in handleMessage: ${e.message}", e)
         }
     }
 
@@ -288,16 +305,24 @@ class ClipboardService : Service() {
     private fun handleTextMessage(message: PushMessage) {
         val content = message.content ?: return
 
-        // 写入剪贴板
-        val success = clipboardHelper.copyText(content)
+        try {
+            // 写入剪贴板
+            val success = clipboardHelper.copyText(content)
 
-        if (success) {
-            // 显示通知
+            // 显示通知（无论剪贴板是否成功都显示）
             NotificationHelper.showPushNotification(
                 this,
-                "收到文本",
+                if (success) "收到文本" else "收到文本（剪贴板写入受限）",
                 content.take(100)
             )
+        } catch (e: Exception) {
+            Log.e(TAG, "Error handling text message: ${e.message}", e)
+            // 尝试至少显示通知
+            try {
+                NotificationHelper.showPushNotification(this, "收到文本", content.take(100))
+            } catch (e2: Exception) {
+                Log.e(TAG, "Failed to show notification: ${e2.message}", e2)
+            }
         }
     }
 
@@ -305,32 +330,48 @@ class ClipboardService : Service() {
      * 处理文件消息
      */
     private suspend fun handleFileMessage(message: PushMessage) {
-        val fileUrl = message.fileUrl ?: return
-        val fileName = message.fileName ?: "unknown_file"
-        val mimeType = message.mimeType ?: FileUtil.getMimeType(fileName)
+        try {
+            val fileUrl = message.fileUrl ?: return
+            val fileName = message.fileName ?: "unknown_file"
+            val mimeType = message.mimeType ?: FileUtil.getMimeType(fileName)
 
-        // 获取文件处理模式
-        val fileMode = settingsRepository.fileHandleModeFlow.first()
-        val baseUrl = settingsRepository.getHttpBaseUrl(serverAddress, useHttps)
-        val fullUrl = "$baseUrl$fileUrl"
+            // 获取文件处理模式
+            val fileMode = settingsRepository.fileHandleModeFlow.first()
+            val baseUrl = settingsRepository.getHttpBaseUrl(serverAddress, useHttps)
+            val fullUrl = "$baseUrl$fileUrl"
 
-        when (fileMode) {
-            SettingsRepository.FILE_MODE_SAVE_LOCAL -> {
-                // 下载文件到本地
-                downloadAndSaveFile(fullUrl, fileName, mimeType, copyImageToClipboard = false)
+            Log.d(TAG, "Processing file message: fileName=$fileName, mimeType=$mimeType, mode=$fileMode")
+
+            when (fileMode) {
+                SettingsRepository.FILE_MODE_SAVE_LOCAL -> {
+                    // 下载文件到本地
+                    downloadAndSaveFile(fullUrl, fileName, mimeType, copyImageToClipboard = false)
+                }
+                SettingsRepository.FILE_MODE_COPY_REFERENCE -> {
+                    // 复制文件 URL
+                    clipboardHelper.copyFileReference(fullUrl, fileName)
+                    NotificationHelper.showPushNotification(
+                        this,
+                        "收到文件",
+                        "$fileName\nURL已复制到剪贴板"
+                    )
+                }
+                SettingsRepository.FILE_MODE_SAVE_AND_COPY_IMAGE -> {
+                    // 保存并复制图片到剪贴板
+                    downloadAndSaveFile(fullUrl, fileName, mimeType, copyImageToClipboard = true)
+                }
             }
-            SettingsRepository.FILE_MODE_COPY_REFERENCE -> {
-                // 复制文件 URL
-                clipboardHelper.copyFileReference(fullUrl, fileName)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error handling file message: ${e.message}", e)
+            // 尝试显示错误通知
+            try {
                 NotificationHelper.showPushNotification(
                     this,
-                    "收到文件",
-                    "$fileName\nURL已复制到剪贴板"
+                    "文件处理失败",
+                    "${message.fileName ?: "未知文件"}: ${e.message}"
                 )
-            }
-            SettingsRepository.FILE_MODE_SAVE_AND_COPY_IMAGE -> {
-                // 保存并复制图片到剪贴板
-                downloadAndSaveFile(fullUrl, fileName, mimeType, copyImageToClipboard = true)
+            } catch (e2: Exception) {
+                Log.e(TAG, "Failed to show error notification: ${e2.message}", e2)
             }
         }
     }

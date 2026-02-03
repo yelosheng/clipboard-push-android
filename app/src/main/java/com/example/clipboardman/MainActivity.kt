@@ -246,7 +246,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 withContext(Dispatchers.Main) {
-                    openLocalFile(localFile, mimeType, message.type)
+                    openLocalFile(localFile, mimeType, message.type ?: PushMessage.TYPE_FILE)
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {

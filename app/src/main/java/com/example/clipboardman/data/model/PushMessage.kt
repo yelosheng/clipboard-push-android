@@ -8,10 +8,10 @@ import com.google.gson.annotations.SerializedName
  */
 data class PushMessage(
     @SerializedName("id")
-    val id: String,
+    val id: String? = null,
 
     @SerializedName("type")
-    val type: String,  // "text", "image", "video", "audio", "file", "connected"
+    val type: String? = null,  // "text", "image", "video", "audio", "file", "connected"
 
     @SerializedName("content")
     val content: String? = null,
@@ -42,6 +42,12 @@ data class PushMessage(
         const val TYPE_FILE = "file"
         const val TYPE_CONNECTED = "connected"
     }
+
+    /**
+     * 安全的 ID，如果原始 id 为空则基于消息内容生成稳定的唯一 ID
+     */
+    val safeId: String
+        get() = id ?: "msg_${type}_${timestamp}_${content?.hashCode() ?: 0}_${fileUrl?.hashCode() ?: 0}"
 
     val isTextType: Boolean
         get() = type == TYPE_TEXT
