@@ -70,7 +70,7 @@ object NotificationHelper {
     }
 
     /**
-     * 显示推送消息通知
+     * 显示推送消息通知（带声音和弹出）
      */
     fun showPushNotification(
         context: Context,
@@ -87,13 +87,16 @@ object NotificationHelper {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val notification = NotificationCompat.Builder(context, ClipboardManApp.NOTIFICATION_CHANNEL_ID)
+        // 使用推送通知渠道（高优先级，有声音）
+        val notification = NotificationCompat.Builder(context, ClipboardManApp.NOTIFICATION_CHANNEL_PUSH)
             .setContentTitle(title)
             .setContentText(content)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)  // 高优先级
+            .setDefaults(NotificationCompat.DEFAULT_ALL)    // 默认声音、振动、灯光
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .build()
 
         val notificationManager = context.getSystemService(NotificationManager::class.java)
