@@ -299,10 +299,9 @@ fun MessageItem(
                         .build(),
                     contentDescription = message.fileName,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 200.dp)
+                        .heightIn(max = 120.dp)
                         .clip(RoundedCornerShape(8.dp)),
-                    contentScale = ContentScale.Crop
+                    contentScale = ContentScale.Fit
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
