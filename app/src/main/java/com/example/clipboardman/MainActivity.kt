@@ -189,17 +189,18 @@ class MainActivity : ComponentActivity() {
         try {
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(Uri.parse(fileUrl), mimeType)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            startActivity(intent)
+            val chooserTitle = when {
+                message.type == PushMessage.TYPE_IMAGE -> "选择图片查看器"
+                message.type == PushMessage.TYPE_VIDEO -> "选择视频播放器"
+                message.type == PushMessage.TYPE_AUDIO -> "选择音频播放器"
+                else -> "选择打开方式"
+            }
+            val chooser = Intent.createChooser(intent, chooserTitle)
+            startActivity(chooser)
         } catch (e: Exception) {
-            // 如果没有应用可以打开，尝试用浏览器打开
-            try {
-                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(fileUrl))
-                startActivity(browserIntent)
-            } catch (e2: Exception) {
-                Toast.makeText(this, "无法打开文件", Toast.LENGTH_SHORT).show()
-            }
+            Toast.makeText(this, "无法打开文件: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 }
