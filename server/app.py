@@ -29,7 +29,17 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 CORS(app)
 
 # WebSocket (Socket.IO for web client)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+# async_mode='eventlet' 适合生产环境
+# engineio_logger=True 用于调试 nginx 反向代理问题
+socketio = SocketIO(
+    app, 
+    cors_allowed_origins="*",
+    async_mode='eventlet',
+    logger=False,
+    engineio_logger=False,
+    ping_timeout=60,
+    ping_interval=25
+)
 
 # Native WebSocket (for Android client)
 sock = Sock(app)

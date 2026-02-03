@@ -216,6 +216,12 @@ def new_message(data):
         source = data.get('source', 'Unknown')
         timestamp = data.get('timestamp', '')
 
+        # 忽略本机推送工具发送的消息 (避免回声)
+        if source == 'pc_push_tool':
+            logger.info("忽略本机推送的消息")
+            return
+
+
         panel_content = f"[bold cyan]来源:[/bold cyan] {source}\n[bold cyan]时间:[/bold cyan] {timestamp}\n\n"
         status_msg = ""
         success = False
