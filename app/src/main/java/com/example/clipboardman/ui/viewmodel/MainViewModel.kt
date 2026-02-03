@@ -31,8 +31,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun loadMessagesFromStorage() {
         viewModelScope.launch {
             messageRepository.messagesFlow.first().let { storedMessages ->
-                if (_messages.value.isEmpty() && storedMessages.isNotEmpty()) {
-                    _messages.value = storedMessages
+                if (storedMessages.isNotEmpty()) {
+                    val maxCount = maxHistoryCount.value
+                    val existingIds = _messages.value.map { it.id }.toSet()
+                    val newMessages = storedMessages.filter { it.id !in existingIds }
+                    _messages.value = (_messages.value + newMessages)
+                        .distinctBy { it.id }
+                        .take(maxCount)
                 }
             }
         }
@@ -65,16 +70,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * 添加新消息 (由 Service 调用)
      */
     fun addMessage(message: PushMessage) {
+        // 检查是否已存在相同ID的消息，避免重复
+        if (_messages.value.any { it.id == message.id }) {
+            return
+        }
         val maxCount = maxHistoryCount.value
         _messages.value = listOf(message) + _messages.value.take(maxCount - 1)
     }
 
     /**
-     * 同步消息列表（从 Service 获取历史消息）
+     * 同步消息列表（从本地存储恢复）
      */
     fun syncMessages(messages: List<PushMessage>) {
         val maxCount = maxHistoryCount.value
-        _messages.value = messages.take(maxCount)
+        // 合并现有消息和新消息，去重后取前maxCount条
+        val existingIds = _messages.value.map { it.id }.toSet()
+        val newMessages = messages.filter { it.id !in existingIds }
+        _messages.value = (_messages.value + newMessages)
+            .distinctBy { it.id }
+            .take(maxCount)
     }
 
     /**
@@ -82,6 +96,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun clearMessages() {
         _messages.value = emptyList()
+        viewModelScope.launch {
+            messageRepository.clearMessages()
+        }
+    }
+
+    /**
+     * 删除指定消息
+     */
+    fun deleteMessages(messageIds: Set<String>) {
+        _messages.value = _messages.value.filter { it.id !in messageIds }
+        viewModelScope.launch {
+            messageRepository.saveMessages(_messages.value)
+        }
     }
 
     /**

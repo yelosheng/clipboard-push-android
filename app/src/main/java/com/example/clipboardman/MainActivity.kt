@@ -42,6 +42,7 @@ import com.example.clipboardman.ui.screens.HomeScreen
 import com.example.clipboardman.ui.screens.SettingsScreen
 import com.example.clipboardman.ui.theme.ClipboardManTheme
 import com.example.clipboardman.ui.viewmodel.MainViewModel
+import android.util.Log
 
 class MainActivity : ComponentActivity() {
 
@@ -71,9 +72,13 @@ class MainActivity : ComponentActivity() {
             val currentState = clipboardService?.getConnectionState() ?: ConnectionState.DISCONNECTED
             mainViewModel?.updateConnectionState(currentState)
 
-            // 同步消息历史（恢复后台收到的消息）
-            clipboardService?.getMessageHistory()?.let { history ->
-                mainViewModel?.syncMessages(history)
+            // 同步消息历史：从本地存储加载，而不是Service内存
+            // 这样可以确保删除操作被正确保留
+            CoroutineScope(Dispatchers.Main).launch {
+                val settingsRepository = com.example.clipboardman.data.repository.SettingsRepository(this@MainActivity)
+                val messageRepository = com.example.clipboardman.data.repository.MessageRepository(this@MainActivity)
+                val storedMessages = messageRepository.messagesFlow.first()
+                mainViewModel?.syncMessages(storedMessages)
             }
 
             // 自动重连：如果启用了自动连接且当前是断开状态，则重新连接
@@ -325,7 +330,8 @@ fun MainNavigation(
                 onSettingsClick = {
                     navController.navigate("settings")
                 },
-                onMessageClick = { message -> onMessageClick(message, serverAddress, useHttps) }
+                onMessageClick = { message -> onMessageClick(message, serverAddress, useHttps) },
+                onDeleteMessages = { messageIds -> viewModel.deleteMessages(messageIds) }
             )
         }
 
