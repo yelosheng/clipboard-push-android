@@ -77,12 +77,13 @@ class ShareReceiverActivity : ComponentActivity() {
         activityScope.launch {
             // 初始化 API Service
             val serverAddress = settingsRepository.serverAddressFlow.first()
+            val useHttps = settingsRepository.useHttpsFlow.first()
             if (serverAddress.isBlank()) {
                 showError("未配置服务器地址")
                 return@launch
             }
 
-            val baseUrl = settingsRepository.getHttpBaseUrl(serverAddress)
+            val baseUrl = settingsRepository.getHttpBaseUrl(serverAddress, useHttps)
             apiService = ApiService(baseUrl)
 
             // 根据类型处理
