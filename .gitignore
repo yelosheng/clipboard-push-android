@@ -1,0 +1,52 @@
+# Android
+*.iml
+.gradle/
+local.properties
+.idea/
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# Build outputs
+build/
+app/build/
+*/build/
+
+# Kotlin
+*.class
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+.env
+
+# Server uploads
+server/uploads/
+
+# IDE
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Test outputs
+*.hprof
+
+# Screenshots
+*.png
+
+# Claude
+.claude/

@@ -1,0 +1,347 @@
+:root {
+    --primary-color: #4CAF50;
+    --secondary-color: #2196F3;
+    --danger-color: #f44336;
+    --warning-color: #ff9800;
+    --bg-color: #f5f5f5;
+    --card-bg: #ffffff;
+    --text-color: #333333;
+    --border-color: #e0e0e0;
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    --shadow-hover: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    padding: 20px;
+    color: var(--text-color);
+}
+
+.container {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+header {
+    background: var(--card-bg);
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+header h1 {
+    color: var(--primary-color);
+    margin-bottom: 15px;
+    font-size: 2em;
+}
+
+.server-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    font-weight: 500;
+}
+
+.status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--warning-color);
+    animation: pulse 2s infinite;
+}
+
+.status-indicator.online {
+    background: var(--primary-color);
+    animation: none;
+}
+
+.status-indicator.offline {
+    background: var(--danger-color);
+    animation: none;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.card {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow);
+    transition: box-shadow 0.3s ease;
+}
+
+.card:hover {
+    box-shadow: var(--shadow-hover);
+}
+
+.card h2 {
+    color: var(--secondary-color);
+    margin-bottom: 20px;
+    font-size: 1.5em;
+}
+
+.card h3 {
+    color: var(--text-color);
+    margin: 15px 0 10px 0;
+    font-size: 1em;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+textarea, input[type="text"] {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    transition: border-color 0.3s ease;
+    resize: vertical;
+}
+
+textarea:focus, input[type="text"]:focus {
+    outline: none;
+    border-color: var(--secondary-color);
+}
+
+.file-label {
+    display: inline-block;
+    padding: 12px 24px;
+    background: var(--secondary-color);
+    color: white;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: 500;
+}
+
+.file-label:hover {
+    background: #1976D2;
+    transform: translateY(-2px);
+}
+
+.file-label input[type="file"] {
+    display: none;
+}
+
+.preview {
+    margin: 15px 0;
+    padding: 15px;
+    background: var(--bg-color);
+    border-radius: 8px;
+    min-height: 60px;
+    display: none;
+}
+
+.preview.active {
+    display: block;
+}
+
+.preview img {
+    max-width: 100%;
+    max-height: 300px;
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+}
+
+.preview-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-color);
+}
+
+.preview-icon {
+    font-size: 2em;
+}
+
+.button-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    flex: 1;
+    min-width: 120px;
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow);
+}
+
+.btn:active {
+    transform: translateY(0);
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.btn-primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: #45a049;
+}
+
+.btn-secondary {
+    background: #9e9e9e;
+    color: white;
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background: #757575;
+}
+
+.btn-small {
+    padding: 8px 16px;
+    font-size: 12px;
+    min-width: auto;
+    flex: 0 0 auto;
+}
+
+.btn-block {
+    width: 100%;
+}
+
+.quick-actions {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-color);
+}
+
+.quick-actions .button-row {
+    margin-top: 10px;
+}
+
+.message-history {
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 10px;
+    background: var(--bg-color);
+    border-radius: 8px;
+    margin-bottom: 15px;
+}
+
+.message-item {
+    background: white;
+    padding: 12px;
+    margin-bottom: 10px;
+    border-radius: 8px;
+    border-left: 4px solid var(--secondary-color);
+}
+
+.message-item.success {
+    border-left-color: var(--primary-color);
+}
+
+.message-item.error {
+    border-left-color: var(--danger-color);
+}
+
+.message-time {
+    font-size: 12px;
+    color: #999;
+    margin-bottom: 5px;
+}
+
+.message-content {
+    font-size: 14px;
+    color: var(--text-color);
+}
+
+.message-type {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-right: 8px;
+}
+
+.message-type.text {
+    background: #e3f2fd;
+    color: #1976d2;
+}
+
+.message-type.image {
+    background: #f3e5f5;
+    color: #7b1fa2;
+}
+
+.message-type.file {
+    background: #fff3e0;
+    color: #f57c00;
+}
+
+/* Scrollbar styling */
+.message-history::-webkit-scrollbar {
+    width: 8px;
+}
+
+.message-history::-webkit-scrollbar-track {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+.message-history::-webkit-scrollbar-thumb {
+    background: #999;
+    border-radius: 4px;
+}
+
+.message-history::-webkit-scrollbar-thumb:hover {
+    background: #666;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .container {
+        padding: 10px;
+    }
+    
+    header h1 {
+        font-size: 1.5em;
+    }
+    
+    .card {
+        padding: 20px;
+    }
+    
+    .button-row {
+        flex-direction: column;
+    }
+    
+    .btn {
+        width: 100%;
+    }
+}
