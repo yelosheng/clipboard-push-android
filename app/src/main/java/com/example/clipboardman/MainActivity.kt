@@ -24,9 +24,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.net.Uri
 import android.widget.Toast
 import com.example.clipboardman.data.model.ConnectionState
 import com.example.clipboardman.data.model.PushMessage
+import com.example.clipboardman.data.repository.SettingsRepository
 import com.example.clipboardman.service.ClipboardService
 import com.example.clipboardman.ui.screens.HomeScreen
 import com.example.clipboardman.ui.screens.SettingsScreen
@@ -105,7 +107,7 @@ class MainActivity : ComponentActivity() {
                         viewModel = viewModel,
                         onStartService = { startClipboardService() },
                         onStopService = { stopClipboardService() },
-                        onCopyMessage = { message -> copyToClipboard(message) }
+                        onMessageClick = { message, serverAddr -> handleMessageClick(message, serverAddr) }
                     )
                 }
             }
@@ -162,12 +164,43 @@ class MainActivity : ComponentActivity() {
         mainViewModel?.updateConnectionState(ConnectionState.DISCONNECTED)
     }
 
-    private fun copyToClipboard(message: PushMessage) {
-        val clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val text = message.content ?: message.fileUrl ?: return
-        val clip = ClipData.newPlainText("Clipboard Man", text)
-        clipboardManager.setPrimaryClip(clip)
-        Toast.makeText(this, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+    private fun handleMessageClick(message: PushMessage, serverAddress: String) {
+        when {
+            // 文本消息 - 复制到剪贴板
+            message.isTextType -> {
+                val clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val text = message.content ?: return
+                val clip = ClipData.newPlainText("Clipboard Man", text)
+                clipboardManager.setPrimaryClip(clip)
+                Toast.makeText(this, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+            }
+            // 图片/文件 - 用系统应用打开
+            message.isFileType && message.fileUrl != null -> {
+                openFileWithSystem(message, serverAddress)
+            }
+        }
+    }
+
+    private fun openFileWithSystem(message: PushMessage, serverAddress: String) {
+        val baseUrl = if (serverAddress.startsWith("http")) serverAddress else "http://$serverAddress"
+        val fileUrl = "$baseUrl${message.fileUrl}"
+        val mimeType = message.mimeType ?: "*/*"
+
+        try {
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(Uri.parse(fileUrl), mimeType)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            // 如果没有应用可以打开，尝试用浏览器打开
+            try {
+                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(fileUrl))
+                startActivity(browserIntent)
+            } catch (e2: Exception) {
+                Toast.makeText(this, "无法打开文件", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 }
 
@@ -176,7 +209,7 @@ fun MainNavigation(
     viewModel: MainViewModel,
     onStartService: () -> Unit,
     onStopService: () -> Unit,
-    onCopyMessage: (PushMessage) -> Unit
+    onMessageClick: (PushMessage, String) -> Unit
 ) {
     val navController = rememberNavController()
 
@@ -215,7 +248,7 @@ fun MainNavigation(
                 onSettingsClick = {
                     navController.navigate("settings")
                 },
-                onMessageClick = onCopyMessage
+                onMessageClick = { message -> onMessageClick(message, serverAddress) }
             )
         }
 
