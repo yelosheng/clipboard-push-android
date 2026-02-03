@@ -327,12 +327,16 @@ fun MainNavigation(
     val autoConnect by viewModel.autoConnect.collectAsState()
     val maxHistoryCount by viewModel.maxHistoryCount.collectAsState()
 
-    // 自动连接
-    LaunchedEffect(autoConnect, serverAddress, connectionState) {
-        if (autoConnect &&
-            serverAddress.isNotBlank() &&
-            connectionState == ConnectionState.DISCONNECTED) {
-            onStartService()
+    // 自动连接 (仅当设置改变时触发，或者首次进入时)
+    LaunchedEffect(autoConnect, serverAddress) {
+        if (autoConnect && serverAddress.isNotBlank()) {
+            // 这里我们只在设置改变且需要连接时尝试连接
+            // 如果已经在连接或已连接，Service 会处理忽略
+            // 但为了避免手动断开后修改配置立刻重连（如果这是非期望行为），可能需要更复杂的逻辑
+            // 目前这样改可以解决"点了断开马上重连"的问题，因为断开时 autoConnect 和 serverAddress 没变
+             if (connectionState == ConnectionState.DISCONNECTED) {
+                 onStartService()
+             }
         }
     }
 
