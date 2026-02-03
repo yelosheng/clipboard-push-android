@@ -28,6 +28,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.core.Animatable
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.gestures.Orientation
+import kotlin.math.roundToInt
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.clipboardman.data.model.ConnectionState
@@ -331,7 +338,6 @@ fun SwipeableMessageItem(
     onLongClick: () -> Unit = {},
     onDelete: () -> Unit
 ) {
-    // 选择模式下禁用滑动删除
     if (isSelectionMode) {
         MessageItem(
             message = message,
@@ -344,73 +350,84 @@ fun SwipeableMessageItem(
         return
     }
 
-    val coroutineScope = rememberCoroutineScope()
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { false } // 不自动删除，需要点击按钮
-    )
+    val density = LocalDensity.current
+    val actionWidth = 80.dp
+    val actionWidthPx = with(density) { actionWidth.toPx() }
+    val offsetX = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
 
-    SwipeToDismissBox(
-        state = dismissState,
-        enableDismissFromStartToEnd = false,
-        enableDismissFromEndToStart = true,
-        backgroundContent = {
-            val isRevealed = dismissState.targetValue == SwipeToDismissBoxValue.EndToStart
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Red500, RoundedCornerShape(12.dp)),
-                contentAlignment = Alignment.CenterEnd
+    Box(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.CenterEnd
+    ) {
+        // 删除按钮背景
+        Box(
+            modifier = Modifier
+                .width(actionWidth)
+                .fillMaxHeight() // 高度会跟随父容器（由前景 Card 决定）
+                .background(Red500, RoundedCornerShape(12.dp))
+                .clickable {
+                    onDelete()
+                    scope.launch { offsetX.snapTo(0f) }
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // 删除按钮
-                Box(
-                    modifier = Modifier
-                        .width(80.dp)
-                        .fillMaxHeight()
-                        .clickable(enabled = isRevealed) {
-                            onDelete()
-                            // 重置滑动状态
-                            coroutineScope.launch {
-                                dismissState.snapTo(SwipeToDismissBoxValue.Settled)
-                            }
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "删除",
-                            tint = MaterialTheme.colorScheme.onError
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "删除",
-                            color = MaterialTheme.colorScheme.onError,
-                            fontSize = 12.sp
-                        )
-                    }
-                }
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "删除",
+                    tint = MaterialTheme.colorScheme.onError
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "删除",
+                    color = MaterialTheme.colorScheme.onError,
+                    fontSize = 12.sp
+                )
             }
         }
-    ) {
-        MessageItem(
-            message = message,
-            baseUrl = baseUrl,
-            isSelectionMode = isSelectionMode,
-            isSelected = isSelected,
-            onClick = {
-                // 如果已滑动，先收回
-                if (dismissState.currentValue != SwipeToDismissBoxValue.Settled) {
-                    coroutineScope.launch {
-                        dismissState.snapTo(SwipeToDismissBoxValue.Settled)
+
+        // 前景内容
+        Box(
+            modifier = Modifier
+                .offset { IntOffset(offsetX.value.roundToInt(), 0) }
+                .draggable(
+                    orientation = androidx.compose.foundation.gestures.Orientation.Horizontal,
+                    state = androidx.compose.foundation.gestures.rememberDraggableState { delta ->
+                        scope.launch {
+                            val targetValue = (offsetX.value + delta).coerceIn(-actionWidthPx, 0f)
+                            offsetX.snapTo(targetValue)
+                        }
+                    },
+                    onDragStopped = {
+                        if (offsetX.value < -actionWidthPx / 2) {
+                            // 超过一半，展开
+                            scope.launch { offsetX.animateTo(-actionWidthPx) }
+                        } else {
+                            // 否则收回
+                            scope.launch { offsetX.animateTo(0f) }
+                        }
                     }
-                } else {
-                    onClick()
-                }
-            },
-            onLongClick = onLongClick
-        )
+                )
+        ) {
+            MessageItem(
+                message = message,
+                baseUrl = baseUrl,
+                isSelectionMode = isSelectionMode,
+                isSelected = isSelected,
+                onClick = {
+                    if (offsetX.value < -10f) {
+                        // 如果已展开，点击则收回
+                        scope.launch { offsetX.animateTo(0f) }
+                    } else {
+                        onClick()
+                    }
+                },
+                onLongClick = onLongClick
+            )
+        }
     }
 }
 
