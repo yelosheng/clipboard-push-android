@@ -31,6 +31,7 @@ import com.example.clipboardman.data.model.ConnectionState
 import com.example.clipboardman.data.model.PushMessage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -67,13 +68,17 @@ class MainActivity : ComponentActivity() {
             }
 
             // 同步当前状态
-            mainViewModel?.updateConnectionState(
-                clipboardService?.getConnectionState() ?: ConnectionState.DISCONNECTED
-            )
+            val currentState = clipboardService?.getConnectionState() ?: ConnectionState.DISCONNECTED
+            mainViewModel?.updateConnectionState(currentState)
 
             // 同步消息历史（恢复后台收到的消息）
             clipboardService?.getMessageHistory()?.let { history ->
                 mainViewModel?.syncMessages(history)
+            }
+
+            // 自动重连：如果启用了自动连接且当前是断开状态，则重新连接
+            if (currentState == ConnectionState.DISCONNECTED) {
+                checkAndAutoReconnect()
             }
         }
 
@@ -148,6 +153,18 @@ class MainActivity : ComponentActivity() {
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
                 requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
+    private fun checkAndAutoReconnect() {
+        CoroutineScope(Dispatchers.Main).launch {
+            val settingsRepository = com.example.clipboardman.data.repository.SettingsRepository(this@MainActivity)
+            val autoConnect = settingsRepository.autoConnectFlow.first()
+            val serverAddress = settingsRepository.serverAddressFlow.first()
+
+            if (autoConnect && serverAddress.isNotBlank()) {
+                startClipboardService()
             }
         }
     }
