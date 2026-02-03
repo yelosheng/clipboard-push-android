@@ -3,6 +3,7 @@ package com.example.clipboardman.service
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 
 /**
@@ -62,6 +63,21 @@ class ClipboardHelper(private val context: Context) {
             true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to copy file path: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * 复制图片 URI 到剪贴板（可直接粘贴到支持的应用）
+     */
+    fun copyImageUri(uri: Uri, mimeType: String = "image/*"): Boolean {
+        return try {
+            val clip = ClipData.newUri(context.contentResolver, CLIP_LABEL, uri)
+            clipboardManager.setPrimaryClip(clip)
+            Log.d(TAG, "Image URI copied: $uri")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to copy image URI: ${e.message}")
             false
         }
     }

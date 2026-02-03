@@ -311,13 +311,13 @@ class ClipboardService : Service() {
 
         // 获取文件处理模式
         val fileMode = settingsRepository.fileHandleModeFlow.first()
-        val baseUrl = settingsRepository.getHttpBaseUrl(serverAddress)
+        val baseUrl = settingsRepository.getHttpBaseUrl(serverAddress, useHttps)
         val fullUrl = "$baseUrl$fileUrl"
 
         when (fileMode) {
             SettingsRepository.FILE_MODE_SAVE_LOCAL -> {
                 // 下载文件到本地
-                downloadAndSaveFile(fullUrl, fileName, mimeType)
+                downloadAndSaveFile(fullUrl, fileName, mimeType, copyImageToClipboard = false)
             }
             SettingsRepository.FILE_MODE_COPY_REFERENCE -> {
                 // 复制文件 URL
@@ -328,6 +328,10 @@ class ClipboardService : Service() {
                     "$fileName\nURL已复制到剪贴板"
                 )
             }
+            SettingsRepository.FILE_MODE_SAVE_AND_COPY_IMAGE -> {
+                // 保存并复制图片到剪贴板
+                downloadAndSaveFile(fullUrl, fileName, mimeType, copyImageToClipboard = true)
+            }
         }
     }
 
@@ -337,9 +341,11 @@ class ClipboardService : Service() {
     private suspend fun downloadAndSaveFile(
         fileUrl: String,
         fileName: String,
-        mimeType: String
+        mimeType: String,
+        copyImageToClipboard: Boolean = false
     ) {
         val api = apiService ?: return
+        val isImage = mimeType.startsWith("image/")
 
         // 先下载到缓存目录
         val cacheDir = FileUtil.getCacheDir(this)
@@ -367,15 +373,25 @@ class ClipboardService : Service() {
             )
 
             if (savedUri != null) {
-                // 复制文件路径到剪贴板
-                val filePath = savedUri.toString()
-                clipboardHelper.copyFilePath(filePath)
-
-                NotificationHelper.showPushNotification(
-                    this,
-                    "文件已保存",
-                    "$fileName\n路径已复制到剪贴板"
-                )
+                // 根据设置决定复制方式
+                if (copyImageToClipboard && isImage) {
+                    // 复制图片 URI 到剪贴板（可直接粘贴）
+                    clipboardHelper.copyImageUri(savedUri, mimeType)
+                    NotificationHelper.showPushNotification(
+                        this,
+                        "图片已保存",
+                        "$fileName\n图片已复制到剪贴板，可直接粘贴"
+                    )
+                } else {
+                    // 复制文件路径到剪贴板
+                    val filePath = savedUri.toString()
+                    clipboardHelper.copyFilePath(filePath)
+                    NotificationHelper.showPushNotification(
+                        this,
+                        "文件已保存",
+                        "$fileName\n路径已复制到剪贴板"
+                    )
+                }
             } else {
                 // 保存到公共目录失败，使用私有目录路径
                 val privateDir = FileUtil.getDownloadDir(this)
