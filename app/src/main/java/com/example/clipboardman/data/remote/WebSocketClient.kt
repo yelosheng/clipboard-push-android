@@ -70,12 +70,17 @@ class WebSocketClient(
                 isConnected = true
                 reconnectAttempts = 0
                 handler.post { onStateChange(ConnectionState.CONNECTED) }
+                
+                // 启动心跳
+                startHeartbeat()
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                Log.d(TAG, "Received message: ${text.take(100)}")
+                // Log.d(TAG, "Received message: ${text.take(100)}") // 减少日志
                 parseAndDispatchMessage(text)
             }
+            
+            // ... (rest of listener)
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
                 Log.d(TAG, "WebSocket closing: $code $reason")
@@ -85,6 +90,7 @@ class WebSocketClient(
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 Log.d(TAG, "WebSocket closed: $code $reason")
                 isConnected = false
+                stopHeartbeat() // 停止心跳
                 this@WebSocketClient.webSocket = null
                 handler.post { onStateChange(ConnectionState.DISCONNECTED) }
 
@@ -94,8 +100,9 @@ class WebSocketClient(
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.e(TAG, "WebSocket failure: ${t.message}", t)
+                Log.e(TAG, "WebSocket failure: ${t.message}")
                 isConnected = false
+                stopHeartbeat() // 停止心跳
                 this@WebSocketClient.webSocket = null
                 handler.post { onStateChange(ConnectionState.ERROR) }
 
@@ -112,6 +119,7 @@ class WebSocketClient(
     fun disconnect() {
         Log.d(TAG, "Disconnecting...")
         isManualDisconnect = true
+        stopHeartbeat() // 停止心跳
         handler.removeCallbacksAndMessages(null)
 
         webSocket?.close(1000, "User disconnected")
@@ -119,6 +127,33 @@ class WebSocketClient(
         isConnected = false
 
         onStateChange(ConnectionState.DISCONNECTED)
+    }
+
+    // 心跳相关
+    private val heartbeatRunnable = object : Runnable {
+        override fun run() {
+            if (isConnected && webSocket != null) {
+                try {
+                    // 发送应用层 Ping
+                    val pingJson = "{\"type\":\"ping\", \"timestamp\":\"${System.currentTimeMillis()}\"}"
+                    webSocket?.send(pingJson)
+                    // Log.d(TAG, "Sent heartbeat")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to send heartbeat: ${e.message}")
+                }
+                // 20秒后再发一次
+                handler.postDelayed(this, 20000)
+            }
+        }
+    }
+
+    private fun startHeartbeat() {
+        stopHeartbeat() // 先清除旧的
+        handler.postDelayed(heartbeatRunnable, 20000)
+    }
+
+    private fun stopHeartbeat() {
+        handler.removeCallbacks(heartbeatRunnable)
     }
 
     /**
@@ -157,9 +192,8 @@ class WebSocketClient(
         try {
             val message = gson.fromJson(text, PushMessage::class.java)
 
-            // 忽略连接确认消息
-            if (message.isConnectedMessage) {
-                Log.d(TAG, "Received connection confirmation")
+            // 忽略连接确认消息和 Ping 响应
+            if (message.isConnectedMessage || message.type == "ping" || message.type == "pong") {
                 return
             }
 
