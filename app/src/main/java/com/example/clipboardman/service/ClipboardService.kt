@@ -442,6 +442,26 @@ class ClipboardService : Service() {
     fun getConnectionState(): ConnectionState = currentState
 
     /**
+     * 发送剪贴板文本到服务器
+     */
+    fun sendClipboardText(text: String) {
+        if (webSocketClient?.isConnected() == true) {
+            val message = PushMessage(
+                id = System.currentTimeMillis().toString(),
+                type = PushMessage.TYPE_TEXT,
+                content = text,
+                timestamp = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+            )
+            val json = com.google.gson.Gson().toJson(message)
+            webSocketClient?.send(json)
+            Log.d(TAG, "Sent clipboard text: ${text.take(50)}")
+        } else {
+            Log.e(TAG, "Cannot send: WebSocket not connected")
+            // 可以选择在这里回调一个错误状态或者Toast，但Service中不方便弹Toast
+        }
+    }
+
+    /**
      * 手动重连
      */
     fun reconnect() {

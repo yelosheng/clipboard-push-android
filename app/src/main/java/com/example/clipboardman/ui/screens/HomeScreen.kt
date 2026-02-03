@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.animation.animateColorAsState
@@ -54,7 +55,8 @@ fun HomeScreen(
     onDisconnectClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onMessageClick: (PushMessage) -> Unit,
-    onDeleteMessages: (Set<String>) -> Unit = {}
+    onDeleteMessages: (Set<String>) -> Unit = {},
+    onPushClipboard: () -> Unit
 ) {
     // 构建基础URL
     val baseUrl = remember(serverAddress, useHttps) {
@@ -145,8 +147,33 @@ fun HomeScreen(
             } else {
                 // 正常模式的 TopAppBar
                 TopAppBar(
-                    title = { Text("Clipboard Man") },
+                    title = { }, // 不显示标题
+                    navigationIcon = {
+                        // 显示连接状态图标
+                        val statusColor = when (connectionState) {
+                            ConnectionState.CONNECTED -> Green500
+                            ConnectionState.CONNECTING -> Orange500
+                            ConnectionState.ERROR -> Red500
+                            ConnectionState.DISCONNECTED -> Grey500
+                        }
+                        Box(
+                            modifier = Modifier
+                                .padding(start = 16.dp, end = 8.dp)
+                                .size(12.dp)
+                                .clip(CircleShape)
+                                .background(statusColor)
+                        )
+                    },
                     actions = {
+                        // 推送剪贴板按钮
+                        IconButton(onClick = onPushClipboard) {
+                            // 使用 Send 图标表示推送
+                            Icon(
+                                imageVector = Icons.Default.Send,
+                                contentDescription = "推送剪贴板内容到服务器"
+                            )
+                        }
+                        // 设置按钮
                         IconButton(onClick = onSettingsClick) {
                             Icon(
                                 imageVector = Icons.Default.Settings,
@@ -157,6 +184,7 @@ fun HomeScreen(
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.primary,
                         titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
                         actionIconContentColor = MaterialTheme.colorScheme.onPrimary
                     )
                 )
@@ -168,14 +196,8 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // 顶部连接状态栏
-            ConnectionStatusBar(
-                connectionState = connectionState,
-                serverAddress = serverAddress,
-                onConnectClick = onConnectClick,
-                onDisconnectClick = onDisconnectClick
-            )
-
+            // 移除了 ConnectionStatusBar
+            
             // 消息列表
             if (messages.isEmpty()) {
                 // 空状态
@@ -235,93 +257,6 @@ fun HomeScreen(
                         )
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-fun ConnectionStatusBar(
-    connectionState: ConnectionState,
-    serverAddress: String,
-    onConnectClick: () -> Unit,
-    onDisconnectClick: () -> Unit
-) {
-    val statusColor = when (connectionState) {
-        ConnectionState.CONNECTED -> Green500
-        ConnectionState.CONNECTING -> Orange500
-        ConnectionState.ERROR -> Red500
-        ConnectionState.DISCONNECTED -> Grey500
-    }
-
-    val statusText = when (connectionState) {
-        ConnectionState.CONNECTED -> "已连接"
-        ConnectionState.CONNECTING -> "连接中..."
-        ConnectionState.DISCONNECTED -> "未连接"
-        ConnectionState.ERROR -> "连接错误"
-    }
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shadowElevation = 4.dp,
-        color = MaterialTheme.colorScheme.surface
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // 状态指示点
-            Box(
-                modifier = Modifier
-                    .size(12.dp)
-                    .clip(CircleShape)
-                    .background(statusColor)
-            )
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            // 状态文字和服务器地址
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = statusText,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 14.sp,
-                    color = statusColor
-                )
-                Text(
-                    text = serverAddress.ifEmpty { "未配置" },
-                    fontSize = 12.sp,
-                    color = TextSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            // 连接/断开按钮
-            Button(
-                onClick = {
-                    when (connectionState) {
-                        ConnectionState.CONNECTED, ConnectionState.CONNECTING -> onDisconnectClick()
-                        else -> onConnectClick()
-                    }
-                },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = when (connectionState) {
-                        ConnectionState.CONNECTED, ConnectionState.CONNECTING -> Red500
-                        else -> MaterialTheme.colorScheme.primary
-                    }
-                ),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                Text(
-                    text = when (connectionState) {
-                        ConnectionState.CONNECTED, ConnectionState.CONNECTING -> "断开"
-                        else -> "连接"
-                    },
-                    fontSize = 14.sp
-                )
             }
         }
     }

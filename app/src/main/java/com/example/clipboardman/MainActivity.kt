@@ -124,7 +124,8 @@ class MainActivity : ComponentActivity() {
                         viewModel = viewModel,
                         onStartService = { startClipboardService() },
                         onStopService = { stopClipboardService() },
-                        onMessageClick = { message, serverAddr, useHttps -> handleMessageClick(message, serverAddr, useHttps) }
+                        onMessageClick = { message, serverAddr, useHttps -> handleMessageClick(message, serverAddr, useHttps) },
+                        onPushClipboard = { handlePushClipboard() }
                     )
                 }
             }
@@ -280,6 +281,31 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             Toast.makeText(this, "无法打开文件: ${e.message}", Toast.LENGTH_SHORT).show()
         }
+
+    }
+
+    private fun handlePushClipboard() {
+        val clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        if (!clipboardManager.hasPrimaryClip() || clipboardManager.primaryClipDescription == null) {
+            Toast.makeText(this, "剪贴板为空", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val item = clipboardManager.primaryClip?.getItemAt(0)
+        val text = item?.text?.toString()
+
+        if (text.isNullOrBlank()) {
+            Toast.makeText(this, "剪贴板内容为空或非文本", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        if (clipboardService == null) {
+            Toast.makeText(this, "服务未连接", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        clipboardService?.sendClipboardText(text)
+        Toast.makeText(this, "已推送至服务器", Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -288,7 +314,8 @@ fun MainNavigation(
     viewModel: MainViewModel,
     onStartService: () -> Unit,
     onStopService: () -> Unit,
-    onMessageClick: (PushMessage, String, Boolean) -> Unit
+    onMessageClick: (PushMessage, String, Boolean) -> Unit,
+    onPushClipboard: () -> Unit
 ) {
     val navController = rememberNavController()
 
@@ -331,7 +358,8 @@ fun MainNavigation(
                     navController.navigate("settings")
                 },
                 onMessageClick = { message -> onMessageClick(message, serverAddress, useHttps) },
-                onDeleteMessages = { messageIds -> viewModel.deleteMessages(messageIds) }
+                onDeleteMessages = { messageIds -> viewModel.deleteMessages(messageIds) },
+                onPushClipboard = onPushClipboard
             )
         }
 
