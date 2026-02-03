@@ -57,6 +57,10 @@ class ClipboardService : Service() {
     private var currentState = ConnectionState.DISCONNECTED
     private var serverAddress = ""
 
+    // 消息历史（保留最近100条）
+    private val messageHistory = mutableListOf<PushMessage>()
+    private val maxMessages = 100
+
     // 状态回调
     var onStateChanged: ((ConnectionState) -> Unit)? = null
     var onMessageReceived: ((PushMessage) -> Unit)? = null
@@ -220,6 +224,14 @@ class ClipboardService : Service() {
     private fun handleMessage(message: PushMessage) {
         Log.d(TAG, "Handling message: type=${message.type}, content=${message.content?.take(50)}")
 
+        // 保存到历史记录
+        synchronized(messageHistory) {
+            messageHistory.add(0, message)
+            if (messageHistory.size > maxMessages) {
+                messageHistory.removeAt(messageHistory.size - 1)
+            }
+        }
+
         // 通知 UI 更新消息列表
         onMessageReceived?.invoke(message)
 
@@ -228,6 +240,15 @@ class ClipboardService : Service() {
                 message.isTextType -> handleTextMessage(message)
                 message.isFileType -> handleFileMessage(message)
             }
+        }
+    }
+
+    /**
+     * 获取消息历史（供 Activity 同步）
+     */
+    fun getMessageHistory(): List<PushMessage> {
+        synchronized(messageHistory) {
+            return messageHistory.toList()
         }
     }
 

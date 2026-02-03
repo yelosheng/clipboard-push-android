@@ -46,6 +46,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * 同步消息列表（从 Service 获取历史消息）
+     */
+    fun syncMessages(messages: List<PushMessage>) {
+        _messages.value = messages.take(100)
+    }
+
+    /**
      * 清空消息列表
      */
     fun clearMessages() {

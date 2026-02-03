@@ -61,6 +61,11 @@ class MainActivity : ComponentActivity() {
             mainViewModel?.updateConnectionState(
                 clipboardService?.getConnectionState() ?: ConnectionState.DISCONNECTED
             )
+
+            // 同步消息历史（恢复后台收到的消息）
+            clipboardService?.getMessageHistory()?.let { history ->
+                mainViewModel?.syncMessages(history)
+            }
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
