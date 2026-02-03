@@ -1,0 +1,6 @@
+{
+    "server_url": "http://localhost:9661",
+    "download_path": "~/Downloads/ClipboardMan",
+    "auto_copy_image": true,
+    "auto_copy_file": true
+}
