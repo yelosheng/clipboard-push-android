@@ -114,7 +114,7 @@ class MainActivity : ComponentActivity() {
                         viewModel = viewModel,
                         onStartService = { startClipboardService() },
                         onStopService = { stopClipboardService() },
-                        onMessageClick = { message, serverAddr -> handleMessageClick(message, serverAddr) }
+                        onMessageClick = { message, serverAddr, useHttps -> handleMessageClick(message, serverAddr, useHttps) }
                     )
                 }
             }
@@ -171,7 +171,7 @@ class MainActivity : ComponentActivity() {
         mainViewModel?.updateConnectionState(ConnectionState.DISCONNECTED)
     }
 
-    private fun handleMessageClick(message: PushMessage, serverAddress: String) {
+    private fun handleMessageClick(message: PushMessage, serverAddress: String, useHttps: Boolean) {
         when {
             // 文本消息 - 复制到剪贴板
             message.isTextType -> {
@@ -183,13 +183,14 @@ class MainActivity : ComponentActivity() {
             }
             // 图片/文件 - 用系统应用打开
             message.isFileType && message.fileUrl != null -> {
-                openFileWithSystem(message, serverAddress)
+                openFileWithSystem(message, serverAddress, useHttps)
             }
         }
     }
 
-    private fun openFileWithSystem(message: PushMessage, serverAddress: String) {
-        val baseUrl = if (serverAddress.startsWith("http")) serverAddress else "http://$serverAddress"
+    private fun openFileWithSystem(message: PushMessage, serverAddress: String, useHttps: Boolean) {
+        val protocol = if (useHttps) "https" else "http"
+        val baseUrl = if (serverAddress.startsWith("http")) serverAddress else "$protocol://$serverAddress"
         val fileUrl = "$baseUrl${message.fileUrl}"
         val fileName = message.fileName ?: "file"
         val mimeType = message.mimeType ?: "*/*"
@@ -265,15 +266,17 @@ fun MainNavigation(
     viewModel: MainViewModel,
     onStartService: () -> Unit,
     onStopService: () -> Unit,
-    onMessageClick: (PushMessage, String) -> Unit
+    onMessageClick: (PushMessage, String, Boolean) -> Unit
 ) {
     val navController = rememberNavController()
 
     val connectionState by viewModel.connectionState.collectAsState()
     val serverAddress by viewModel.serverAddress.collectAsState()
+    val useHttps by viewModel.useHttps.collectAsState()
     val messages by viewModel.messages.collectAsState()
     val fileHandleMode by viewModel.fileHandleMode.collectAsState()
     val autoConnect by viewModel.autoConnect.collectAsState()
+    val maxHistoryCount by viewModel.maxHistoryCount.collectAsState()
 
     // 自动连接
     LaunchedEffect(autoConnect, serverAddress, connectionState) {
@@ -292,6 +295,7 @@ fun MainNavigation(
             HomeScreen(
                 connectionState = connectionState,
                 serverAddress = serverAddress,
+                useHttps = useHttps,
                 messages = messages,
                 onConnectClick = {
                     if (serverAddress.isNotBlank()) {
@@ -304,18 +308,22 @@ fun MainNavigation(
                 onSettingsClick = {
                     navController.navigate("settings")
                 },
-                onMessageClick = { message -> onMessageClick(message, serverAddress) }
+                onMessageClick = { message -> onMessageClick(message, serverAddress, useHttps) }
             )
         }
 
         composable("settings") {
             SettingsScreen(
                 serverAddress = serverAddress,
+                useHttps = useHttps,
                 fileHandleMode = fileHandleMode,
                 autoConnect = autoConnect,
+                maxHistoryCount = maxHistoryCount,
                 onServerAddressChange = { viewModel.saveServerAddress(it) },
+                onUseHttpsChange = { viewModel.saveUseHttps(it) },
                 onFileHandleModeChange = { viewModel.saveFileHandleMode(it) },
                 onAutoConnectChange = { viewModel.saveAutoConnect(it) },
+                onMaxHistoryCountChange = { viewModel.saveMaxHistoryCount(it) },
                 onBackClick = { navController.popBackStack() }
             )
         }

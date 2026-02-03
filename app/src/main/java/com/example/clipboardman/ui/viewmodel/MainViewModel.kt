@@ -42,11 +42,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val serverAddress: StateFlow<String> = settingsRepository.serverAddressFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, "")
 
+    val useHttps: StateFlow<Boolean> = settingsRepository.useHttpsFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     val fileHandleMode: StateFlow<Int> = settingsRepository.fileHandleModeFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, SettingsRepository.FILE_MODE_COPY_REFERENCE)
 
     val autoConnect: StateFlow<Boolean> = settingsRepository.autoConnectFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    val maxHistoryCount: StateFlow<Int> = settingsRepository.maxHistoryCountFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 100)
 
     /**
      * 更新连接状态 (由 Service 调用)
@@ -59,14 +65,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * 添加新消息 (由 Service 调用)
      */
     fun addMessage(message: PushMessage) {
-        _messages.value = listOf(message) + _messages.value.take(99) // 最多保留100条
+        val maxCount = maxHistoryCount.value
+        _messages.value = listOf(message) + _messages.value.take(maxCount - 1)
     }
 
     /**
      * 同步消息列表（从 Service 获取历史消息）
      */
     fun syncMessages(messages: List<PushMessage>) {
-        _messages.value = messages.take(100)
+        val maxCount = maxHistoryCount.value
+        _messages.value = messages.take(maxCount)
     }
 
     /**
@@ -86,6 +94,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * 保存是否使用 HTTPS
+     */
+    fun saveUseHttps(useHttps: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.saveUseHttps(useHttps)
+        }
+    }
+
+    /**
      * 保存文件处理模式
      */
     fun saveFileHandleMode(mode: Int) {
@@ -100,6 +117,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun saveAutoConnect(autoConnect: Boolean) {
         viewModelScope.launch {
             settingsRepository.saveAutoConnect(autoConnect)
+        }
+    }
+
+    /**
+     * 保存最大历史消息数量
+     */
+    fun saveMaxHistoryCount(count: Int) {
+        viewModelScope.launch {
+            settingsRepository.saveMaxHistoryCount(count)
         }
     }
 }

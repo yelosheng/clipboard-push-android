@@ -35,6 +35,7 @@ import java.util.*
 fun HomeScreen(
     connectionState: ConnectionState,
     serverAddress: String,
+    useHttps: Boolean,
     messages: List<PushMessage>,
     onConnectClick: () -> Unit,
     onDisconnectClick: () -> Unit,
@@ -42,10 +43,10 @@ fun HomeScreen(
     onMessageClick: (PushMessage) -> Unit
 ) {
     // 构建基础URL
-    val baseUrl = remember(serverAddress) {
+    val baseUrl = remember(serverAddress, useHttps) {
         if (serverAddress.isBlank()) ""
         else if (serverAddress.startsWith("http")) serverAddress
-        else "http://$serverAddress"
+        else "${if (useHttps) "https" else "http"}://$serverAddress"
     }
 
     // 列表滚动状态

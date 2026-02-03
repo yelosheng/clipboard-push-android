@@ -19,17 +19,22 @@ class SettingsRepository(private val context: Context) {
     companion object {
         // 设置键
         private val KEY_SERVER_ADDRESS = stringPreferencesKey("server_address")
+        private val KEY_USE_HTTPS = booleanPreferencesKey("use_https")
         private val KEY_FILE_HANDLE_MODE = intPreferencesKey("file_handle_mode")
         private val KEY_AUTO_CONNECT = booleanPreferencesKey("auto_connect")
+        private val KEY_MAX_HISTORY_COUNT = intPreferencesKey("max_history_count")
 
         // 文件处理模式
-        const val FILE_MODE_SAVE_LOCAL = 0
-        const val FILE_MODE_COPY_REFERENCE = 1
+        const val FILE_MODE_SAVE_LOCAL = 0          // 保存到本地
+        const val FILE_MODE_COPY_REFERENCE = 1      // 仅复制引用
+        const val FILE_MODE_SAVE_AND_COPY_IMAGE = 2 // 保存并复制图片到剪贴板
 
         // 默认值
         private const val DEFAULT_SERVER_ADDRESS = "192.168.1.100:9661"
+        private const val DEFAULT_USE_HTTPS = false
         private const val DEFAULT_FILE_HANDLE_MODE = FILE_MODE_COPY_REFERENCE
         private const val DEFAULT_AUTO_CONNECT = false
+        private const val DEFAULT_MAX_HISTORY_COUNT = 100
     }
 
     /**
@@ -37,6 +42,13 @@ class SettingsRepository(private val context: Context) {
      */
     val serverAddressFlow: Flow<String> = context.dataStore.data.map { preferences ->
         preferences[KEY_SERVER_ADDRESS] ?: DEFAULT_SERVER_ADDRESS
+    }
+
+    /**
+     * 是否使用 HTTPS Flow
+     */
+    val useHttpsFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[KEY_USE_HTTPS] ?: DEFAULT_USE_HTTPS
     }
 
     /**
@@ -54,11 +66,27 @@ class SettingsRepository(private val context: Context) {
     }
 
     /**
+     * 最大历史消息数量 Flow
+     */
+    val maxHistoryCountFlow: Flow<Int> = context.dataStore.data.map { preferences ->
+        preferences[KEY_MAX_HISTORY_COUNT] ?: DEFAULT_MAX_HISTORY_COUNT
+    }
+
+    /**
      * 保存服务器地址
      */
     suspend fun saveServerAddress(address: String) {
         context.dataStore.edit { preferences ->
             preferences[KEY_SERVER_ADDRESS] = address
+        }
+    }
+
+    /**
+     * 保存是否使用 HTTPS
+     */
+    suspend fun saveUseHttps(useHttps: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_USE_HTTPS] = useHttps
         }
     }
 
@@ -81,26 +109,37 @@ class SettingsRepository(private val context: Context) {
     }
 
     /**
+     * 保存最大历史消息数量
+     */
+    suspend fun saveMaxHistoryCount(count: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_MAX_HISTORY_COUNT] = count
+        }
+    }
+
+    /**
      * 获取完整的 WebSocket URL
      */
-    fun getWebSocketUrl(serverAddress: String): String {
+    fun getWebSocketUrl(serverAddress: String, useHttps: Boolean): String {
         val address = serverAddress.trim()
+        val protocol = if (useHttps) "wss" else "ws"
         return if (address.startsWith("ws://") || address.startsWith("wss://")) {
             "$address/ws"
         } else {
-            "ws://$address/ws"
+            "$protocol://$address/ws"
         }
     }
 
     /**
      * 获取 HTTP 基础 URL
      */
-    fun getHttpBaseUrl(serverAddress: String): String {
+    fun getHttpBaseUrl(serverAddress: String, useHttps: Boolean): String {
         val address = serverAddress.trim()
+        val protocol = if (useHttps) "https" else "http"
         return if (address.startsWith("http://") || address.startsWith("https://")) {
             address
         } else {
-            "http://$address"
+            "$protocol://$address"
         }
     }
 }

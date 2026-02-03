@@ -58,6 +58,7 @@ class ClipboardService : Service() {
     // 状态
     private var currentState = ConnectionState.DISCONNECTED
     private var serverAddress = ""
+    private var useHttps = false
 
     // 消息历史（保留最近100条）
     private val messageHistory = mutableListOf<PushMessage>()
@@ -120,8 +121,9 @@ class ClipboardService : Service() {
      */
     private fun startService() {
         serviceScope.launch {
-            // 获取服务器地址
+            // 获取服务器地址和协议设置
             serverAddress = settingsRepository.serverAddressFlow.first()
+            useHttps = settingsRepository.useHttpsFlow.first()
 
             if (serverAddress.isBlank()) {
                 Log.e(TAG, "Server address is empty")
@@ -130,7 +132,7 @@ class ClipboardService : Service() {
             }
 
             // 初始化 ApiService
-            val baseUrl = settingsRepository.getHttpBaseUrl(serverAddress)
+            val baseUrl = settingsRepository.getHttpBaseUrl(serverAddress, useHttps)
             apiService = ApiService(baseUrl)
 
             // 启动前台服务
@@ -177,7 +179,7 @@ class ClipboardService : Service() {
      * 连接 WebSocket
      */
     private fun connectWebSocket() {
-        val wsUrl = settingsRepository.getWebSocketUrl(serverAddress)
+        val wsUrl = settingsRepository.getWebSocketUrl(serverAddress, useHttps)
         Log.d(TAG, "Connecting to WebSocket: $wsUrl")
 
         webSocketClient = WebSocketClient(

@@ -2,13 +2,17 @@ package com.example.clipboardman.ui.screens
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.clipboardman.data.repository.SettingsRepository
 
@@ -16,11 +20,15 @@ import com.example.clipboardman.data.repository.SettingsRepository
 @Composable
 fun SettingsScreen(
     serverAddress: String,
+    useHttps: Boolean,
     fileHandleMode: Int,
     autoConnect: Boolean,
+    maxHistoryCount: Int,
     onServerAddressChange: (String) -> Unit,
+    onUseHttpsChange: (Boolean) -> Unit,
     onFileHandleModeChange: (Int) -> Unit,
     onAutoConnectChange: (Boolean) -> Unit,
+    onMaxHistoryCountChange: (Int) -> Unit,
     onBackClick: () -> Unit
 ) {
     Scaffold(
@@ -48,18 +56,59 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(16.dp)
+                .verticalScroll(rememberScrollState())
         ) {
-            // 服务器地址
+            // 服务器设置
             SettingsSection(title = "服务器设置") {
-                OutlinedTextField(
-                    value = serverAddress,
-                    onValueChange = onServerAddressChange,
-                    label = { Text("服务器地址") },
-                    placeholder = { Text("例如: 192.168.1.100:9661") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp)
-                )
+                Column {
+                    // 协议选择
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "协议",
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.width(60.dp)
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+
+                        FilterChip(
+                            selected = !useHttps,
+                            onClick = { onUseHttpsChange(false) },
+                            label = { Text("HTTP") }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        FilterChip(
+                            selected = useHttps,
+                            onClick = { onUseHttpsChange(true) },
+                            label = { Text("HTTPS") }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // 服务器地址
+                    OutlinedTextField(
+                        value = serverAddress,
+                        onValueChange = onServerAddressChange,
+                        label = { Text("服务器地址") },
+                        placeholder = { Text("例如: 192.168.1.100:9661") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // 完整地址预览
+                    val protocol = if (useHttps) "https" else "http"
+                    Text(
+                        text = "完整地址: $protocol://$serverAddress",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -80,12 +129,51 @@ fun SettingsScreen(
                         selected = fileHandleMode == SettingsRepository.FILE_MODE_COPY_REFERENCE,
                         onClick = { onFileHandleModeChange(SettingsRepository.FILE_MODE_COPY_REFERENCE) }
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    RadioButtonOption(
+                        text = "保存并复制图片",
+                        description = "下载图片到本地，并复制图片到剪贴板可直接粘贴",
+                        selected = fileHandleMode == SettingsRepository.FILE_MODE_SAVE_AND_COPY_IMAGE,
+                        onClick = { onFileHandleModeChange(SettingsRepository.FILE_MODE_SAVE_AND_COPY_IMAGE) }
+                    )
                 }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 自动连接
+            // 历史记录设置
+            SettingsSection(title = "历史记录") {
+                Column {
+                    Text(
+                        text = "最大保存消息数量",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Text(
+                        text = "设置列表中保存的历史消息条数",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(50, 100, 200, 500).forEach { count ->
+                            FilterChip(
+                                selected = maxHistoryCount == count,
+                                onClick = { onMaxHistoryCountChange(count) },
+                                label = { Text("$count") }
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 其他设置
             SettingsSection(title = "其他设置") {
                 Row(
                     modifier = Modifier
@@ -112,6 +200,8 @@ fun SettingsScreen(
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
