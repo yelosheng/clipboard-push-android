@@ -5,12 +5,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,6 +46,19 @@ fun HomeScreen(
         if (serverAddress.isBlank()) ""
         else if (serverAddress.startsWith("http")) serverAddress
         else "http://$serverAddress"
+    }
+
+    // 列表滚动状态
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+
+    // 收到新消息时滚动到顶部
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) {
+            coroutineScope.launch {
+                listState.animateScrollToItem(0)
+            }
+        }
     }
 
     Scaffold(
@@ -101,6 +116,7 @@ fun HomeScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
+                    state = listState,
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {

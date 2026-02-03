@@ -186,6 +186,15 @@ fun MainNavigation(
     val fileHandleMode by viewModel.fileHandleMode.collectAsState()
     val autoConnect by viewModel.autoConnect.collectAsState()
 
+    // 自动连接
+    LaunchedEffect(autoConnect, serverAddress, connectionState) {
+        if (autoConnect &&
+            serverAddress.isNotBlank() &&
+            connectionState == ConnectionState.DISCONNECTED) {
+            onStartService()
+        }
+    }
+
     NavHost(
         navController = navController,
         startDestination = "home"
