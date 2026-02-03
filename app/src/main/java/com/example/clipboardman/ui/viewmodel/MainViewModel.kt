@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.clipboardman.data.model.ConnectionState
 import com.example.clipboardman.data.model.PushMessage
+import com.example.clipboardman.data.repository.MessageRepository
 import com.example.clipboardman.data.repository.SettingsRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -12,6 +13,7 @@ import kotlinx.coroutines.launch
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val settingsRepository = SettingsRepository(application)
+    private val messageRepository = MessageRepository(application)
 
     // 连接状态
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
@@ -20,6 +22,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // 消息列表
     private val _messages = MutableStateFlow<List<PushMessage>>(emptyList())
     val messages: StateFlow<List<PushMessage>> = _messages.asStateFlow()
+
+    init {
+        // 启动时加载本地存储的消息
+        loadMessagesFromStorage()
+    }
+
+    private fun loadMessagesFromStorage() {
+        viewModelScope.launch {
+            messageRepository.messagesFlow.first().let { storedMessages ->
+                if (_messages.value.isEmpty() && storedMessages.isNotEmpty()) {
+                    _messages.value = storedMessages
+                }
+            }
+        }
+    }
 
     // 设置
     val serverAddress: StateFlow<String> = settingsRepository.serverAddressFlow

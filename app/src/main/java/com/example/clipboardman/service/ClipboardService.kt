@@ -14,6 +14,7 @@ import com.example.clipboardman.data.model.ConnectionState
 import com.example.clipboardman.data.model.PushMessage
 import com.example.clipboardman.data.remote.ApiService
 import com.example.clipboardman.data.remote.WebSocketClient
+import com.example.clipboardman.data.repository.MessageRepository
 import com.example.clipboardman.data.repository.SettingsRepository
 import com.example.clipboardman.util.FileUtil
 import com.example.clipboardman.util.NotificationHelper
@@ -42,6 +43,7 @@ class ClipboardService : Service() {
 
     // 组件
     private lateinit var settingsRepository: SettingsRepository
+    private lateinit var messageRepository: MessageRepository
     private lateinit var clipboardHelper: ClipboardHelper
     private var webSocketClient: WebSocketClient? = null
     private var apiService: ApiService? = null
@@ -70,7 +72,27 @@ class ClipboardService : Service() {
         Log.d(TAG, "Service created")
 
         settingsRepository = SettingsRepository(this)
+        messageRepository = MessageRepository(this)
         clipboardHelper = ClipboardHelper(this)
+
+        // 加载历史消息
+        loadMessageHistory()
+    }
+
+    /**
+     * 从本地存储加载消息历史
+     */
+    private fun loadMessageHistory() {
+        serviceScope.launch {
+            messageRepository.messagesFlow.collect { messages ->
+                synchronized(messageHistory) {
+                    if (messageHistory.isEmpty() && messages.isNotEmpty()) {
+                        messageHistory.addAll(messages)
+                        Log.d(TAG, "Loaded ${messages.size} messages from storage")
+                    }
+                }
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -224,12 +246,18 @@ class ClipboardService : Service() {
     private fun handleMessage(message: PushMessage) {
         Log.d(TAG, "Handling message: type=${message.type}, content=${message.content?.take(50)}")
 
-        // 保存到历史记录
+        // 保存到内存历史记录
         synchronized(messageHistory) {
             messageHistory.add(0, message)
             if (messageHistory.size > maxMessages) {
                 messageHistory.removeAt(messageHistory.size - 1)
             }
+        }
+
+        // 持久化到本地存储
+        serviceScope.launch {
+            val currentMessages = getMessageHistory()
+            messageRepository.saveMessages(currentMessages)
         }
 
         // 通知 UI 更新消息列表
