@@ -1,101 +1,158 @@
 #include "Network.hpp"
 #include "Clipboard.hpp"
+#include <ixwebsocket/IXNetSystem.h>
 #include <cpr/cpr.h>
 #include <spdlog/spdlog.h>
+#include <nlohmann/json.hpp>
 #include <filesystem>
+#include <regex>
+
+using json = nlohmann::json;
 
 NetworkClient::NetworkClient(const AppConfig& config) : m_config(config) {
-    m_io.set_open_listener(std::bind(&NetworkClient::OnConnect, this));
-    m_io.set_close_listener(std::bind(&NetworkClient::OnDisconnect, this));
-    m_io.socket()->on("new_message", std::bind(&NetworkClient::OnNewMessage, this, std::placeholders::_1));
+    // 必须调用以初始化 Windows Sockets
+    ix::initNetSystem();
+
+    // 构造 Socket.IO URL
+    // e.g., http://localhost:9661 -> ws://localhost:9661/socket.io/?EIO=4&transport=websocket
+    std::string url = m_config.server_url;
+    if (url.find("http://") == 0) url.replace(0, 7, "ws://");
+    else if (url.find("https://") == 0) url.replace(0, 8, "wss://");
+    
+    // 移除尾部斜杠
+    if (url.back() == '/') url.pop_back();
+    url += "/socket.io/?EIO=4&transport=websocket";
+
+    spdlog::info("Socket URL: {}", url);
+    m_socket.setUrl(url);
+
+    m_socket.setOnMessageCallback([this](const ix::WebSocketMessagePtr& msg) {
+        this->OnMessage(msg);
+    });
 }
 
 NetworkClient::~NetworkClient() {
     Stop();
+    ix::uninitNetSystem();
 }
 
 void NetworkClient::Start() {
-    spdlog::info("Connecting to server: {}", m_config.server_url);
-    m_io.connect(m_config.server_url);
+    m_running = true;
+    m_socket.start();
 }
 
 void NetworkClient::Stop() {
-    m_io.sync_close();
+    m_running = false;
+    m_socket.stop();
 }
 
 bool NetworkClient::IsConnected() const {
     return m_connected;
 }
 
-void NetworkClient::OnConnect() {
-    m_connected = true;
-    spdlog::info("Connected to server!");
+void NetworkClient::OnMessage(const ix::WebSocketMessagePtr& msg) {
+    if (msg->type == ix::WebSocketMessageType::Open) {
+        spdlog::info("WebSocket Open. Sending Socket.IO connect packet...");
+        m_connected = true;
+        // Socket.IO v4 握手：必须发送 "40" 才能加入默认命名空间并接收事件
+        m_socket.send("40");
+    }
+    else if (msg->type == ix::WebSocketMessageType::Close) {
+        spdlog::warn("Disconnected");
+        m_connected = false;
+    }
+    else if (msg->type == ix::WebSocketMessageType::Message) {
+        // spdlog::debug("Raw Message: {}", msg->str); // 调试用
+        HandleSocketIOMessage(msg->str);
+    }
+    else if (msg->type == ix::WebSocketMessageType::Error) {
+        spdlog::error("Connection error: {}", msg->errorInfo.reason);
+    }
 }
 
-void NetworkClient::OnDisconnect() {
-    m_connected = false;
-    spdlog::warn("Disconnected from server.");
-}
+void NetworkClient::HandleSocketIOMessage(const std::string& payload) {
+    // Socket.IO 协议简易解析
+    // 0: open
+    // 2: ping -> 需要回 pong (3)
+    // 40: connection request
+    // 42: event message ["event", data]
 
-void NetworkClient::OnNewMessage(sio::event& ev) {
-    try {
-        auto data = ev.get_message();
-        if (data->get_flag() != sio::message::flag_object) return;
+    if (payload.empty()) return;
 
-        auto map = data->get_map();
-        std::string type = map["type"]->get_string();
-        std::string source = map.count("source") ? map["source"]->get_string() : "unknown";
+    char type = payload[0];
 
-        if (source == "pc_client_cpp") return; // Ignore self
+    if (type == '0') { // Open
+        // 收到 {"sid":...}，需要回复 40
+        // 但对于单纯接收端，通常可以直接忽略
+    }
+    else if (type == '2') { // Ping
+        m_socket.send("3"); // Pong
+    }
+    else if (type == '4') { 
+        if (payload.size() > 1 && payload[1] == '2') { // 42: Event
+            try {
+                // 提取 JSON 部分: 42["new_message",{...}]
+                std::string jsonStr = payload.substr(2);
+                auto j = json::parse(jsonStr);
 
-        spdlog::info("Received message: Type={}, Source={}", type, source);
+                if (j.is_array() && j.size() >= 2) {
+                    std::string eventName = j[0];
+                    if (eventName == "new_message") {
+                        auto data = j[1];
+                        
+                        std::string msgType = data.value("type", "unknown");
+                        std::string source = data.value("source", "unknown");
 
-        if (type == "text") {
-            std::string content = map["content"]->get_string();
-            Clipboard::SetText(content);
-            spdlog::info("Copied text to clipboard");
-        } 
-        else if (type == "image" || type == "file" || type == "video") {
-            std::string fileUrl = map["file_url"]->get_string();
-            std::string fileName = map["file_name"]->get_string();
+                        if (source == "pc_client_cpp") return;
 
-            if (fileUrl.rfind("http", 0) != 0) {
-                fileUrl = m_config.server_url + fileUrl;
+                        spdlog::info("Received: Type={}, Source={}", msgType, source);
+
+                        if (msgType == "text") {
+                            std::string content = data.value("content", "");
+                            Clipboard::SetText(content);
+                            spdlog::info("Copied text: {}", content);
+                        }
+                        else if (msgType == "image" || msgType == "file") {
+                            std::string fileUrl = data.value("file_url", "");
+                            std::string fileName = data.value("file_name", "downloaded_file");
+                            
+                            if (fileUrl.find("http") != 0) {
+                                fileUrl = m_config.server_url + fileUrl;
+                            }
+                            
+                            std::string localPath = DownloadFile(fileUrl, fileName);
+                            if (!localPath.empty()) {
+                                Clipboard::SetFiles({localPath});
+                                spdlog::info("Downloaded: {}", localPath);
+                            }
+                        }
+                    }
+                }
             }
-
-            std::string localPath = DownloadFile(fileUrl, fileName);
-            if (!localPath.empty()) {
-                Clipboard::SetFiles({localPath});
-                spdlog::info("Downloaded and copied file: {}", localPath);
+            catch (const std::exception& e) {
+                spdlog::error("JSON parse error: {}", e.what());
             }
         }
-    } catch (const std::exception& e) {
-        spdlog::error("Error processing message: {}", e.what());
     }
 }
 
 std::string NetworkClient::DownloadFile(const std::string& url, const std::string& fileName) {
     try {
         std::filesystem::path dir(m_config.download_path);
-        std::filesystem::create_directories(dir);
+        if (!std::filesystem::exists(dir)) std::filesystem::create_directories(dir);
         
         std::filesystem::path path = dir / fileName;
-        
-        // Simple avoid overwrite
         int i = 1;
         while (std::filesystem::exists(path)) {
             path = dir / (std::to_string(i++) + "_" + fileName);
         }
 
-        spdlog::info("Downloading {} to {}", url, path.string());
+        spdlog::info("Downloading {}...", fileName);
         std::ofstream f(path, std::ios::binary);
         cpr::Response r = cpr::Download(f, cpr::Url{url});
         
-        if (r.status_code == 200) {
-            return path.string();
-        } else {
-            spdlog::error("Download failed code: {}", r.status_code);
-        }
+        if (r.status_code == 200) return path.string();
+        else spdlog::error("Download failed: {}", r.status_code);
     } catch (const std::exception& e) {
         spdlog::error("Download exception: {}", e.what());
     }
@@ -103,22 +160,14 @@ std::string NetworkClient::DownloadFile(const std::string& url, const std::strin
 }
 
 bool NetworkClient::PushText(const std::string& text) {
-    std::string url = m_config.server_url + "/api/push/text";
-    nlohmann::json j;
-    j["content"] = text;
-    j["source"] = "pc_client_cpp";
-
-    auto r = cpr::Post(cpr::Url{url}, 
-                       cpr::Body{j.dump()}, 
+    auto r = cpr::Post(cpr::Url{m_config.server_url + "/api/push/text"}, 
+                       cpr::Body{json{{"content", text}, {"source", "pc_client_cpp"}}.dump()},
                        cpr::Header{{"Content-Type", "application/json"}});
-    
     return r.status_code == 200;
 }
 
 bool NetworkClient::PushFile(const std::string& filePath, const std::string& fileName) {
-    std::string url = m_config.server_url + "/api/push/file";
-    
-    auto r = cpr::Post(cpr::Url{url},
+    auto r = cpr::Post(cpr::Url{m_config.server_url + "/api/push/file"},
                        cpr::Multipart{
                            {"file", cpr::File(filePath, fileName)},
                            {"source", "pc_client_cpp"}

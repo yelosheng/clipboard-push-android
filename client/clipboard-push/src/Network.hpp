@@ -1,8 +1,11 @@
 #pragma once
 #include "Config.hpp"
-#include <sio_client.h>
+#include <ixwebsocket/IXWebSocket.h>
+#include <ixwebsocket/IXUserAgent.h>
 #include <functional>
-#include <vector>
+#include <string>
+#include <thread>
+#include <atomic>
 
 class NetworkClient {
 public:
@@ -13,19 +16,17 @@ public:
     void Stop();
     bool IsConnected() const;
 
-    // 推送功能
     bool PushText(const std::string& text);
     bool PushFile(const std::string& filePath, const std::string& fileName);
 
 private:
-    void OnConnect();
-    void OnDisconnect();
-    void OnNewMessage(sio::event& ev);
-
-    // 下载文件
+    void OnMessage(const ix::WebSocketMessagePtr& msg);
+    void HandleSocketIOMessage(const std::string& payload);
     std::string DownloadFile(const std::string& url, const std::string& fileName);
 
     AppConfig m_config;
-    sio::client m_io;
-    bool m_connected = false;
+    ix::WebSocket m_socket;
+    std::atomic<bool> m_connected{false};
+    std::thread m_pingThread;
+    std::atomic<bool> m_running{false};
 };

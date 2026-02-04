@@ -7,7 +7,7 @@
 #include <filesystem>
 #include <spdlog/spdlog.h>
 
-#pragma comment (lib, "Gdiplus.lib")
+// #pragma comment (lib, "Gdiplus.lib") // 已移动到 CMakeLists.txt
 
 // --- Helper Functions ---
 

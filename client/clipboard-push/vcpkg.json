@@ -4,7 +4,7 @@
   "dependencies": [
     "cpr",
     "nlohmann-json",
-    "socket-io-client-cpp",
-    "spdlog"
+    "spdlog",
+    "ixwebsocket"
   ]
 }

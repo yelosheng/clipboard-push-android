@@ -5,6 +5,8 @@
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
+namespace fs = std::filesystem;
+
 struct AppConfig {
     std::string server_url = "http://localhost:9661";
     std::string download_path = "C:/Downloads/ClipboardMan";
