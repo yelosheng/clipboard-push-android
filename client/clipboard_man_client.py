@@ -279,24 +279,36 @@ def new_message(data):
         logger.error(f"处理消息失败: {e}")
 
 def main():
-    try:
-        console.print(Panel(
-            f"[bold cyan]Clipboard Man PC Client[/bold cyan]\n"
-            f"正在连接: {SERVER_URL} ...",
-            border_style="blue"
-        ))
-        
-        # 连接 Socket.IO
-        sio.connect(SERVER_URL, wait_timeout=10)
-        sio.wait()
-        
-    except KeyboardInterrupt:
-        logger.info("程序退出")
-        sys.exit(0)
-    except Exception as e:
-        logger.error(f"发生错误: {e}")
-        time.sleep(5)
-        main() # 简单重试
+    while True:
+        try:
+            if sio.connected:
+                logger.info("清理旧连接...")
+                sio.disconnect()
+                
+            console.print(Panel(
+                f"[bold cyan]Clipboard Man PC Client[/bold cyan]\n"
+                f"正在连接: {SERVER_URL} ...",
+                border_style="blue"
+            ))
+            
+            # 连接 Socket.IO
+            sio.connect(SERVER_URL, wait_timeout=10)
+            sio.wait()
+            
+        except KeyboardInterrupt:
+            logger.info("程序退出")
+            sys.exit(0)
+        except Exception as e:
+            if "Already connected" in str(e):
+                # 显式忽略已连接错误，或者尝试断开重连
+                logger.warning(f"状态异常: {e}，尝试重置...")
+                try: sio.disconnect()
+                except: pass
+            else:
+                logger.error(f"发生错误: {e}")
+            
+            logger.info("5秒后重连...")
+            time.sleep(5)
 
 if __name__ == '__main__':
     main()

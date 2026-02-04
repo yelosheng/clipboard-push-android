@@ -4,6 +4,8 @@ Clipboard Man - Flask WebSocket Server
 
 端口: 9661
 """
+import eventlet
+eventlet.monkey_patch()
 
 import os
 import json
@@ -71,13 +73,17 @@ def detect_message_type(mime_type):
         return 'file'
 
 
-def broadcast_message(message):
+def broadcast_message(message, exclude_ws=None):
     """广播消息给所有客户端（Socket.IO + Native WebSocket）"""
     # Socket.IO clients
+    # 注意：在非 Socket.IO 上下文（如 Native WS 或 REST API）中调用 emit，
+    # 必须显式指定 broadcast=True（尽管在较新版本中可能是默认行为，但加上更保险）
     socketio.emit('new_message', message)
 
     # Native WebSocket clients
     for ws_client in list(websocket_clients_native):
+        if ws_client == exclude_ws:
+            continue
         try:
             ws_client.send(json.dumps(message))
         except Exception as e:
@@ -328,7 +334,7 @@ def handle_native_ws_message(ws, msg):
                 'timestamp': datetime.now().isoformat(),
             }
             save_message(message)
-            broadcast_message(message)
+            broadcast_message(message, exclude_ws=ws)
             print(f"[Native WS] 收到文本推送: {content[:50]}...")
 
 
