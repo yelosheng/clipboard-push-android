@@ -14,7 +14,10 @@ public:
 
     void Start();
     void Stop();
+    void Restart();
     bool IsConnected() const;
+
+    void SetStatusCallback(std::function<void(bool)> cb) { m_onStatusChange = cb; }
 
     bool PushText(const std::string& text);
     bool PushFile(const std::string& filePath, const std::string& fileName);
@@ -27,6 +30,7 @@ private:
     AppConfig m_config;
     ix::WebSocket m_socket;
     std::atomic<bool> m_connected{false};
+    std::function<void(bool)> m_onStatusChange;
     std::thread m_pingThread;
     std::atomic<bool> m_running{false};
 };

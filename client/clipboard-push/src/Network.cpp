@@ -13,19 +13,6 @@ NetworkClient::NetworkClient(const AppConfig& config) : m_config(config) {
     // 必须调用以初始化 Windows Sockets
     ix::initNetSystem();
 
-    // 构造 Socket.IO URL
-    // e.g., http://localhost:9661 -> ws://localhost:9661/socket.io/?EIO=4&transport=websocket
-    std::string url = m_config.server_url;
-    if (url.find("http://") == 0) url.replace(0, 7, "ws://");
-    else if (url.find("https://") == 0) url.replace(0, 8, "wss://");
-    
-    // 移除尾部斜杠
-    if (url.back() == '/') url.pop_back();
-    url += "/socket.io/?EIO=4&transport=websocket";
-
-    spdlog::info("Socket URL: {}", url);
-    m_socket.setUrl(url);
-
     m_socket.setOnMessageCallback([this](const ix::WebSocketMessagePtr& msg) {
         this->OnMessage(msg);
     });
@@ -38,12 +25,29 @@ NetworkClient::~NetworkClient() {
 
 void NetworkClient::Start() {
     m_running = true;
+    
+    // 每次启动前重新构造 URL，确保使用的是最新配置
+    std::string url = m_config.server_url;
+    if (url.find("http://") == 0) url.replace(0, 7, "ws://");
+    else if (url.find("https://") == 0) url.replace(0, 8, "wss://");
+    
+    if (!url.empty() && url.back() == '/') url.pop_back();
+    url += "/socket.io/?EIO=4&transport=websocket";
+    
+    spdlog::info("Starting NetworkClient with URL: {}", url);
+    m_socket.setUrl(url);
     m_socket.start();
 }
 
 void NetworkClient::Stop() {
     m_running = false;
     m_socket.stop();
+}
+
+void NetworkClient::Restart() {
+    spdlog::info("Restarting NetworkClient...");
+    Stop();
+    Start();
 }
 
 bool NetworkClient::IsConnected() const {
@@ -54,12 +58,13 @@ void NetworkClient::OnMessage(const ix::WebSocketMessagePtr& msg) {
     if (msg->type == ix::WebSocketMessageType::Open) {
         spdlog::info("WebSocket Open. Sending Socket.IO connect packet...");
         m_connected = true;
-        // Socket.IO v4 握手：必须发送 "40" 才能加入默认命名空间并接收事件
         m_socket.send("40");
+        if (m_onStatusChange) m_onStatusChange(true);
     }
     else if (msg->type == ix::WebSocketMessageType::Close) {
         spdlog::warn("Disconnected");
         m_connected = false;
+        if (m_onStatusChange) m_onStatusChange(false);
     }
     else if (msg->type == ix::WebSocketMessageType::Message) {
         // spdlog::debug("Raw Message: {}", msg->str); // 调试用

@@ -28,8 +28,9 @@ public:
     static bool SetImageFromFile(const std::string& imagePath);
     static std::optional<std::string> GetImageToTempFile();
 
-private:
-    // 编码转换辅助
+    // 编码转换辅助 (公开以便 GUI 使用)
     static std::wstring Utf8ToWide(const std::string& str);
     static std::string WideToUtf8(const std::wstring& wstr);
+
+private:
 };

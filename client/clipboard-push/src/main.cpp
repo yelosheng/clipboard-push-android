@@ -1,83 +1,113 @@
 #include "Config.hpp"
 #include "Network.hpp"
 #include "Clipboard.hpp"
+#include "Gui.hpp"
 #include <windows.h>
+#include <gdiplus.h>
 #include <spdlog/spdlog.h>
-#include <iostream>
+#include <spdlog/sinks/basic_file_sink.h>
 
 #define HOTKEY_ID 1
 
-void ProcessPush(NetworkClient& client) {
-    spdlog::info("Hotkey triggered! Checking clipboard...");
+// Global Pointers for Callbacks
+NetworkClient* g_Client = nullptr;
+Gui* g_GuiPtr = nullptr;
+AppConfig g_Config;
+
+void DoPush() {
+    spdlog::info("Push triggered by Hotkey/Menu");
     
     ClipboardType type = Clipboard::GetType();
-    
+    bool success = false;
+    std::wstring msg = L"";
+
     if (type == ClipboardType::Text) {
         auto text = Clipboard::GetText();
-        if (text) {
-            spdlog::info("Pushing text: {}...", text->substr(0, 20));
-            if (client.PushText(*text)) spdlog::info("Push success");
-            else spdlog::error("Push failed");
-        }
+        if (text) success = g_Client->PushText(*text);
+        msg = L"Text pushed to server";
     } 
     else if (type == ClipboardType::FileList) {
         auto files = Clipboard::GetFiles();
         for (const auto& path : files) {
             std::filesystem::path p(path);
-            spdlog::info("Pushing file: {}", p.filename().string());
-            if (client.PushFile(path, p.filename().string())) spdlog::info("Push success");
-            else spdlog::error("Push failed");
+            if(g_Client->PushFile(path, p.filename().string())) success = true;
         }
+        msg = L"Files pushed to server";
     }
     else if (type == ClipboardType::Image) {
-        // Handle image as temp file
         auto tempFile = Clipboard::GetImageToTempFile();
         if (tempFile) {
-            spdlog::info("Pushing image from clipboard...");
-            if (client.PushFile(*tempFile, "clipboard_image.bmp")) spdlog::info("Push success");
-            else spdlog::error("Push failed");
-            
-            // Cleanup? maybe later
+            if(g_Client->PushFile(*tempFile, "clipboard_image.bmp")) success = true;
+            msg = L"Image pushed to server";
         }
     }
-    else {
-        spdlog::warn("Clipboard empty or unknown format");
+
+    if (success) g_GuiPtr->ShowNotification(L"Push Success", msg);
+    else g_GuiPtr->ShowNotification(L"Push Failed", L"Could not push clipboard content");
+}
+
+void RegisterAppHotkey() {
+    UnregisterHotKey(NULL, HOTKEY_ID);
+    if (g_Config.hotkey_key != 0) {
+        if (RegisterHotKey(NULL, HOTKEY_ID, g_Config.hotkey_mod | MOD_NOREPEAT, g_Config.hotkey_key)) {
+            spdlog::info("Registered Hotkey: MOD={} KEY={}", g_Config.hotkey_mod, g_Config.hotkey_key);
+        } else {
+            DWORD err = GetLastError();
+            spdlog::error("Failed to register hotkey (Error: {}). Key collision?", err);
+            // Optional: Notify user
+            // MessageBoxW(NULL, L"Failed to register hotkey. It might be used by another app.", L"Warning", MB_ICONWARNING);
+        }
+    } else {
+        spdlog::info("Hotkey disabled (Key is 0)");
     }
 }
 
-int main() {
-    // 1. 初始化 Log
-    spdlog::set_pattern("[%H:%M:%S %z] [%^%l%$] %v");
-    spdlog::info("Starting Clipboard Man C++ Client...");
+void ReloadConfig() {
+    spdlog::info("Reloading config...");
+    g_Client->Restart();
+    // Re-register hotkey in case it changed
+    RegisterAppHotkey();
+}
 
-    // 2. 加载配置
-    AppConfig config = AppConfig::Load();
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    // 1. File Logger
+    auto logger = spdlog::basic_logger_mt("file_logger", "client.log");
+    spdlog::set_default_logger(logger);
     
-    // 3. 启动网络客户端
-    NetworkClient client(config);
+    // 2. Init GDI+
+    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+    ULONG_PTR gdiplusToken;
+    Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+
+    // 3. Config
+    g_Config = AppConfig::Load();
+
+    // 3. Network
+    NetworkClient client(g_Config);
+    g_Client = &client;
+    client.SetStatusCallback([](bool connected) {
+        if (g_GuiPtr) g_GuiPtr->UpdateStatus(connected);
+    });
     client.Start();
 
-    // 4. 注册热键 (Ctrl + Alt + V)
-    if (RegisterHotKey(NULL, HOTKEY_ID, MOD_CONTROL | MOD_ALT, 'V')) {
-        spdlog::info("Global Hotkey Registered: Ctrl + Alt + V");
-    } else {
-        spdlog::error("Failed to register hotkey!");
+    // 4. GUI
+    Gui gui(hInstance, g_Config, DoPush, ReloadConfig);
+    g_GuiPtr = &gui;
+    if (!gui.Init()) {
+        MessageBoxW(NULL, L"Failed to init GUI", L"Error", MB_ICONERROR);
+        return 1;
     }
+    
+    // 初始化一次状态
+    gui.UpdateStatus(client.IsConnected());
 
-    spdlog::info("Running... Press Ctrl+C to exit.");
+    // 5. Hotkey
+    RegisterAppHotkey();
 
-    // 5. 消息循环 (必须有消息循环才能响应 Hotkey)
-    MSG msg = {0};
-    while (GetMessage(&msg, NULL, 0, 0) != 0) {
-        if (msg.message == WM_HOTKEY) {
-            if (msg.wParam == HOTKEY_ID) {
-                ProcessPush(client);
-            }
-        }
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
-    }
+    // 6. Message Loop (handled by GUI)
+    gui.Run();
 
     client.Stop();
+    Gdiplus::GdiplusShutdown(gdiplusToken);
     return 0;
 }
