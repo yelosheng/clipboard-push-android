@@ -72,14 +72,9 @@ class MainActivity : ComponentActivity() {
             val currentState = clipboardService?.getConnectionState() ?: ConnectionState.DISCONNECTED
             mainViewModel?.updateConnectionState(currentState)
 
-            // 同步消息历史：从本地存储加载，而不是Service内存
-            // 这样可以确保删除操作被正确保留
-            CoroutineScope(Dispatchers.Main).launch {
-                val settingsRepository = com.example.clipboardman.data.repository.SettingsRepository(this@MainActivity)
-                val messageRepository = com.example.clipboardman.data.repository.MessageRepository(this@MainActivity)
-                val storedMessages = messageRepository.messagesFlow.first()
-                mainViewModel?.syncMessages(storedMessages)
-            }
+            // 从 Service 内存直接同步消息历史（最可靠，不依赖 DataStore 异步读取）
+            val serviceMessages = clipboardService?.getMessageHistory() ?: emptyList()
+            mainViewModel?.syncMessages(serviceMessages)
 
             // 自动重连：如果启用了自动连接且当前是断开状态，则重新连接
             if (currentState == ConnectionState.DISCONNECTED) {

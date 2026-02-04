@@ -79,14 +79,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * 同步消息列表（从本地存储恢复）
+     * 同步消息列表（从 Service 内存同步）
+     * Service 的消息列表已按最新在前排序，直接作为数据源
      */
     fun syncMessages(messages: List<PushMessage>) {
         val maxCount = maxHistoryCount.value
-        // 合并现有消息和新消息，去重后取前maxCount条
-        val existingIds = _messages.value.map { it.safeId }.toSet()
-        val newMessages = messages.filter { it.safeId !in existingIds }
-        _messages.value = (_messages.value + newMessages)
+        _messages.value = messages
             .distinctBy { it.safeId }
             .take(maxCount)
     }
