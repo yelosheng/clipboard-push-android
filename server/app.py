@@ -52,7 +52,17 @@ MAX_MESSAGES = 100  # 最多保存100条消息
 
 # 已连接的客户端
 connected_clients = set()  # Socket.IO clients
-websocket_clients_native = set()  # Native WebSocket clients
+websocket_clients_native = {}  # Native WebSocket clients: {ws_object: ip_address}
+
+
+def get_real_ip():
+    """获取客户端真实 IP（处理 Nginx 反向代理）"""
+    if request.headers.getlist("X-Forwarded-For"):
+        return request.headers.getlist("X-Forwarded-For")[0].split(',')[0].strip()
+    elif request.headers.get("X-Real-Ip"):
+        return request.headers.get("X-Real-Ip")
+    else:
+        return request.remote_addr
 
 
 def get_mime_type(filename):
@@ -73,22 +83,31 @@ def detect_message_type(mime_type):
         return 'file'
 
 
-def broadcast_message(message, exclude_ws=None):
+def broadcast_message(message, exclude_ws=None, exclude_sid=None, exclude_ip=None):
     """广播消息给所有客户端（Socket.IO + Native WebSocket）"""
     # Socket.IO clients
     # 注意：在非 Socket.IO 上下文（如 Native WS 或 REST API）中调用 emit，
     # 必须显式指定 broadcast=True（尽管在较新版本中可能是默认行为，但加上更保险）
-    socketio.emit('new_message', message)
+    socketio.emit('new_message', message, skip_sid=exclude_sid)
 
     # Native WebSocket clients
-    for ws_client in list(websocket_clients_native):
-        if ws_client == exclude_ws:
+    # websocket_clients_native 是个字典: {ws: ip}
+    for ws_client, client_ip in list(websocket_clients_native.items()):
+        # 1. 排除指定的 WebSocket 连接对象 (针对 Native WS 发送的文本)
+        if exclude_ws and ws_client == exclude_ws:
             continue
+        
+        # 2. 排除指定的 IP 地址 (针对 HTTP POST 上传的文件/图片)
+        # 只有当 client_ip 和 exclude_ip 都存在且相等时才排除
+        if exclude_ip and client_ip and client_ip == exclude_ip:
+            continue
+
         try:
             ws_client.send(json.dumps(message))
         except Exception as e:
             print(f"[Native WS] Failed to send to client: {e}")
-            websocket_clients_native.discard(ws_client)
+            if ws_client in websocket_clients_native:
+                del websocket_clients_native[ws_client]
 
 
 def save_message(message):
@@ -151,9 +170,11 @@ def push_text():
 
     # 保存并广播
     save_message(message)
-    broadcast_message(message)
+    # 排除发送者 IP (防止回声)
+    sender_ip = get_real_ip()
+    broadcast_message(message, exclude_ip=sender_ip)
 
-    print(f"[PUSH] 文本消息 (from {source}): {content[:50]}{'...' if len(content) > 50 else ''}")
+    print(f"[PUSH] 文本消息 (from {source}, ip={sender_ip}): {content[:50]}{'...' if len(content) > 50 else ''}")
     return jsonify({'status': 'ok', 'message': message})
 
 
@@ -207,9 +228,11 @@ def push_file():
 
     # 保存并广播
     save_message(message)
-    broadcast_message(message)
+    # 排除发送者 IP (防止回声)
+    sender_ip = get_real_ip()
+    broadcast_message(message, exclude_ip=sender_ip)
 
-    print(f"[PUSH] 文件消息 (from {source}): {original_filename} ({file_size} bytes)")
+    print(f"[PUSH] 文件消息 (from {source}, ip={sender_ip}): {original_filename} ({file_size} bytes)")
     return jsonify({'status': 'ok', 'message': message})
 
 
@@ -280,15 +303,21 @@ def handle_ping():
 @sock.route('/ws')
 def websocket_endpoint(ws):
     """原生 WebSocket 端点（for Android client）"""
-    client_addr = request.remote_addr
+    client_ip = get_real_ip()
+    # client_addr 只用于日志打印
+    client_addr = f"{client_ip} ({request.remote_addr})"
+    
     print(f"[Native WS] 客户端连接: {client_addr} (在线: {len(websocket_clients_native) + 1})")
-    websocket_clients_native.add(ws)
+    
+    # 将 WS 对象和 IP 存入字典
+    websocket_clients_native[ws] = client_ip
 
     try:
         # 发送欢迎消息
         ws.send(json.dumps({
             'type': 'connected',
-            'server_time': datetime.now().isoformat()
+            'server_time': datetime.now().isoformat(),
+            'your_ip': client_ip
         }))
 
         # 保持连接，接收消息
@@ -307,7 +336,9 @@ def websocket_endpoint(ws):
     except Exception as e:
         print(f"[Native WS] 错误: {e}")
     finally:
-        websocket_clients_native.discard(ws)
+        # 清理连接
+        if ws in websocket_clients_native:
+            del websocket_clients_native[ws]
         print(f"[Native WS] 客户端断开: {client_addr} (在线: {len(websocket_clients_native)})")
 
 
