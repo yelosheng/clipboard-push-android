@@ -365,7 +365,11 @@ def handle_native_ws_message(ws, msg):
                 'timestamp': datetime.now().isoformat(),
             }
             save_message(message)
-            broadcast_message(message, exclude_ws=ws)
+            
+            # 使用 IP 排除 (因为 exclude_ws 可能不稳定，且为了统一逻辑)
+            sender_ip = websocket_clients_native.get(ws)
+            broadcast_message(message, exclude_ws=ws, exclude_ip=sender_ip)
+            
             print(f"[Native WS] 收到文本推送: {content[:50]}...")
 
 
