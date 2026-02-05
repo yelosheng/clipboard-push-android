@@ -22,6 +22,9 @@ import com.example.clipboardman.util.NotificationHelper
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
 import java.io.File
+import java.util.UUID
+import java.util.Collections
+import java.util.HashSet
 
 /**
  * 剪贴板前台服务
@@ -68,6 +71,9 @@ class ClipboardService : Service() {
     // 状态回调
     var onStateChanged: ((ConnectionState) -> Unit)? = null
     var onMessageReceived: ((PushMessage) -> Unit)? = null
+
+    // 已处理的消息ID集合（防重）
+    private val processedMessageIds = Collections.synchronizedSet(HashSet<String>())
 
     override fun onCreate() {
         super.onCreate()
@@ -248,6 +254,27 @@ class ClipboardService : Service() {
      */
     private fun handleMessage(message: PushMessage) {
         try {
+            // 防重处理
+            if (message.id != null && processedMessageIds.contains(message.id)) {
+                Log.d(TAG, "Duplicate message ignored: ${message.id}")
+                return
+            }
+            if (message.id != null) {
+                processedMessageIds.add(message.id)
+                // 限制集合大小，防止内存泄漏（保留最近200条）
+                if (processedMessageIds.size > 200) {
+                    // 简单的清理策略：当超过200时，清空早期的一半，或者直接重新创建一个新的（为简单起见，这里清除旧的）
+                    // 由于Set不好按顺序删，这里做个简单保护即可，实际场景200条ID占用内存极小
+                    val iterator = processedMessageIds.iterator()
+                    var count = 0
+                    while (iterator.hasNext() && count < 50) {
+                        iterator.next()
+                        iterator.remove()
+                        count++
+                    }
+                }
+            }
+
             Log.d(TAG, "Handling message: type=${message.type}, content=${message.content?.take(50)}")
 
             // 保存到内存历史记录
@@ -382,11 +409,16 @@ class ClipboardService : Service() {
         val isImage = mimeType.startsWith("image/")
         val downloadNotificationId = NotificationHelper.getServiceNotificationId() + 100
 
-        // 先下载到缓存目录
+        // 标记是否成功保存，用于决定是否报告错误
+        var isSaved = false
+
+        // 先下载到缓存目录，使用唯一文件名防止冲突
         val cacheDir = FileUtil.getCacheDir(this)
-        val tempFile = File(cacheDir, fileName)
+        val uniqueTempName = "${UUID.randomUUID()}_$fileName"
+        val tempFile = File(cacheDir, uniqueTempName)
 
         try {
+
             // 显示下载中通知
             NotificationHelper.showPushNotification(
                 this, "正在下载", fileName, downloadNotificationId
