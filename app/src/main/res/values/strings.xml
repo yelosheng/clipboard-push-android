@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Clipboard Man</string>
-
+    <string name="app_name">Clipboard Push</string>
     <!-- 主页 -->
     <string name="status_connected">已连接</string>
     <string name="status_disconnected">未连接</string>
@@ -23,7 +22,7 @@
     <!-- 通知 -->
     <string name="notification_channel_name">剪贴板服务</string>
     <string name="notification_channel_description">保持剪贴板推送服务运行</string>
-    <string name="notification_title">Clipboard Man</string>
+    <string name="notification_title">Clipboard Push</string>
     <string name="notification_text_connected">已连接到服务器</string>
     <string name="notification_text_disconnected">未连接</string>
 

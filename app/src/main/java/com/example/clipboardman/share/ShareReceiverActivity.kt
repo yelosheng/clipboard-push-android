@@ -69,7 +69,8 @@ class ShareReceiverActivity : ComponentActivity() {
     }
 
     private fun handleShareIntent(intent: Intent?) {
-        if (intent?.action != Intent.ACTION_SEND) {
+        val action = intent?.action
+        if (action != Intent.ACTION_SEND && action != Intent.ACTION_SEND_MULTIPLE) {
             finish()
             return
         }
@@ -88,10 +89,10 @@ class ShareReceiverActivity : ComponentActivity() {
 
             // 根据类型处理
             val mimeType = intent.type ?: ""
-            when {
-                mimeType == "text/plain" -> handleTextShare(intent)
-                mimeType.startsWith("image/") -> handleFileShare(intent, mimeType)
-                else -> handleFileShare(intent, mimeType)
+            if (mimeType == "text/plain" && action == Intent.ACTION_SEND) {
+                handleTextShare(intent)
+            } else {
+                handleContentShare(intent, action == Intent.ACTION_SEND_MULTIPLE)
             }
         }
     }
@@ -123,45 +124,93 @@ class ShareReceiverActivity : ComponentActivity() {
     /**
      * 处理文件/图片分享
      */
-    private suspend fun handleFileShare(intent: Intent, mimeType: String) {
-        val uri = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+    /**
+     * 处理文件/图片分享（支持单选和多选）
+     */
+    private suspend fun handleContentShare(intent: Intent, isMultiple: Boolean) {
+        val uris = ArrayList<Uri>()
+
+        if (isMultiple) {
+            val list = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM)
+            }
+            list?.let { uris.addAll(it) }
         } else {
-            @Suppress("DEPRECATION")
-            intent.getParcelableExtra(Intent.EXTRA_STREAM)
+            val uri = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra(Intent.EXTRA_STREAM)
+            }
+            uri?.let { uris.add(it) }
         }
 
-        if (uri == null) {
+        if (uris.isEmpty()) {
             showError("无法获取分享内容")
             return
         }
 
-        // 获取文件名
-        val fileName = getFileName(uri) ?: "shared_file"
-        contentDescription.value = fileName
+        val total = uris.size
+        var successCount = 0
+        var failCount = 0
 
-        uploadState.value = UploadState.Uploading("正在上传文件...")
+        // 显示初始状态
+        contentDescription.value = if (total == 1) "准备上传..." else "准备上传 $total 个文件..."
 
-        // 复制到临时文件
-        val tempFile = copyUriToTempFile(uri, fileName)
-        if (tempFile == null) {
-            showError("无法读取文件")
-            return
+        for ((index, uri) in uris.withIndex()) {
+            val fileName = getFileName(uri) ?: "shared_file_${System.currentTimeMillis()}"
+            
+            // 更新当前状态
+            val progressStr = if (total > 1) "(${index + 1}/$total) " else ""
+            uploadState.value = UploadState.Uploading("${progressStr}正在上传:\n$fileName")
+            if (total == 1) {
+                contentDescription.value = fileName
+            }
+
+            // 复制到临时文件
+            val tempFile = copyUriToTempFile(uri, fileName)
+            if (tempFile == null) {
+                Log.e(TAG, "Failed to copy file: $fileName")
+                failCount++
+                continue
+            }
+
+            try {
+                // 尝试获取具体 MIME 类型
+                val specificMimeType = contentResolver.getType(uri) ?: intent.type ?: "*/*"
+                
+                val result = apiService?.pushFile(tempFile, specificMimeType)
+                if (result != null && result.isSuccess) {
+                    successCount++
+                } else {
+                    failCount++
+                    Log.e(TAG, "Failed to upload $fileName: ${result?.exceptionOrNull()?.message}")
+                }
+            } catch (e: Exception) {
+                failCount++
+                Log.e(TAG, "Exception uploading $fileName: ${e.message}")
+            } finally {
+                // 清理临时文件
+                tempFile.delete()
+            }
         }
 
-        try {
-            val result = apiService?.pushFile(tempFile, mimeType)
-            result?.onSuccess {
-                uploadState.value = UploadState.Success
-                Toast.makeText(this, "上传成功", Toast.LENGTH_SHORT).show()
-                delay(500)
-                finish()
-            }?.onFailure { error ->
-                showError("上传失败: ${error.message}")
+        // 最终结果处理
+        if (failCount == 0) {
+            uploadState.value = UploadState.Success
+            Toast.makeText(this, "全部上传成功", Toast.LENGTH_SHORT).show()
+            delay(500)
+            finish()
+        } else {
+            if (successCount > 0) {
+                Toast.makeText(this, "完成: $successCount 成功, $failCount 失败", Toast.LENGTH_LONG).show()
+                finish() // 部分成功也关闭
+            } else {
+                showError("所有文件上传失败")
             }
-        } finally {
-            // 清理临时文件
-            tempFile.delete()
         }
     }
 
