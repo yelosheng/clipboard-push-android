@@ -5,6 +5,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import androidx.core.content.FileProvider
+import java.io.File
 
 /**
  * 剪贴板操作助手
@@ -109,6 +111,22 @@ class ClipboardHelper(private val context: Context) {
             Log.d(TAG, "Clipboard cleared")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to clear clipboard: ${e.message}")
+        }
+    }
+
+    /**
+     * 获取文件的安全 URI (FileProvider)
+     */
+    fun getUriForFile(file: File): Uri? {
+        return try {
+            FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get URI for file: ${e.message}")
+            null
         }
     }
 }

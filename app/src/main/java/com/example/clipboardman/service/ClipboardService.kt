@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.wifi.WifiManager
+import android.net.Uri
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
@@ -281,6 +282,8 @@ class ClipboardService : Service() {
                         message.isTextType -> handleTextMessage(message)
                         message.isFileType -> handleFileMessage(message)
                     }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e // 协程取消必须重新抛出
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to handle message content: ${e.message}", e)
                 }
@@ -330,54 +333,44 @@ class ClipboardService : Service() {
      * 处理文件消息
      */
     private suspend fun handleFileMessage(message: PushMessage) {
-        try {
-            val fileUrl = message.fileUrl ?: return
-            val fileName = message.fileName ?: "unknown_file"
-            val mimeType = message.mimeType ?: FileUtil.getMimeType(fileName)
+        val fileUrl = message.fileUrl ?: return
+        val fileName = message.fileName ?: "unknown_file"
+        val mimeType = message.mimeType ?: FileUtil.getMimeType(fileName)
 
-            // 获取文件处理模式
-            val fileMode = settingsRepository.fileHandleModeFlow.first()
-            val baseUrl = settingsRepository.getHttpBaseUrl(serverAddress, useHttps)
-            val fullUrl = "$baseUrl$fileUrl"
-
-            Log.d(TAG, "Processing file message: fileName=$fileName, mimeType=$mimeType, mode=$fileMode")
-
-            when (fileMode) {
-                SettingsRepository.FILE_MODE_SAVE_LOCAL -> {
-                    // 下载文件到本地
-                    downloadAndSaveFile(fullUrl, fileName, mimeType, copyImageToClipboard = false)
-                }
-                SettingsRepository.FILE_MODE_COPY_REFERENCE -> {
-                    // 复制文件 URL
-                    clipboardHelper.copyFileReference(fullUrl, fileName)
-                    NotificationHelper.showPushNotification(
-                        this,
-                        "收到文件",
-                        "$fileName\nURL已复制到剪贴板"
-                    )
-                }
-                SettingsRepository.FILE_MODE_SAVE_AND_COPY_IMAGE -> {
-                    // 保存并复制图片到剪贴板
-                    downloadAndSaveFile(fullUrl, fileName, mimeType, copyImageToClipboard = true)
-                }
-            }
+        // 获取文件处理模式
+        val fileMode = try {
+            settingsRepository.fileHandleModeFlow.first()
         } catch (e: Exception) {
-            Log.e(TAG, "Error handling file message: ${e.message}", e)
-            // 尝试显示错误通知
-            try {
+            Log.e(TAG, "Failed to get file handle mode, using default: ${e.message}")
+            SettingsRepository.FILE_MODE_COPY_REFERENCE
+        }
+        val baseUrl = settingsRepository.getHttpBaseUrl(serverAddress, useHttps)
+        val fullUrl = "$baseUrl$fileUrl"
+
+        Log.d(TAG, "Processing file message: fileName=$fileName, mimeType=$mimeType, mode=$fileMode")
+
+        // downloadAndSaveFile 内部已有完整的错误处理，不需要外层再包 try-catch
+        when (fileMode) {
+            SettingsRepository.FILE_MODE_SAVE_LOCAL -> {
+                downloadAndSaveFile(fullUrl, fileName, mimeType, copyImageToClipboard = false)
+            }
+            SettingsRepository.FILE_MODE_COPY_REFERENCE -> {
+                clipboardHelper.copyFileReference(fullUrl, fileName)
                 NotificationHelper.showPushNotification(
                     this,
-                    "文件处理失败",
-                    "${message.fileName ?: "未知文件"}: ${e.message}"
+                    "收到文件",
+                    "$fileName\nURL已复制到剪贴板"
                 )
-            } catch (e2: Exception) {
-                Log.e(TAG, "Failed to show error notification: ${e2.message}", e2)
+            }
+            SettingsRepository.FILE_MODE_SAVE_AND_COPY_IMAGE -> {
+                downloadAndSaveFile(fullUrl, fileName, mimeType, copyImageToClipboard = true)
             }
         }
     }
 
     /**
      * 下载文件并保存到本地
+     * 内部完整处理所有错误，不会抛出异常
      */
     private suspend fun downloadAndSaveFile(
         fileUrl: String,
@@ -387,79 +380,90 @@ class ClipboardService : Service() {
     ) {
         val api = apiService ?: return
         val isImage = mimeType.startsWith("image/")
+        val downloadNotificationId = NotificationHelper.getServiceNotificationId() + 100
 
         // 先下载到缓存目录
         val cacheDir = FileUtil.getCacheDir(this)
         val tempFile = File(cacheDir, fileName)
 
-        // 显示下载中通知
-        NotificationHelper.showPushNotification(
-            this,
-            "正在下载",
-            fileName,
-            NotificationHelper.getServiceNotificationId() + 100
-        )
-
-        val result = api.downloadFile(fileUrl, tempFile) { progress ->
-            Log.d(TAG, "Download progress: $progress%")
-        }
-
-        result.onSuccess { downloadedFile ->
-            // 保存到公共目录
-            val savedUri = FileUtil.saveToPublicDownloads(
-                this,
-                downloadedFile,
-                FileUtil.generateUniqueFileName(fileName),
-                mimeType
+        try {
+            // 显示下载中通知
+            NotificationHelper.showPushNotification(
+                this, "正在下载", fileName, downloadNotificationId
             )
 
+            val result = api.downloadFile(fileUrl, tempFile) { progress ->
+                // Log.d(TAG, "Download progress: $progress%")
+            }
+
+            if (result.isFailure) {
+                val error = result.exceptionOrNull()
+                Log.e(TAG, "Download failed: ${error?.message}")
+                NotificationHelper.showPushNotification(
+                    this, "下载失败", "$fileName: ${error?.message}"
+                )
+                // 回退到复制 URL
+                clipboardHelper.copyFileReference(fileUrl, fileName)
+                return
+            }
+
+            val downloadedFile = result.getOrNull() ?: return
+
+            // 保存到公共目录
+            val savedUri = FileUtil.saveToPublicDownloads(
+                this, downloadedFile,
+                FileUtil.generateUniqueFileName(fileName), mimeType
+            )
+
+            val finalUri: Uri?
+            val finalPath: String?
+
             if (savedUri != null) {
-                // 根据设置决定复制方式
-                if (copyImageToClipboard && isImage) {
-                    // 复制图片 URI 到剪贴板（可直接粘贴）
-                    clipboardHelper.copyImageUri(savedUri, mimeType)
-                    NotificationHelper.showPushNotification(
-                        this,
-                        "图片已保存",
-                        "$fileName\n图片已复制到剪贴板，可直接粘贴"
-                    )
-                } else {
-                    // 复制文件路径到剪贴板
-                    val filePath = savedUri.toString()
-                    clipboardHelper.copyFilePath(filePath)
-                    NotificationHelper.showPushNotification(
-                        this,
-                        "文件已保存",
-                        "$fileName\n路径已复制到剪贴板"
-                    )
-                }
+                finalUri = savedUri
+                finalPath = savedUri.toString()
             } else {
-                // 保存到公共目录失败，使用私有目录路径
+                // 保存到公共目录失败，使用私有目录
                 val privateDir = FileUtil.getDownloadDir(this)
                 val privateFile = File(privateDir, FileUtil.generateUniqueFileName(fileName))
                 downloadedFile.copyTo(privateFile, overwrite = true)
-
-                clipboardHelper.copyFilePath(privateFile.absolutePath)
-                NotificationHelper.showPushNotification(
-                    this,
-                    "文件已保存",
-                    "$fileName\n路径已复制到剪贴板"
-                )
+                finalUri = clipboardHelper.getUriForFile(privateFile) ?: Uri.fromFile(privateFile)
+                finalPath = privateFile.absolutePath
             }
 
-            // 清理临时文件
-            tempFile.delete()
+            // 文件已保存成功，后续剪贴板/通知操作失败只记日志
+            try {
+                if (copyImageToClipboard && isImage && finalUri != null) {
+                    clipboardHelper.copyImageUri(finalUri, mimeType)
+                    NotificationHelper.showPushNotification(
+                        this, "图片已保存",
+                        "$fileName\n图片已复制到剪贴板，可直接粘贴"
+                    )
+                } else {
+                    if (finalPath != null) {
+                        clipboardHelper.copyFilePath(finalPath)
+                    }
+                    NotificationHelper.showPushNotification(
+                        this, "文件已保存",
+                        "$fileName\n路径已复制到剪贴板"
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Post-save operation failed (file already saved): ${e.message}", e)
+            }
 
-        }.onFailure { error ->
-            Log.e(TAG, "Download failed: ${error.message}")
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // 协程取消不应当作错误处理，直接重新抛出
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in downloadAndSaveFile: ${e.message}", e)
             NotificationHelper.showPushNotification(
-                this,
-                "下载失败",
-                "$fileName: ${error.message}"
+                this, "文件处理失败", "$fileName: ${e.message}"
             )
-
-            // 失败时回退到复制 URL
-            clipboardHelper.copyFileReference(fileUrl, fileName)
+        } finally {
+            // 清理临时文件
+            try {
+                if (tempFile.exists()) tempFile.delete()
+            } catch (ignore: Exception) {}
         }
     }
 
