@@ -149,5 +149,32 @@ def handle_file_push(data):
         emit('file_sync', data, room=room, include_self=False)
         logger.info(f"Relayed file metadata to room: {room}")
 
+@app.route('/api/relay', methods=['POST'])
+def relay_message():
+    """
+    Stateless relay endpoint for Push Tools (CLI/Shortcuts).
+    Accepts JSON: { "room": "...", "event": "...", "data": ... }
+    Broadcasts via Socket.IO to the specified room.
+    """
+    try:
+        content = request.json
+        room = content.get('room')
+        event = content.get('event')
+        data = content.get('data')
+
+        if not room or not event or data is None:
+            return jsonify({'error': 'Missing room, event, or data'}), 400
+
+        # Broadcast to room (exclude_self=False because sender is via HTTP)
+        socketio.emit(event, data, room=room)
+        logger.info(f"Relayed HTTP message to room {room}: event={event}")
+        
+        return jsonify({'status': 'ok'}), 200
+
+    except Exception as e:
+        logger.error(f"Relay error: {e}")
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    # use_reloader=False to prevent double execution and potential SSL issues on startup
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True, use_reloader=False)

@@ -1,6 +1,10 @@
 {
+    "relay_server_url": "http://localhost:5000",
+    "download_path": "Z:\\ReceivedFiles",
+    "device_id": "pc_Huang",
+    "room_id": "room_1770292750",
+    "room_key": "o5v322z2ne8DpMBinIaRUcnJkFlPb/MxYDuU41nNfSg=",
     "server_url": "http://192.168.2.63:9661",
-    "download_path": "Z:/ReceivedFiles",
     "auto_copy_image": true,
     "auto_copy_file": true
 }
