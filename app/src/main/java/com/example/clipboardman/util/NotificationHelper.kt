@@ -29,7 +29,7 @@ object NotificationHelper {
         serverAddress: String
     ): Notification {
         val contentText = when (state) {
-            ConnectionState.CONNECTED -> "已连接: $serverAddress"
+            ConnectionState.CONNECTED -> "已连接"
             ConnectionState.CONNECTING -> "正在连接..."
             ConnectionState.DISCONNECTED -> "未连接"
             ConnectionState.ERROR -> "连接错误"
