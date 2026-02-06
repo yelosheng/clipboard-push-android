@@ -80,7 +80,14 @@ class ClipboardService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
 
-    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    // 异常处理器：捕获协程中的未处理异常，防止崩溃
+    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        Log.e(TAG, "Coroutine exception caught", throwable)
+        DebugLogger.log(TAG, "Coroutine exception: ${throwable.message}")
+        // 不崩溃，只记录日志
+    }
+
+    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob() + exceptionHandler)
 
     private var currentState = ConnectionState.DISCONNECTED
     private var serverAddress = ""
@@ -111,12 +118,16 @@ class ClipboardService : Service() {
 
     private fun loadMessageHistory() {
         serviceScope.launch {
-            messageRepository.messagesFlow.collect { messages ->
-                synchronized(messageHistory) {
-                    if (messageHistory.isEmpty() && messages.isNotEmpty()) {
-                        messageHistory.addAll(messages)
+            try {
+                messageRepository.messagesFlow.collect { messages ->
+                    synchronized(messageHistory) {
+                        if (messageHistory.isEmpty() && messages.isNotEmpty()) {
+                            messageHistory.addAll(messages)
+                        }
                     }
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading message history", e)
             }
         }
     }
@@ -124,28 +135,40 @@ class ClipboardService : Service() {
     // Connect relay status to Service State
     private fun observeRelayEvents() {
         serviceScope.launch {
-            relayRepository.connectionStatus.collect { isConnected ->
-                updateState(if (isConnected) ConnectionState.CONNECTED else ConnectionState.DISCONNECTED)
+            try {
+                relayRepository.connectionStatus.collect { isConnected ->
+                    updateState(if (isConnected) ConnectionState.CONNECTED else ConnectionState.DISCONNECTED)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error observing connection status", e)
             }
         }
 
         serviceScope.launch {
-            relayRepository.events.collect { event ->
-                when (event) {
-                    is RelayEvent.ClipboardSync -> handleClipboardSync(event.data)
-                    is RelayEvent.FileSync -> handleFileSync(event.data)
+            try {
+                relayRepository.events.collect { event ->
+                    when (event) {
+                        is RelayEvent.ClipboardSync -> handleClipboardSync(event.data)
+                        is RelayEvent.FileSync -> handleFileSync(event.data)
+                    }
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error processing relay event", e)
             }
         }
         
         // Listen for clipboard changes to SEND (Upload)
-        clipboardHelper.addPrimaryClipChangedListener(object : ClipboardHelper.OnPrimaryClipChangedListener {
-            override fun onPrimaryClipChanged() {
-                // Determine if changed by us (ignore) or external
-                // For MVP, just try to send whatever is new
-                // TODO: Avoid loops
-            }
-        })
+        try {
+            clipboardHelper.addPrimaryClipChangedListener(object : ClipboardHelper.OnPrimaryClipChangedListener {
+                override fun onPrimaryClipChanged() {
+                    // Determine if changed by us (ignore) or external
+                    // For MVP, just try to send whatever is new
+                    // TODO: Avoid loops
+                }
+            })
+        } catch (e: Exception) {
+            Log.e(TAG, "Error adding clipboard listener", e)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

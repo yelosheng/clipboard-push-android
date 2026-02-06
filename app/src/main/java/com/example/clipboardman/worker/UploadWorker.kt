@@ -129,6 +129,15 @@ class UploadWorker(
             .setOngoing(true)
             .setProgress(0, 0, true)
             .build()
-        return androidx.work.ForegroundInfo(notificationId, notification)
+        // Android 14+ 需要指定 foregroundServiceType
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            androidx.work.ForegroundInfo(
+                notificationId, 
+                notification, 
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            )
+        } else {
+            androidx.work.ForegroundInfo(notificationId, notification)
+        }
     }
 }

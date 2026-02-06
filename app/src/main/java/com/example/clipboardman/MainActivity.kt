@@ -215,13 +215,17 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkAndAutoReconnect() {
-        CoroutineScope(Dispatchers.Main).launch {
-            val settingsRepository = com.example.clipboardman.data.repository.SettingsRepository(this@MainActivity)
-            val autoConnect = settingsRepository.autoConnectFlow.first()
-            val serverAddress = settingsRepository.serverAddressFlow.first()
+        lifecycleScope.launch {
+            try {
+                val settingsRepository = com.example.clipboardman.data.repository.SettingsRepository(this@MainActivity)
+                val autoConnect = settingsRepository.autoConnectFlow.first()
+                val serverAddress = settingsRepository.serverAddressFlow.first()
 
-            if (autoConnect && serverAddress.isNotBlank()) {
-                startClipboardService()
+                if (autoConnect && serverAddress.isNotBlank()) {
+                    startClipboardService()
+                }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Error in checkAndAutoReconnect", e)
             }
         }
     }

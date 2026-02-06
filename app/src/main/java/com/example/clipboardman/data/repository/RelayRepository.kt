@@ -31,6 +31,10 @@ class RelayRepository {
         try {
             val opts = IO.Options()
             opts.reconnection = true
+            opts.reconnectionAttempts = Int.MAX_VALUE // 无限重试
+            opts.reconnectionDelay = 1000
+            opts.reconnectionDelayMax = 5000
+            opts.timeout = 20000
             // opts.forceNew = true // Uncomment if needed
             
             Log.d("RelayRepository", "Socket Connecting: $serverUrl")
@@ -43,9 +47,13 @@ class RelayRepository {
                 DebugLogger.log("RelayRepository", "Socket Connected")
                 _connectionStatus.tryEmit(true)
                 // Join Room
-                val joinData = JSONObject()
-                joinData.put("room", roomId)
-                socket?.emit("join", joinData)
+                try {
+                    val joinData = JSONObject()
+                    joinData.put("room", roomId)
+                    socket?.emit("join", joinData)
+                } catch (e: Exception) {
+                    Log.e("RelayRepository", "Failed to join room", e)
+                }
             }?.on(Socket.EVENT_DISCONNECT) {
                 Log.d("RelayRepository", "Disconnected from Relay")
                 DebugLogger.log("RelayRepository", "Socket Disconnected")
@@ -58,18 +66,30 @@ class RelayRepository {
             }
             
             socket?.on("clipboard_sync") { args ->
-                if (args.isNotEmpty()) {
-                    val data = args[0] as JSONObject
-                    Log.d("Relay", "Received clipboard_sync: $data")
-                    _events.tryEmit(RelayEvent.ClipboardSync(data))
+                try {
+                    if (args.isNotEmpty() && args[0] is JSONObject) {
+                        val data = args[0] as JSONObject
+                        Log.d("Relay", "Received clipboard_sync: $data")
+                        _events.tryEmit(RelayEvent.ClipboardSync(data))
+                    } else {
+                        Log.w("Relay", "clipboard_sync: Invalid data format: ${args.getOrNull(0)}")
+                    }
+                } catch (e: Exception) {
+                    Log.e("Relay", "Error processing clipboard_sync", e)
                 }
             }
             
             socket?.on("file_sync") { args ->
-                if (args.isNotEmpty()) {
-                    val data = args[0] as JSONObject
-                    Log.d("Relay", "Received file_sync: $data")
-                    _events.tryEmit(RelayEvent.FileSync(data))
+                try {
+                    if (args.isNotEmpty() && args[0] is JSONObject) {
+                        val data = args[0] as JSONObject
+                        Log.d("Relay", "Received file_sync: $data")
+                        _events.tryEmit(RelayEvent.FileSync(data))
+                    } else {
+                        Log.w("Relay", "file_sync: Invalid data format: ${args.getOrNull(0)}")
+                    }
+                } catch (e: Exception) {
+                    Log.e("Relay", "Error processing file_sync", e)
                 }
             }
             
@@ -77,6 +97,8 @@ class RelayRepository {
             
         } catch (e: URISyntaxException) {
             Log.e("Relay", "Invalid URL: $serverUrl", e)
+        } catch (e: Exception) {
+            Log.e("Relay", "Connection failed: ${e.message}", e)
         }
     }
 

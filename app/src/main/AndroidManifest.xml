@@ -82,6 +82,12 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- WorkManager 前台服务 (Android 14+ 需要声明 foregroundServiceType) -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
+
         <!-- FileProvider (用于文件分享) -->
         <provider
             android:name="androidx.core.content.FileProvider"

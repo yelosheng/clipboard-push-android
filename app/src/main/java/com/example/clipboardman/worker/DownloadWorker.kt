@@ -97,7 +97,42 @@ class DownloadWorker(
             decryptedFile.delete()
 
             if (savedUri != null) {
-                // Success
+                // 4. Check file handling mode and copy to clipboard if needed
+                val fileHandleMode = settingsRepository.fileHandleModeFlow.first()
+                Log.d(TAG, "File handle mode: $fileHandleMode")
+                
+                val clipboardHelper = com.example.clipboardman.service.ClipboardHelper(applicationContext)
+                
+                when (fileHandleMode) {
+                    SettingsRepository.FILE_MODE_SAVE_LOCAL -> {
+                        // Just save, copy file path to clipboard
+                        clipboardHelper.copyFilePath(savedUri.toString())
+                        Log.d(TAG, "Copied file path to clipboard")
+                    }
+                    SettingsRepository.FILE_MODE_COPY_REFERENCE -> {
+                        // Copy file URI reference
+                        clipboardHelper.copyImageUri(savedUri)
+                        Log.d(TAG, "Copied file URI to clipboard")
+                    }
+                    SettingsRepository.FILE_MODE_SAVE_AND_COPY_IMAGE -> {
+                        // If it's an image, copy the image to clipboard
+                        if (mimeType.startsWith("image")) {
+                            try {
+                                clipboardHelper.copyImageUri(savedUri, mimeType)
+                                Log.d(TAG, "Copied image to clipboard")
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to copy image to clipboard", e)
+                                // Fallback: copy path
+                                clipboardHelper.copyFilePath(savedUri.toString())
+                            }
+                        } else {
+                            // For non-images, copy file URI
+                            clipboardHelper.copyImageUri(savedUri)
+                        }
+                    }
+                }
+                
+                // Success notification
                 NotificationHelper.showPushNotification(
                     applicationContext,
                     "Download Complete",
@@ -142,6 +177,15 @@ class DownloadWorker(
             .setOngoing(true)
             .setProgress(0, 0, true)
             .build()
-        return androidx.work.ForegroundInfo(notificationId, notification)
+        // Android 14+ 需要指定 foregroundServiceType
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            androidx.work.ForegroundInfo(
+                notificationId, 
+                notification, 
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            )
+        } else {
+            androidx.work.ForegroundInfo(notificationId, notification)
+        }
     }
 }

@@ -26,13 +26,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         // Auto-Migration for legacy defaults
         viewModelScope.launch {
-            val currentAddress = settingsRepository.serverAddressFlow.first()
-            val hasKeys = settingsRepository.serverAddressFlow.firstOrNull() != null
-            
-            // 如果是 "localhost" (模拟器/旧缓存) 或者空或者包含端口 5000 (旧默认)
-            if (currentAddress.contains("localhost") || currentAddress.contains("5000")) {
-                com.example.clipboardman.util.DebugLogger.log("ViewModel", "Auto-Migrating config: $currentAddress -> kxkl.tk:5055")
-                settingsRepository.saveServerAddress("kxkl.tk:5055")
+            try {
+                val currentAddress = settingsRepository.serverAddressFlow.first()
+                
+                // 如果是 "localhost" (模拟器/旧缓存) 或者空或者包含端口 5000 (旧默认)
+                if (currentAddress.contains("localhost") || currentAddress.contains("5000")) {
+                    com.example.clipboardman.util.DebugLogger.log("ViewModel", "Auto-Migrating config: $currentAddress -> kxkl.tk:5055")
+                    settingsRepository.saveServerAddress("kxkl.tk:5055")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MainViewModel", "Error in auto-migration", e)
             }
         }
         // 启动时加载本地存储的消息
@@ -41,15 +44,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun loadMessagesFromStorage() {
         viewModelScope.launch {
-            messageRepository.messagesFlow.first().let { storedMessages ->
-                if (storedMessages.isNotEmpty()) {
-                    val maxCount = maxHistoryCount.value
-                    val existingIds = _messages.value.map { it.safeId }.toSet()
-                    val newMessages = storedMessages.filter { it.safeId !in existingIds }
-                    _messages.value = (_messages.value + newMessages)
-                        .distinctBy { it.safeId }
-                        .take(maxCount)
+            try {
+                messageRepository.messagesFlow.first().let { storedMessages ->
+                    if (storedMessages.isNotEmpty()) {
+                        val maxCount = maxHistoryCount.value
+                        val existingIds = _messages.value.map { it.safeId }.toSet()
+                        val newMessages = storedMessages.filter { it.safeId !in existingIds }
+                        _messages.value = (_messages.value + newMessages)
+                            .distinctBy { it.safeId }
+                            .take(maxCount)
+                    }
                 }
+            } catch (e: Exception) {
+                android.util.Log.e("MainViewModel", "Error loading messages from storage", e)
             }
         }
     }
