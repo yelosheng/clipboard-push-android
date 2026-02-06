@@ -47,7 +47,7 @@ object NotificationHelper {
         return NotificationCompat.Builder(context, ClipboardManApp.NOTIFICATION_CHANNEL_ID)
             .setContentTitle("Clipboard Man")
             .setContentText(contentText)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setSilent(true)
@@ -91,7 +91,7 @@ object NotificationHelper {
         val notification = NotificationCompat.Builder(context, ClipboardManApp.NOTIFICATION_CHANNEL_PUSH)
             .setContentTitle(title)
             .setContentText(content)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)  // 高优先级
