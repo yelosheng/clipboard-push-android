@@ -213,8 +213,14 @@ fun HomeScreen(
                             "连接服务器后可接收消息"
                         },
                         color = TextSecondary,
+
                         fontSize = 16.sp
                     )
+                    
+                    if (connectionState == ConnectionState.DISCONNECTED || connectionState == ConnectionState.ERROR) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("请前往设置页面进行配对", color = MaterialTheme.colorScheme.error)
+                    }
                 }
             } else {
                 LazyColumn(

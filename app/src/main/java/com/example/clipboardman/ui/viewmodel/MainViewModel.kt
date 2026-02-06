@@ -24,6 +24,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val messages: StateFlow<List<PushMessage>> = _messages.asStateFlow()
 
     init {
+        // Auto-Migration for legacy defaults
+        viewModelScope.launch {
+            val currentAddress = settingsRepository.serverAddressFlow.first()
+            val hasKeys = settingsRepository.serverAddressFlow.firstOrNull() != null
+            
+            // 如果是 "localhost" (模拟器/旧缓存) 或者空或者包含端口 5000 (旧默认)
+            if (currentAddress.contains("localhost") || currentAddress.contains("5000")) {
+                com.example.clipboardman.util.DebugLogger.log("ViewModel", "Auto-Migrating config: $currentAddress -> kxkl.tk:5055")
+                settingsRepository.saveServerAddress("kxkl.tk:5055")
+            }
+        }
         // 启动时加载本地存储的消息
         loadMessagesFromStorage()
     }

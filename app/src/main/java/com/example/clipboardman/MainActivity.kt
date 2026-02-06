@@ -18,6 +18,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -96,6 +97,60 @@ class MainActivity : ComponentActivity() {
         // 权限请求结果处理
     }
 
+    private val scanLauncher = registerForActivityResult(com.journeyapps.barcodescanner.ScanContract()) { result ->
+        if (result.contents == null) {
+            Toast.makeText(this, "Cancelled", Toast.LENGTH_SHORT).show()
+        } else {
+            handleScanResult(result.contents)
+        }
+    }
+
+    private fun launchQRScanner() {
+        val options = com.journeyapps.barcodescanner.ScanOptions()
+        options.setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE)
+        options.setPrompt("Scan Pairing Code from PC")
+        options.setCameraId(0)
+        options.setBeepEnabled(false)
+        options.setBarcodeImageEnabled(false)
+        options.setOrientationLocked(false)
+        options.setCaptureActivity(com.journeyapps.barcodescanner.CaptureActivity::class.java)
+        scanLauncher.launch(options)
+    }
+
+    private fun handleScanResult(json: String) {
+        try {
+            val obj = org.json.JSONObject(json)
+            val server = obj.getString("server")
+            val room = obj.getString("room")
+            val key = obj.getString("key")
+            
+            lifecycleScope.launch {
+                com.example.clipboardman.util.DebugLogger.log("QR_SCAN", "Saving pairing info...")
+                val settingsRepo = com.example.clipboardman.data.repository.SettingsRepository(applicationContext)
+                settingsRepo.savePairingInfo(server, room, key)
+                
+                com.example.clipboardman.util.DebugLogger.log("QR_SCAN", "Restarting Service...")
+                
+                // Restart Service with ACTION_START
+                val intent = Intent(this@MainActivity, ClipboardService::class.java).apply {
+                    action = ClipboardService.ACTION_START
+                }
+                stopService(intent)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    startForegroundService(intent)
+                } else {
+                    startService(intent)
+                }
+                
+                Toast.makeText(this@MainActivity, "Settings Saved. Connecting...", Toast.LENGTH_LONG).show()
+                // Update Log UI
+                com.example.clipboardman.util.DebugLogger.log("MainActivity", "Service restart requested")
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Invalid Code: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -120,7 +175,8 @@ class MainActivity : ComponentActivity() {
                         onStartService = { startClipboardService() },
                         onStopService = { stopClipboardService() },
                         onMessageClick = { message, serverAddr, useHttps -> handleMessageClick(message, serverAddr, useHttps) },
-                        onPushClipboard = { handlePushClipboard() }
+                        onPushClipboard = { handlePushClipboard() },
+                        onScanClick = { launchQRScanner() }
                     )
                 }
             }
@@ -310,7 +366,9 @@ fun MainNavigation(
     onStartService: () -> Unit,
     onStopService: () -> Unit,
     onMessageClick: (PushMessage, String, Boolean) -> Unit,
-    onPushClipboard: () -> Unit
+
+    onPushClipboard: () -> Unit,
+    onScanClick: () -> Unit
 ) {
     val navController = rememberNavController()
 
@@ -350,6 +408,7 @@ fun MainNavigation(
                 },
                 onMessageClick = { message -> onMessageClick(message, serverAddress, useHttps) },
                 onDeleteMessages = { messageIds -> viewModel.deleteMessages(messageIds) },
+
                 onPushClipboard = onPushClipboard
             )
         }
@@ -375,6 +434,7 @@ fun MainNavigation(
                 onFileHandleModeChange = { viewModel.saveFileHandleMode(it) },
                 onAutoConnectChange = { viewModel.saveAutoConnect(it) },
                 onMaxHistoryCountChange = { viewModel.saveMaxHistoryCount(it) },
+                onScanClick = onScanClick,
                 onBackClick = { navController.popBackStack() }
             )
         }

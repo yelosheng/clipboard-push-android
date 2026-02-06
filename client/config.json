@@ -1,9 +1,9 @@
 {
-    "relay_server_url": "http://localhost:5000",
+    "relay_server_url": "http://kxkl.tk:5055",
     "download_path": "Z:\\ReceivedFiles",
     "device_id": "pc_Huang",
-    "room_id": "room_1770292750",
-    "room_key": "o5v322z2ne8DpMBinIaRUcnJkFlPb/MxYDuU41nNfSg=",
+    "room_id": "room_1770342471",
+    "room_key": "/5dlqQJDGRgL0QVjUgXF838marteXqcD+Gx7j5uIvrI=",
     "server_url": "http://192.168.2.63:9661",
     "auto_copy_image": true,
     "auto_copy_file": true

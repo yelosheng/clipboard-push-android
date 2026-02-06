@@ -28,6 +28,10 @@ app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'dev_secret_key')
 # Initialize SocketIO with standard threading (most compatible)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
+import urllib3
+# Disable SSL warnings because we are using verify=False to fix local proxy issues
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 # Initialize S3 Client (Cloudflare R2)
 s3_client = boto3.client(
     's3',
@@ -35,7 +39,8 @@ s3_client = boto3.client(
     aws_access_key_id=R2_ACCESS_KEY_ID,
     aws_secret_access_key=R2_SECRET_ACCESS_KEY,
     config=Config(signature_version='s3v4'),
-    region_name='auto' # R2 specific
+    region_name='auto', # R2 specific
+    verify=False # FIXME: SSL validation fails in this env, likely due to proxy
 )
 
 # Verify R2 Connection on Startup
@@ -49,7 +54,7 @@ except Exception as e:
     
 @app.route('/')
 def index():
-    return "Clipboard Push Relay Server is Running. 🚀"
+    return "Clipboard Push Relay Server is Running (Port 5055). 🚀"
 
 # --- File Transfer Logic (R2 Presigned URLs) ---
 
@@ -177,4 +182,4 @@ def relay_message():
 
 if __name__ == '__main__':
     # use_reloader=False to prevent double execution and potential SSL issues on startup
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True, use_reloader=False)
+    socketio.run(app, host='0.0.0.0', port=5055, debug=True, use_reloader=False)

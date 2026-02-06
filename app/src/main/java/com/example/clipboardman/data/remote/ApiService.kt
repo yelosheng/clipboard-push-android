@@ -181,8 +181,97 @@ class ApiService(private val baseUrl: String) {
     }
 
     /**
-     * API 响应数据类
+     * 获取上传授权 (Cloudflare R2)
      */
+    suspend fun getUploadAuth(filename: String, size: Long, contentType: String): Result<UploadAuthResponse> = withContext(Dispatchers.IO) {
+        try {
+            val json = gson.toJson(mapOf(
+                "filename" to filename,
+                "size" to size,
+                "content_type" to contentType
+            ))
+            val requestBody = json.toRequestBody("application/json".toMediaType())
+
+            val request = Request.Builder()
+                .url("$baseUrl/api/file/upload_auth")
+                .post(requestBody)
+                .build()
+
+            val response = client.newCall(request).execute()
+            val responseBody = response.body?.string()
+
+            if (response.isSuccessful && responseBody != null) {
+                // Server returns { upload_url: "...", download_url: "...", file_id: "..." }
+                val auth = gson.fromJson(responseBody, UploadAuthResponse::class.java)
+                Result.success(auth)
+            } else {
+                Result.failure(Exception("Get upload auth failed: ${response.code}"))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "getUploadAuth error", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 上传文件到 R2 (PUT)
+     */
+    suspend fun uploadToR2(url: String, file: File, contentType: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val requestBody = file.asRequestBody(contentType.toMediaType())
+            val request = Request.Builder()
+                .url(url)
+                .put(requestBody)
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception("R2 Upload failed: ${response.code}"))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "uploadToR2 error", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 发送 Relay 事件 (通知服务器广播)
+     */
+    suspend fun relayEvent(room: String, event: String, data: Map<String, Any>): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val payload = mapOf(
+                "room" to room,
+                "event" to event,
+                "data" to data
+            )
+            val json = gson.toJson(payload)
+            val requestBody = json.toRequestBody("application/json".toMediaType())
+
+            val request = Request.Builder()
+                .url("$baseUrl/api/relay")
+                .post(requestBody)
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception("Relay event failed: ${response.code}"))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "relayEvent error", e)
+            Result.failure(e)
+        }
+    }
+
+    data class UploadAuthResponse(
+        val upload_url: String,
+        val download_url: String,
+        val file_id: String
+    )
+
     private data class ApiResponse(
         val status: String,
         val message: PushMessage? = null,

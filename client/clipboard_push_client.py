@@ -39,7 +39,7 @@ def load_config():
     config_path = Path(__file__).parent / "config.json"
     # 默认配置：不再需要 server_url，而是 relay_server_url
     default_config = {
-        "relay_server_url": "http://localhost:5000",   # 开发环境
+        "relay_server_url": "http://kxkl.tk:5055",   # 默认公网地址
         "download_path": str(Path.home() / "Downloads" / "ClipboardPush"),
         "device_id": "pc_" + os.getlogin(),
         "room_id": None,      # 配对成功后保存
@@ -365,7 +365,8 @@ def main():
         # Allow running to pairing menu even if offline
     
     # Simple CLI Loop
-    if not CONFIG["room_id"]:
+    force_pair = "--pair" in sys.argv or "--reset" in sys.argv
+    if force_pair or not CONFIG["room_id"]:
         pairing_menu()
         if not CONFIG["room_id"]: # User exited without pairing
             return 

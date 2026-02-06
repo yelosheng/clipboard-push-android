@@ -129,4 +129,23 @@ class ClipboardHelper(private val context: Context) {
             null
         }
     }
+    interface OnPrimaryClipChangedListener {
+        fun onPrimaryClipChanged()
+    }
+
+    private val listeners = mutableMapOf<OnPrimaryClipChangedListener, ClipboardManager.OnPrimaryClipChangedListener>()
+
+    fun addPrimaryClipChangedListener(listener: OnPrimaryClipChangedListener) {
+        val systemListener = ClipboardManager.OnPrimaryClipChangedListener {
+            listener.onPrimaryClipChanged()
+        }
+        listeners[listener] = systemListener
+        clipboardManager.addPrimaryClipChangedListener(systemListener)
+    }
+
+    fun removePrimaryClipChangedListener(listener: OnPrimaryClipChangedListener) {
+        listeners.remove(listener)?.let { systemListener ->
+            clipboardManager.removePrimaryClipChangedListener(systemListener)
+        }
+    }
 }

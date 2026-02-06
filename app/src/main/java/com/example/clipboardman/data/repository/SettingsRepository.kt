@@ -23,6 +23,10 @@ class SettingsRepository(private val context: Context) {
         private val KEY_FILE_HANDLE_MODE = intPreferencesKey("file_handle_mode")
         private val KEY_AUTO_CONNECT = booleanPreferencesKey("auto_connect")
         private val KEY_MAX_HISTORY_COUNT = intPreferencesKey("max_history_count")
+        
+        // Pairing Info
+        private val KEY_ROOM_ID = stringPreferencesKey("room_id")
+        private val KEY_ROOM_KEY = stringPreferencesKey("room_key")
 
         // 文件处理模式
         const val FILE_MODE_SAVE_LOCAL = 0          // 保存到本地
@@ -30,7 +34,7 @@ class SettingsRepository(private val context: Context) {
         const val FILE_MODE_SAVE_AND_COPY_IMAGE = 2 // 保存并复制图片到剪贴板
 
         // 默认值
-        private const val DEFAULT_SERVER_ADDRESS = "192.168.1.100:9661"
+        private const val DEFAULT_SERVER_ADDRESS = "kxkl.tk:5055"
         private const val DEFAULT_USE_HTTPS = false
         private const val DEFAULT_FILE_HANDLE_MODE = FILE_MODE_COPY_REFERENCE
         private const val DEFAULT_AUTO_CONNECT = false
@@ -130,9 +134,6 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
-    /**
-     * 获取 HTTP 基础 URL
-     */
     fun getHttpBaseUrl(serverAddress: String, useHttps: Boolean): String {
         val address = serverAddress.trim()
         val protocol = if (useHttps) "https" else "http"
@@ -140,6 +141,33 @@ class SettingsRepository(private val context: Context) {
             address
         } else {
             "$protocol://$address"
+        }
+    }
+
+    // --- Pairing Info ---
+
+    val roomIdFlow: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[KEY_ROOM_ID]
+    }
+
+    val roomKeyFlow: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[KEY_ROOM_KEY]
+    }
+
+    suspend fun savePairingInfo(server: String, room: String, key: String) {
+        com.example.clipboardman.util.DebugLogger.log("SettingsRepo", "Saving - Server: $server Room: $room")
+        context.dataStore.edit { preferences ->
+            preferences[KEY_SERVER_ADDRESS] = server
+            preferences[KEY_ROOM_ID] = room
+            preferences[KEY_ROOM_KEY] = key
+            preferences[KEY_USE_HTTPS] = false // Default to HTTP for local relay
+        }
+    }
+
+    suspend fun clearPairingInfo() {
+        context.dataStore.edit { preferences ->
+            preferences.remove(KEY_ROOM_ID)
+            preferences.remove(KEY_ROOM_KEY)
         }
     }
 }

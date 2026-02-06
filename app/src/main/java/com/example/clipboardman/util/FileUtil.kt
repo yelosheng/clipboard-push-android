@@ -44,8 +44,34 @@ object FileUtil {
     }
 
     /**
-     * 生成唯一文件名
+     * 从 URI 获取文件名
      */
+    fun getFileName(context: Context, uri: Uri): String? {
+        var result: String? = null
+        if (uri.scheme == "content") {
+            val cursor = context.contentResolver.query(uri, null, null, null, null)
+            try {
+                if (cursor != null && cursor.moveToFirst()) {
+                    val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (index != -1) {
+                        result = cursor.getString(index)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to get filename from content provider", e)
+            } finally {
+                cursor?.close()
+            }
+        }
+        if (result == null) {
+            result = uri.path
+            val cut = result?.lastIndexOf('/')
+            if (cut != -1 && cut != null) {
+                result = result?.substring(cut + 1)
+            }
+        }
+        return result
+    }
     fun generateUniqueFileName(originalName: String): String {
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
         val extension = originalName.substringAfterLast('.', "")

@@ -9,7 +9,7 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.clipboardman"
+        applicationId = "com.example.clipboardpush.plus"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
@@ -66,11 +66,21 @@ dependencies {
     // DataStore
     implementation("androidx.datastore:datastore-preferences:1.0.0")
 
+    // WorkManager (Background Tasks)
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
     // Coil (图片加载)
     implementation("io.coil-kt:coil-compose:2.5.0")
+
+    // Socket.IO
+    implementation("io.socket:socket.io-client:2.1.0")
+
+    // QR Code Scanning (ZXing)
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    implementation("com.google.zxing:core:3.5.1")
 
     // Test
     testImplementation("junit:junit:4.13.2")
