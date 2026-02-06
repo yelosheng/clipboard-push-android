@@ -66,4 +66,27 @@ class MessageRepository(private val context: Context) {
             preferences[KEY_MESSAGES] = "[]"
         }
     }
+
+    /**
+     * 更新消息的本地路径
+     */
+    suspend fun updateMessageLocalPath(messageId: String, localPath: String) {
+        context.messageDataStore.edit { preferences ->
+            val json = preferences[KEY_MESSAGES] ?: "[]"
+            try {
+                val type = object : TypeToken<MutableList<PushMessage>>() {}.type
+                val messages: MutableList<PushMessage> = gson.fromJson(json, type) ?: mutableListOf()
+                
+                // 找到对应消息并更新
+                val index = messages.indexOfFirst { it.id == messageId || it.safeId == messageId }
+                if (index >= 0) {
+                    val oldMsg = messages[index]
+                    messages[index] = oldMsg.copy(localPath = localPath)
+                    preferences[KEY_MESSAGES] = gson.toJson(messages)
+                }
+            } catch (e: Exception) {
+                // 忽略错误
+            }
+        }
+    }
 }

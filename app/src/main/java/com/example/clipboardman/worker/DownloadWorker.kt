@@ -10,6 +10,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.example.clipboardman.R
 import com.example.clipboardman.ClipboardManApp
+import com.example.clipboardman.data.repository.MessageRepository
 import com.example.clipboardman.data.repository.SettingsRepository
 import com.example.clipboardman.util.CryptoManager
 import com.example.clipboardman.util.FileUtil
@@ -33,17 +34,20 @@ class DownloadWorker(
         const val KEY_FILE_NAME = "key_file_name"
         const val KEY_MIME_TYPE = "key_mime_type"
         const val KEY_IS_ENCRYPTED = "key_is_encrypted"
+        const val KEY_MESSAGE_ID = "key_message_id"
         
         private const val TAG = "DownloadWorker"
     }
 
     private val settingsRepository = SettingsRepository(context)
+    private val messageRepository = MessageRepository(context)
     private val client = OkHttpClient()
 
     override suspend fun doWork(): Result {
         val fileUrl = inputData.getString(KEY_FILE_URL) ?: return Result.failure()
         val fileName = inputData.getString(KEY_FILE_NAME) ?: "unknown_file"
         val mimeType = inputData.getString(KEY_MIME_TYPE) ?: "application/octet-stream"
+        val messageId = inputData.getString(KEY_MESSAGE_ID)
         
         // Construct full URL if relative
         val serverAddress = settingsRepository.serverAddressFlow.first()
@@ -130,6 +134,12 @@ class DownloadWorker(
                             clipboardHelper.copyImageUri(savedUri)
                         }
                     }
+                }
+                
+                // Update message with local path
+                if (messageId != null) {
+                    messageRepository.updateMessageLocalPath(messageId, savedUri.toString())
+                    Log.d(TAG, "Updated message $messageId with local path: $savedUri")
                 }
                 
                 // Success notification

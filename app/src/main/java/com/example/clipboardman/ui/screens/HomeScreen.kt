@@ -517,20 +517,40 @@ fun MessageItem(
             Spacer(modifier = Modifier.height(8.dp))
 
             // 图片缩略图
-            if (isImage && message.fileUrl != null && baseUrl.isNotBlank()) {
-                val imageUrl = "$baseUrl${message.fileUrl}"
-
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(imageUrl)
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = message.fileName,
-                    modifier = Modifier
-                        .heightIn(max = 120.dp)
-                        .clip(RoundedCornerShape(8.dp)),
-                    contentScale = ContentScale.Fit
-                )
+            if (isImage) {
+                // 优先使用本地路径
+                val imageSource = message.localPath
+                
+                if (imageSource != null) {
+                    // 已下载，使用本地文件
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(android.net.Uri.parse(imageSource))
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = message.fileName,
+                        modifier = Modifier
+                            .heightIn(max = 120.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    // 尚未下载，显示占位符
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(80.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "图片下载中...",
+                            color = TextSecondary,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(8.dp))
 

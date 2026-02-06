@@ -259,10 +259,46 @@ class MainActivity : ComponentActivity() {
                 clipboardManager.setPrimaryClip(clip)
                 Toast.makeText(this, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
             }
-            // 图片/文件 - 用系统应用打开
+            // 图片/文件 - 优先使用本地路径
+            message.isFileType && message.localPath != null -> {
+                // 已有本地文件，直接打开
+                openLocalUri(message.localPath!!, message.mimeType ?: "*/*", message.type ?: PushMessage.TYPE_FILE)
+            }
+            // 图片/文件 - 无本地路径，从网上下载
             message.isFileType && message.fileUrl != null -> {
                 openFileWithSystem(message, serverAddress, useHttps)
             }
+        }
+    }
+
+    private fun openLocalUri(uriString: String, mimeType: String, messageType: String) {
+        try {
+            val uri = android.net.Uri.parse(uriString)
+            
+            // 根据消息类型推断正确的 MIME 类型
+            val actualMimeType = when {
+                mimeType != "*/*" && mimeType.isNotBlank() -> mimeType
+                messageType == PushMessage.TYPE_IMAGE -> "image/*"
+                messageType == PushMessage.TYPE_VIDEO -> "video/*"
+                messageType == PushMessage.TYPE_AUDIO -> "audio/*"
+                else -> "*/*"
+            }
+            
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, actualMimeType)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+
+            // 直接启动，不使用 chooser
+            if (intent.resolveActivity(packageManager) != null) {
+                startActivity(intent)
+            } else {
+                // 没有找到可以处理的应用，显示 chooser
+                startActivity(Intent.createChooser(intent, "选择应用打开"))
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "打开失败: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 

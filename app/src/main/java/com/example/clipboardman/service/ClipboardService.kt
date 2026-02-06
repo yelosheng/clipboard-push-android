@@ -271,6 +271,15 @@ class ClipboardService : Service() {
             
             // Write to Clipboard
             clipboardHelper.copyText(content)
+            
+            // 发送系统通知
+            val previewText = if (content.length > 50) content.take(50) + "..." else content
+            NotificationHelper.showPushNotification(
+                this,
+                "收到文本",
+                previewText,
+                System.currentTimeMillis().toInt()
+            )
         }
     }
 
@@ -282,8 +291,9 @@ class ClipboardService : Service() {
         DebugLogger.log(TAG, "Received File Sync: $fileName")
         
         if (downloadUrl.isNotEmpty()) {
+            val messageId = System.currentTimeMillis().toString()
              val msg = PushMessage(
-                id = System.currentTimeMillis().toString(),
+                id = messageId,
                 type = if (mimeType == "image") PushMessage.TYPE_IMAGE else PushMessage.TYPE_FILE,
                 content = fileName,
                 timestamp = data.optString("timestamp"),
@@ -291,13 +301,23 @@ class ClipboardService : Service() {
                 fileName = fileName
             )
             saveAndNotifyMessage(msg)
+            
+            // 发送系统通知
+            val typeLabel = if (mimeType == "image") "图片" else "文件"
+            NotificationHelper.showPushNotification(
+                this,
+                "收到$typeLabel",
+                "正在下载: $fileName",
+                messageId.toInt()
+            )
 
-            // Start Download Worker
+            // Start Download Worker with message ID
             val workData = workDataOf(
                 DownloadWorker.KEY_FILE_URL to downloadUrl,
                 DownloadWorker.KEY_FILE_NAME to fileName,
                 DownloadWorker.KEY_MIME_TYPE to mimeType,
-                DownloadWorker.KEY_IS_ENCRYPTED to true
+                DownloadWorker.KEY_IS_ENCRYPTED to true,
+                DownloadWorker.KEY_MESSAGE_ID to messageId
             )
             
             val workRequest = OneTimeWorkRequestBuilder<DownloadWorker>()

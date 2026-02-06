@@ -45,15 +45,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun loadMessagesFromStorage() {
         viewModelScope.launch {
             try {
-                messageRepository.messagesFlow.first().let { storedMessages ->
-                    if (storedMessages.isNotEmpty()) {
-                        val maxCount = maxHistoryCount.value
-                        val existingIds = _messages.value.map { it.safeId }.toSet()
-                        val newMessages = storedMessages.filter { it.safeId !in existingIds }
-                        _messages.value = (_messages.value + newMessages)
-                            .distinctBy { it.safeId }
-                            .take(maxCount)
-                    }
+                // 持续观察 MessageRepository 的变化（包括 localPath 更新）
+                messageRepository.messagesFlow.collect { storedMessages ->
+                    val maxCount = maxHistoryCount.value
+                    _messages.value = storedMessages.take(maxCount)
                 }
             } catch (e: Exception) {
                 android.util.Log.e("MainViewModel", "Error loading messages from storage", e)
