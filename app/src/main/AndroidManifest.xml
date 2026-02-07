@@ -55,6 +55,7 @@
             android:exported="false"
             android:theme="@style/Theme.ClipboardMan.Transparent"
             android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
             android:taskAffinity="" />
 
         <!-- 分享接收 Activity -->

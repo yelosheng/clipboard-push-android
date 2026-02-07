@@ -49,11 +49,12 @@ object NotificationHelper {
 
         // 创建推送剪贴板按钮的 Intent
         val pushIntent = Intent(context, com.example.clipboardman.QuickPushActivity::class.java).apply {
+            action = ACTION_PUSH_CLIPBOARD  // 使用 action 区分
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val pushPendingIntent = PendingIntent.getActivity(
             context,
-            1,
+            100,  // 使用不同的 requestCode
             pushIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )

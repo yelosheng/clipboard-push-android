@@ -21,43 +21,63 @@ class QuickPushActivity : ComponentActivity() {
 
     companion object {
         private const val TAG = "QuickPushActivity"
+        private const val EXPECTED_ACTION = "com.example.clipboardman.ACTION_PUSH_CLIPBOARD"
+        @Volatile
+        private var lastPushTime = 0L
+        private const val DEBOUNCE_MS = 3000L // 3秒防抖
     }
-
-    private val activityScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    private lateinit var settingsRepository: SettingsRepository
-    private var isProcessing = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // 防止重复执行
-        if (isProcessing) {
+        handleIntent(intent)
+    }
+
+    override fun onNewIntent(intent: android.content.Intent?) {
+        super.onNewIntent(intent)
+        intent?.let { handleIntent(it) }
+    }
+
+    private fun handleIntent(intent: android.content.Intent) {
+        // 验证 action，忽略非预期的调用
+        if (intent.action != EXPECTED_ACTION) {
+            Log.d(TAG, "Ignoring intent with action: ${intent.action}")
             finish()
             return
         }
-        isProcessing = true
-        
-        settingsRepository = SettingsRepository(this)
-        
-        // 立即执行推送
         performQuickPush()
     }
 
     private fun performQuickPush() {
-        activityScope.launch {
+        // 防抖：3秒内不重复执行
+        val now = System.currentTimeMillis()
+        if (now - lastPushTime < DEBOUNCE_MS) {
+            Log.d(TAG, "Debounce: skipping duplicate push")
+            finish()
+            return
+        }
+        lastPushTime = now
+
+        val settingsRepository = SettingsRepository(this)
+
+        CoroutineScope(Dispatchers.Main).launch {
             try {
-                // 读取剪贴板 (在 Activity 前台上下文中可以正常读取)
+                // 读取剪贴板
                 val clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val clipData = clipboardManager.primaryClip
                 
                 if (clipData == null || clipData.itemCount == 0) {
-                    showResult(false, "剪贴板为空")
+                    Toast.makeText(this@QuickPushActivity, "剪贴板为空", Toast.LENGTH_SHORT).show()
+                    finish()
                     return@launch
                 }
                 
-                val text = clipData.getItemAt(0).text?.toString()
+                // 尝试获取文本
+                val item = clipData.getItemAt(0)
+                val text = item.text?.toString() ?: item.coerceToText(this@QuickPushActivity)?.toString()
+                
                 if (text.isNullOrBlank()) {
-                    showResult(false, "剪贴板内容不是文本")
+                    Toast.makeText(this@QuickPushActivity, "剪贴板不是文本", Toast.LENGTH_SHORT).show()
+                    finish()
                     return@launch
                 }
                 
@@ -67,15 +87,15 @@ class QuickPushActivity : ComponentActivity() {
                 val roomId = settingsRepository.roomIdFlow.first()
                 
                 if (serverAddress.isBlank() || roomId.isNullOrBlank()) {
-                    showResult(false, "未配置服务器")
+                    Toast.makeText(this@QuickPushActivity, "未配置服务器", Toast.LENGTH_SHORT).show()
+                    finish()
                     return@launch
                 }
                 
-                // 发送 - 使用 HTTP Relay API 而不是 WebSocket
+                // 发送
                 val httpUrl = settingsRepository.getHttpBaseUrl(serverAddress, useHttps)
                 val apiService = com.example.clipboardman.data.remote.ApiService(httpUrl)
                 
-                // 使用 Relay API 发送
                 val result = apiService.relayEvent(roomId, "clipboard_sync", mapOf(
                     "content" to text,
                     "room" to roomId,
@@ -84,19 +104,22 @@ class QuickPushActivity : ComponentActivity() {
                 ))
                 
                 if (result.isFailure) {
-                    showResult(false, result.exceptionOrNull()?.message ?: "发送失败")
-                    return@launch
+                    Toast.makeText(this@QuickPushActivity, "发送失败", Toast.LENGTH_SHORT).show()
+                } else {
+                    // 震动反馈
+                    vibrateSuccess()
+                    val preview = text.take(20) + if (text.length > 20) "..." else ""
+                    Toast.makeText(this@QuickPushActivity, "✓ $preview", Toast.LENGTH_SHORT).show()
                 }
-                
-                // 震动反馈
-                vibrateSuccess()
-                
-                showResult(true, text.take(30) + if (text.length > 30) "..." else "")
                 
             } catch (e: Exception) {
                 Log.e(TAG, "Quick push failed", e)
-                showResult(false, e.message ?: "未知错误")
+                Toast.makeText(this@QuickPushActivity, "推送失败", Toast.LENGTH_SHORT).show()
             }
+            
+            // 完成后关闭
+            delay(100)
+            finish()
         }
     }
     
@@ -104,32 +127,13 @@ class QuickPushActivity : ComponentActivity() {
         try {
             val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE))
+                vibrator.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
             } else {
                 @Suppress("DEPRECATION")
-                vibrator.vibrate(100)
+                vibrator.vibrate(50)
             }
         } catch (e: Exception) {
-            // Ignore vibration errors
+            // Ignore
         }
-    }
-    
-    private fun showResult(success: Boolean, message: String) {
-        if (success) {
-            Toast.makeText(this, "已推送: $message", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(this, "推送失败: $message", Toast.LENGTH_SHORT).show()
-        }
-        
-        // 延迟关闭以显示 Toast
-        activityScope.launch {
-            delay(300)
-            finish()
-        }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        activityScope.cancel()
     }
 }
