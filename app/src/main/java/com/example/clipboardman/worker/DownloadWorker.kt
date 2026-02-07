@@ -13,6 +13,7 @@ import com.example.clipboardman.ClipboardManApp
 import com.example.clipboardman.data.repository.MessageRepository
 import com.example.clipboardman.data.repository.SettingsRepository
 import com.example.clipboardman.util.CryptoManager
+import com.example.clipboardman.util.DebugLogger
 import com.example.clipboardman.util.FileUtil
 import com.example.clipboardman.util.NotificationHelper
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +50,8 @@ class DownloadWorker(
         val mimeType = inputData.getString(KEY_MIME_TYPE) ?: "application/octet-stream"
         val messageId = inputData.getString(KEY_MESSAGE_ID)
         
+        DebugLogger.log("DL", "Start: $fileName msgId=$messageId")
+        
         // Construct full URL if relative
         val serverAddress = settingsRepository.serverAddressFlow.first()
         val useHttps = settingsRepository.useHttpsFlow.first()
@@ -66,12 +69,15 @@ class DownloadWorker(
             // 1. Download
             val tempEncryptedFile = File.createTempFile("enc_", ".tmp", applicationContext.cacheDir)
             
+            DebugLogger.log("DL", "Downloading: $fullUrl")
             Log.d(TAG, "Starting download: $fullUrl")
             downloadToFile(fullUrl, tempEncryptedFile)
+            DebugLogger.log("DL", "Downloaded ${tempEncryptedFile.length()} bytes")
 
             // 2. Decrypt (if needed) - Assume all R2 files are encrypted
             val roomKey = settingsRepository.roomKeyFlow.first()
             if (roomKey.isNullOrEmpty()) {
+                DebugLogger.log("DL", "ERROR: No room key!")
                 Log.e(TAG, "No room key found for decryption")
                 return Result.failure()
             }
@@ -138,8 +144,12 @@ class DownloadWorker(
                 
                 // Update message with local path
                 if (messageId != null) {
+                    DebugLogger.log("DL", "Updating localPath for $messageId")
                     messageRepository.updateMessageLocalPath(messageId, savedUri.toString())
+                    DebugLogger.log("DL", "✓ Done updating localPath")
                     Log.d(TAG, "Updated message $messageId with local path: $savedUri")
+                } else {
+                    DebugLogger.log("DL", "WARN: No messageId to update!")
                 }
                 
                 // Success notification
@@ -148,13 +158,16 @@ class DownloadWorker(
                     "Download Complete",
                     "Saved to Downloads: $uniqueName"
                 )
+                DebugLogger.log("DL", "✓ Success: $uniqueName")
                 Result.success(workDataOf("uri" to savedUri.toString()))
             } else {
+                DebugLogger.log("DL", "ERROR: saveToPublicDownloads returned null")
                 Log.e(TAG, "Failed to save to public downloads")
                 Result.failure()
             }
 
         } catch (e: Exception) {
+            DebugLogger.log("DL", "ERROR: ${e.message}")
             Log.e(TAG, "Download failed", e)
             NotificationHelper.showPushNotification(
                 applicationContext,

@@ -251,29 +251,104 @@ fun SettingsScreen(
 
             // 其他设置
             SettingsSection(title = "其他设置") {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onAutoConnectChange(!autoConnect) }
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "启动时自动连接",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Text(
-                            text = "App 启动后自动连接到服务器",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onAutoConnectChange(!autoConnect) }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "启动时自动连接",
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Text(
+                                text = "App 启动后自动连接到服务器",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = autoConnect,
+                            onCheckedChange = onAutoConnectChange
                         )
                     }
-                    Switch(
-                        checked = autoConnect,
-                        onCheckedChange = onAutoConnectChange
-                    )
+                    
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    
+                    // 电池优化白名单
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    val powerManager = context.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+                    val isIgnoringBattery = powerManager.isIgnoringBatteryOptimizations(context.packageName)
+                    
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                try {
+                                    val intent = android.content.Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                        data = android.net.Uri.parse("package:${context.packageName}")
+                                    }
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    // 某些手机可能不支持，尝试打开电池设置页面
+                                    try {
+                                        val intent = android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                        context.startActivity(intent)
+                                    } catch (e2: Exception) {
+                                        android.widget.Toast.makeText(context, "无法打开电池设置", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "忽略电池优化",
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Text(
+                                text = if (isIgnoringBattery) "✓ 已忽略（后台正常运行）" else "⚠ 未忽略（可能被系统杀死）",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isIgnoringBattery) Green500 else Orange500
+                            )
+                        }
+                        Text(
+                            text = "设置 →",
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    
+                    // 国产手机额外提示
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Orange500.copy(alpha = 0.1f)
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = "📱 国产手机用户注意",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = Orange500
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "小米/华为/OPPO/vivo 等手机可能还需要：\n" +
+                                    "• 在系统设置中搜索「自启动管理」，允许本 APP 自启动\n" +
+                                    "• 在「电池」设置中将 APP 设为「无限制」或允许后台运行",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             }
 

@@ -72,10 +72,9 @@ class MainActivity : ComponentActivity() {
             // 同步当前状态
             val currentState = clipboardService?.getConnectionState() ?: ConnectionState.DISCONNECTED
             mainViewModel?.updateConnectionState(currentState)
-
-            // 从 Service 内存直接同步消息历史（最可靠，不依赖 DataStore 异步读取）
-            val serviceMessages = clipboardService?.getMessageHistory() ?: emptyList()
-            mainViewModel?.syncMessages(serviceMessages)
+            
+            // 不再从 Service 内存同步消息历史
+            // ViewModel 通过 messageRepository.messagesFlow.collect 持续观察，更可靠
 
             // 自动重连：如果启用了自动连接且当前是断开状态，则重新连接
             if (currentState == ConnectionState.DISCONNECTED) {

@@ -308,7 +308,7 @@ class ClipboardService : Service() {
                 this,
                 "收到$typeLabel",
                 "正在下载: $fileName",
-                messageId.toInt()
+                messageId.hashCode()  // 使用 hashCode 而非 toInt()，避免溢出
             )
 
             // Start Download Worker with message ID
@@ -329,12 +329,14 @@ class ClipboardService : Service() {
     }
 
     private fun saveAndNotifyMessage(message: PushMessage) {
-        synchronized(messageHistory) {
-            messageHistory.add(0, message)
-            if (messageHistory.size > maxMessages) messageHistory.removeAt(messageHistory.size - 1)
-        }
+        // 使用原子操作保存，避免竞争条件
         serviceScope.launch {
-            messageRepository.saveMessages(messageHistory)
+            try {
+                messageRepository.addMessageAtomic(message)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error saving message", e)
+                DebugLogger.log(TAG, "Save error: ${e.message}")
+            }
         }
         onMessageReceived?.invoke(message)
     }

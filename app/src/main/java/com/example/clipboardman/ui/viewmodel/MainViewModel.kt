@@ -24,6 +24,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val messages: StateFlow<List<PushMessage>> = _messages.asStateFlow()
 
     init {
+        com.example.clipboardman.util.DebugLogger.log("ViewModel", "INIT - ViewModel Created!")
+        
         // Auto-Migration for legacy defaults
         viewModelScope.launch {
             try {
@@ -45,10 +47,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun loadMessagesFromStorage() {
         viewModelScope.launch {
             try {
+                var firstEmission = true
                 // 持续观察 MessageRepository 的变化（包括 localPath 更新）
                 messageRepository.messagesFlow.collect { storedMessages ->
                     val maxCount = maxHistoryCount.value
-                    _messages.value = storedMessages.take(maxCount)
+                    val result = storedMessages.take(maxCount)
+                    
+                    com.example.clipboardman.util.DebugLogger.log(
+                        "ViewModel", 
+                        "Flow emit: stored=${storedMessages.size}, maxCount=$maxCount, result=${result.size}, first=$firstEmission"
+                    )
+                    
+                    // 只有当结果非空，或者这不是第一次发射时才更新
+                    // 这避免了 DataStore 初始化时可能的空发射覆盖真实数据
+                    if (result.isNotEmpty() || !firstEmission) {
+                        _messages.value = result
+                    }
+                    firstEmission = false
                 }
             } catch (e: Exception) {
                 android.util.Log.e("MainViewModel", "Error loading messages from storage", e)
