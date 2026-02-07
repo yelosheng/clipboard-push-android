@@ -12,6 +12,10 @@ import org.json.JSONObject
 import java.net.URISyntaxException
 
 class RelayRepository {
+    companion object {
+        private const val TAG = "Relay"
+    }
+    
     private var socket: Socket? = null
     
     // Events exposed to Service / UI
@@ -115,7 +119,11 @@ class RelayRepository {
                 put("room", roomId)
                 put("content", content)
             }
-            socket?.emit("clipboard_sync", payload)
+            // 注意：服务器端监听 clipboard_push，然后广播 clipboard_sync
+            socket?.emit("clipboard_push", payload)
+            Log.d(TAG, "Sent clipboard_push to room: $roomId")
+        } else {
+            Log.w(TAG, "Cannot send: socket not connected")
         }
     }
 }
