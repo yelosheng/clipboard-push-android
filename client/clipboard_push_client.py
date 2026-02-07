@@ -15,6 +15,7 @@ PC 端剪贴板同步客户端 (Windows)
 """
 
 import sys
+import uuid
 import time
 import json
 import socketio
@@ -41,7 +42,7 @@ def load_config():
     default_config = {
         "relay_server_url": "http://kxkl.tk:5055",   # 默认公网地址
         "download_path": str(Path.home() / "Downloads" / "ClipboardPush"),
-        "device_id": "pc_" + os.getlogin(),
+        "device_id": f"pc_{os.getlogin()}_{uuid.uuid4().hex[:8]}", # Append UUID for uniqueness
         "room_id": None,      # 配对成功后保存
         "room_key": None      # 配对成功后保存 (Base64)
     }
@@ -274,8 +275,14 @@ sio = socketio.Client()
 def connect():
     logger.info("已连接中转服务器")
     if CONFIG["room_id"]:
-        sio.emit('join', {'room': CONFIG["room_id"]})
-        logger.info(f"已加入房间: {CONFIG['room_id']}")
+        # Send client_id (device_id) to server to identify this connection
+        # This allows the server to exclude us from broadcasts we initiated via HTTP
+        join_payload = {
+            'room': CONFIG["room_id"],
+            'client_id': CONFIG.get("device_id")
+        }
+        sio.emit('join', join_payload)
+        logger.info(f"已加入房间: {CONFIG['room_id']} (Device ID: {CONFIG.get('device_id')})")
         console.print(Panel(f"[bold green]✓ 在线 | 房间: {CONFIG['room_id']}[/bold green]", border_style="green"))
     else:
         console.print(Panel("[bold yellow]⚠ 未配对，请在菜单中选择配对[/bold yellow]", border_style="yellow"))

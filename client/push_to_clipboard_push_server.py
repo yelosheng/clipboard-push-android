@@ -89,7 +89,8 @@ def push_event(event_type, data):
     payload = {
         "room": ROOM_ID,
         "event": event_type,
-        "data": data
+        "data": data,
+        "client_id": CONFIG.get("device_id") # Identify sender to prevent echo
     }
     try:
         resp = requests.post(API_RELAY, json=payload, timeout=5)

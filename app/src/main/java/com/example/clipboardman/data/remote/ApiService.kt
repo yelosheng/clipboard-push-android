@@ -239,13 +239,22 @@ class ApiService(private val baseUrl: String) {
     /**
      * 发送 Relay 事件 (通知服务器广播)
      */
-    suspend fun relayEvent(room: String, event: String, data: Map<String, Any>): Result<Unit> = withContext(Dispatchers.IO) {
+    /**
+     * 发送 Relay 事件 (通知服务器广播)
+     * @param clientId 发送者的唯一标识，用于防止 Echo
+     */
+    suspend fun relayEvent(room: String, event: String, data: Map<String, Any>, clientId: String? = null): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val payload = mapOf(
+            val payload = mutableMapOf(
                 "room" to room,
                 "event" to event,
                 "data" to data
             )
+            
+            if (clientId != null) {
+                payload["client_id"] = clientId
+            }
+            
             val json = gson.toJson(payload)
             val requestBody = json.toRequestBody("application/json".toMediaType())
 

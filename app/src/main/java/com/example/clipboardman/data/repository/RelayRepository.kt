@@ -29,7 +29,7 @@ class RelayRepository {
     private val _connectionStatus = MutableSharedFlow<Boolean>(replay = 1)
     val connectionStatus = _connectionStatus.asSharedFlow()
 
-    fun connect(serverUrl: String, roomId: String) {
+    fun connect(serverUrl: String, roomId: String, clientId: String) {
         disconnect() // Close existing
 
         try {
@@ -54,6 +54,18 @@ class RelayRepository {
                 try {
                     val joinData = JSONObject()
                     joinData.put("room", roomId)
+                    
+                    // Add client_id if available (Pass it via connect or get globally? For now hardcode logic here or change connect signature)
+                    // Changing signature might break other calls. Let's retrieve it from a helper or just leave it for now?
+                    // Better to fix it properly. But RelayRepository doesn't have Context to get ANDROID_ID easily without dependency injection.
+                    // For now, let's leave IO socket join as is since IO socket broadcasts naturally exclude self.
+                    // The focus was cleaning up HTTP echo.
+                    
+                    // Actually, if we want the server to track this socket as "android_xxx", we MUST send it.
+                    // Let's rely on the caller to pass it? 
+                    // Let's modify connect to take clientId.
+                    joinData.put("client_id", clientId) // We need to add clientId to connect() param first
+                    
                     socket?.emit("join", joinData)
                 } catch (e: Exception) {
                     Log.e("RelayRepository", "Failed to join room", e)

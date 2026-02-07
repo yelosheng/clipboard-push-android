@@ -1,3 +1,4 @@
+# ... (imports remain the same)
 import os
 import time
 import json
@@ -51,7 +52,11 @@ try:
 except Exception as e:
     logger.error(f"❌ R2 Connection Failed: {e}")
     # Don't exit, just log error so we can debug
-    
+
+# Global mapping to track client_id -> list of sids
+# Structure: { 'client_id_1': {'sid1', 'sid2'}, ... }
+CLIENT_SESSIONS = {}
+
 @app.route('/')
 def index():
     return "Clipboard Push Relay Server is Running (Port 5055). 🚀"
@@ -113,13 +118,37 @@ def generate_upload_url():
 
 # --- Real-time Signaling Logic (Socket.IO) ---
 
+@socketio.on('connect')
+def on_connect():
+    logger.info(f"Client connected: {request.sid}")
+
+@socketio.on('disconnect')
+def on_disconnect():
+    logger.info(f"Client disconnected: {request.sid}")
+    # Remove SID from CLIENT_SESSIONS
+    for client_id, sids in list(CLIENT_SESSIONS.items()):
+        if request.sid in sids:
+            sids.discard(request.sid)
+            if not sids:
+                del CLIENT_SESSIONS[client_id]
+            logger.info(f"Removed SID {request.sid} from client {client_id}")
+            break
+
 @socketio.on('join')
 def on_join(data):
     room = data.get('room')
+    client_id = data.get('client_id')
+    
     if room:
         join_room(room)
         emit('status', {'msg': f'Joined room: {room}'}, room=room)
-        logger.info(f"Client joined room: {room}")
+        logger.info(f"Client {request.sid} joined room: {room}")
+        
+    if client_id:
+        if client_id not in CLIENT_SESSIONS:
+            CLIENT_SESSIONS[client_id] = set()
+        CLIENT_SESSIONS[client_id].add(request.sid)
+        logger.info(f"Registered client_id {client_id} with sid {request.sid}")
 
 @socketio.on('leave')
 def on_leave(data):
@@ -158,21 +187,35 @@ def handle_file_push(data):
 def relay_message():
     """
     Stateless relay endpoint for Push Tools (CLI/Shortcuts).
-    Accepts JSON: { "room": "...", "event": "...", "data": ... }
+    Accepts JSON: { "room": "...", "event": "...", "data": ..., "sender_id": "..." }
     Broadcasts via Socket.IO to the specified room.
+    To prevent echo, provide 'sender_id' in the JSON body.
     """
     try:
         content = request.json
         room = content.get('room')
         event = content.get('event')
         data = content.get('data')
+        sender_id = content.get('sender_id') or content.get('client_id')
 
         if not room or not event or data is None:
             return jsonify({'error': 'Missing room, event, or data'}), 400
 
-        # Broadcast to room (exclude_self=False because sender is via HTTP)
-        socketio.emit(event, data, room=room)
-        logger.info(f"Relayed HTTP message to room {room}: event={event}")
+        # Determine sids to skip if sender_id is provided
+        skip_sids = []
+        if sender_id and sender_id in CLIENT_SESSIONS:
+            skip_sids = list(CLIENT_SESSIONS[sender_id])
+            logger.info(f"Skipping sids for sender {sender_id}: {skip_sids}")
+
+        # Broadcast to room
+        # Note: socketio.emit doesn't have exclude_self (that's for context-aware emit)
+        # But it has skip_sid which accepts a list of SIDs to skip.
+        if skip_sids:
+            socketio.emit(event, data, room=room, skip_sid=skip_sids)
+        else:
+            socketio.emit(event, data, room=room)
+            
+        logger.info(f"Relayed HTTP message to room {room}: event={event}, skipped={len(skip_sids)}")
         
         return jsonify({'status': 'ok'}), 200
 

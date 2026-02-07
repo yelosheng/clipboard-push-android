@@ -97,7 +97,11 @@ class UploadWorker(
                 "source" to "Android",
                 "type" to if (mimeType.startsWith("image")) "image" else "file"
             )
-            apiService.relayEvent(roomId, "file_sync", eventData)
+            
+            // Generate Device ID (Simple Android ID or UUID if prefer)
+            val deviceId = android.provider.Settings.Secure.getString(applicationContext.contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "android_unknown"
+            
+            apiService.relayEvent(roomId, "file_sync", eventData, "android_$deviceId")
 
             NotificationHelper.showPushNotification(
                 applicationContext,

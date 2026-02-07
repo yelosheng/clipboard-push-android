@@ -247,9 +247,15 @@ class ClipboardService : Service() {
     private fun connectRelay() {
         val wsUrl = settingsRepository.getHttpBaseUrl(serverAddress, useHttps) // Socket.IO uses HTTP base
         roomId?.let { id ->
-            Log.d(TAG, "Connecting Relay: $wsUrl Room: $id")
-            DebugLogger.log(TAG, "Connecting to Relay: $wsUrl")
-            relayRepository.connect(wsUrl, id)
+            val wsUrl = settingsRepository.getHttpBaseUrl(serverAddress, useHttps) // Socket.IO uses HTTP base
+            
+            // Get Client ID (Device ID)
+            val deviceId = android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "android_unknown"
+            val clientId = "android_$deviceId"
+            
+            Log.d(TAG, "Connecting Relay: $wsUrl Room: $id Client: $clientId")
+            DebugLogger.log(TAG, "Connecting to Relay: $wsUrl ($clientId)")
+            relayRepository.connect(wsUrl, id, clientId)
         }
     }
 
