@@ -23,7 +23,9 @@ import com.example.clipboardman.ui.theme.ClipboardManTheme
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
+import com.example.clipboardman.util.CryptoManager
 
 /**
  * 分享接收 Activity
@@ -98,7 +100,7 @@ class ShareReceiverActivity : ComponentActivity() {
     }
 
     /**
-     * 处理文本分享
+     * 处理文本分享 - 使用 Relay API
      */
     private suspend fun handleTextShare(intent: Intent) {
         val text = intent.getStringExtra(Intent.EXTRA_TEXT)
@@ -108,16 +110,31 @@ class ShareReceiverActivity : ComponentActivity() {
         }
 
         contentDescription.value = text.take(50) + if (text.length > 50) "..." else ""
-        uploadState.value = UploadState.Uploading("正在上传文本...")
+        uploadState.value = UploadState.Uploading("正在发送文本...")
 
-        val result = apiService?.pushText(text)
+        // 获取 roomId
+        val roomId = settingsRepository.roomIdFlow.first()
+        if (roomId.isNullOrBlank()) {
+            showError("未配置房间ID，请先在APP中连接服务器")
+            return
+        }
+
+        // 使用 Relay API 发送
+        val data = mapOf(
+            "room" to roomId,
+            "content" to text,
+            "type" to "text",
+            "timestamp" to System.currentTimeMillis()
+        )
+        
+        val result = apiService?.relayEvent(roomId, "clipboard_sync", data)
         result?.onSuccess {
             uploadState.value = UploadState.Success
-            Toast.makeText(this, "上传成功", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "发送成功", Toast.LENGTH_SHORT).show()
             delay(500)
             finish()
         }?.onFailure { error ->
-            showError("上传失败: ${error.message}")
+            showError("发送失败: ${error.message}")
         }
     }
 
@@ -180,14 +197,70 @@ class ShareReceiverActivity : ComponentActivity() {
 
             try {
                 // 尝试获取具体 MIME 类型
-                val specificMimeType = contentResolver.getType(uri) ?: intent.type ?: "*/*"
+                val specificMimeType = contentResolver.getType(uri) ?: intent.type ?: "application/octet-stream"
                 
-                val result = apiService?.pushFile(tempFile, specificMimeType)
-                if (result != null && result.isSuccess) {
+                // 获取 roomId 和 roomKey
+                val roomId = settingsRepository.roomIdFlow.first()
+                val roomKey = settingsRepository.roomKeyFlow.first()
+                if (roomId.isNullOrBlank()) {
+                    showError("未配置房间ID，请先在APP中连接服务器")
+                    tempFile.delete()
+                    return
+                }
+                if (roomKey.isNullOrBlank()) {
+                    showError("未配置加密密钥，请先在APP中扫码配对")
+                    tempFile.delete()
+                    return
+                }
+                
+                // Step 1: 加密文件
+                val cryptoManager = CryptoManager(roomKey)
+                val encryptedFile = File(cacheDir, "encrypted_${tempFile.name}")
+                withContext(Dispatchers.IO) {
+                    FileInputStream(tempFile).use { input ->
+                        FileOutputStream(encryptedFile).use { output ->
+                            cryptoManager.encryptFile(input, output)
+                        }
+                    }
+                }
+                Log.d(TAG, "Encrypted ${tempFile.name}: ${tempFile.length()} -> ${encryptedFile.length()} bytes")
+                
+                // Step 2: 获取 R2 上传授权 (使用加密后的文件大小)
+                val authResult = apiService?.getUploadAuth(fileName, encryptedFile.length(), "application/octet-stream")
+                if (authResult == null || authResult.isFailure) {
+                    failCount++
+                    Log.e(TAG, "Failed to get upload auth for $fileName")
+                    encryptedFile.delete()
+                    continue
+                }
+                val auth = authResult.getOrThrow()
+                
+                // Step 3: 上传加密文件到 R2
+                val uploadResult = apiService?.uploadToR2(auth.upload_url, encryptedFile, "application/octet-stream")
+                encryptedFile.delete() // 清理加密临时文件
+                if (uploadResult == null || uploadResult.isFailure) {
+                    failCount++
+                    Log.e(TAG, "Failed to upload $fileName to R2")
+                    continue
+                }
+                
+                // Step 3: 通过 Relay 通知其他客户端
+                val isImage = specificMimeType.startsWith("image/")
+                val data = mapOf(
+                    "room" to roomId,
+                    "download_url" to auth.download_url,
+                    "filename" to fileName,
+                    "content_type" to specificMimeType,
+                    "type" to (if (isImage) "image" else "file"),
+                    "timestamp" to System.currentTimeMillis()
+                )
+                
+                val relayResult = apiService?.relayEvent(roomId, "file_sync", data)
+                if (relayResult != null && relayResult.isSuccess) {
                     successCount++
                 } else {
                     failCount++
-                    Log.e(TAG, "Failed to upload $fileName: ${result?.exceptionOrNull()?.message}")
+                    Log.e(TAG, "Failed to relay file_sync for $fileName")
                 }
             } catch (e: Exception) {
                 failCount++
