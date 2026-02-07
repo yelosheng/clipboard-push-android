@@ -2,7 +2,7 @@
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:padding="12dp">
+    android:padding="8dp">
 
     <!-- 左侧内容 -->
     <LinearLayout
@@ -19,7 +19,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Clipboard Push Plus"
-            android:textColor="@android:color/black"
+            android:textColor="?android:attr/textColorPrimary"
             android:textSize="14sp"
             android:textStyle="bold" />
 
@@ -28,23 +28,22 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="已连接"
-            android:textColor="@android:color/darker_gray"
+            android:textColor="?android:attr/textColorSecondary"
             android:textSize="12sp"
             android:layout_marginTop="2dp" />
     </LinearLayout>
 
-    <!-- 右侧推送按钮 -->
-    <Button
+    <!-- 右侧推送按钮 - 使用圆形带箭头的 ImageButton -->
+    <ImageButton
         android:id="@+id/btn_push"
-        android:layout_width="wrap_content"
-        android:layout_height="40dp"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
         android:layout_alignParentEnd="true"
         android:layout_centerVertical="true"
         android:layout_marginStart="8dp"
-        android:text="推送"
-        android:textSize="13sp"
-        android:paddingHorizontal="16dp"
-        android:background="@android:color/holo_blue_light"
-        android:textColor="@android:color/white" />
+        android:src="@android:drawable/ic_menu_send"
+        android:background="@drawable/btn_push_background"
+        android:padding="12dp"
+        android:contentDescription="推送剪贴板" />
 
 </RelativeLayout>

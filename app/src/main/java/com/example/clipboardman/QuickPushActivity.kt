@@ -25,9 +25,17 @@ class QuickPushActivity : ComponentActivity() {
 
     private val activityScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private lateinit var settingsRepository: SettingsRepository
+    private var isProcessing = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // 防止重复执行
+        if (isProcessing) {
+            finish()
+            return
+        }
+        isProcessing = true
         
         settingsRepository = SettingsRepository(this)
         
