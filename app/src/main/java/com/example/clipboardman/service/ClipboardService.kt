@@ -176,6 +176,7 @@ class ClipboardService : Service() {
         when (intent?.action) {
             ACTION_START -> startService()
             ACTION_STOP -> stopService()
+            // Push clipboard now handled by QuickPushActivity
         }
         return START_STICKY
     }

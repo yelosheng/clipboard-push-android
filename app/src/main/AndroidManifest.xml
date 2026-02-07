@@ -49,6 +49,14 @@
             android:screenOrientation="fullSensor"
             tools:replace="screenOrientation" />
 
+        <!-- 快速推送 Activity (从通知栏启动，透明) -->
+        <activity
+            android:name=".QuickPushActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ClipboardMan.Transparent"
+            android:excludeFromRecents="true"
+            android:taskAffinity="" />
+
         <!-- 分享接收 Activity -->
         <activity
             android:name=".share.ShareReceiverActivity"

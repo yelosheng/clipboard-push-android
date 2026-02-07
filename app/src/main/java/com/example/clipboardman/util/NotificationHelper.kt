@@ -19,9 +19,12 @@ object NotificationHelper {
 
     private const val SERVICE_NOTIFICATION_ID = 1001
     private const val PUSH_NOTIFICATION_ID_BASE = 2000
+    
+    // 推送剪贴板 action
+    const val ACTION_PUSH_CLIPBOARD = "com.example.clipboardman.ACTION_PUSH_CLIPBOARD"
 
     /**
-     * 构建前台服务通知
+     * 构建前台服务通知 - 使用自定义布局
      */
     fun buildServiceNotification(
         context: Context,
@@ -44,11 +47,28 @@ object NotificationHelper {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+        // 创建推送剪贴板按钮的 Intent
+        val pushIntent = Intent(context, com.example.clipboardman.QuickPushActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pushPendingIntent = PendingIntent.getActivity(
+            context,
+            1,
+            pushIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        // 创建自定义布局
+        val remoteViews = android.widget.RemoteViews(context.packageName, R.layout.notification_service)
+        remoteViews.setTextViewText(R.id.notification_title, "Clipboard Push Plus")
+        remoteViews.setTextViewText(R.id.notification_text, contentText)
+        remoteViews.setOnClickPendingIntent(R.id.btn_push, pushPendingIntent)
+
         return NotificationCompat.Builder(context, ClipboardManApp.NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("Clipboard Man")
-            .setContentText(contentText)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(pendingIntent)
+            .setCustomContentView(remoteViews)
+            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
             .setOngoing(true)
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
