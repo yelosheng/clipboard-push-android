@@ -22,10 +22,6 @@ import com.example.clipboardman.data.repository.SettingsRepository
 import com.example.clipboardman.ui.theme.ClipboardManTheme
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
-import java.io.File
-import java.io.FileInputStream
-import java.io.FileOutputStream
-import com.example.clipboardman.util.CryptoManager
 
 /**
  * 分享接收 Activity
@@ -142,7 +138,7 @@ class ShareReceiverActivity : ComponentActivity() {
      * 处理文件/图片分享
      */
     /**
-     * 处理文件/图片分享（支持单选和多选）
+     * 处理文件/图片分享（支持单选和多选）- 使用 WorkManager 后台上传
      */
     private suspend fun handleContentShare(intent: Intent, isMultiple: Boolean) {
         val uris = ArrayList<Uri>()
@@ -170,121 +166,48 @@ class ShareReceiverActivity : ComponentActivity() {
             return
         }
 
+        // 检查配置
+        val roomId = settingsRepository.roomIdFlow.first()
+        val roomKey = settingsRepository.roomKeyFlow.first()
+        if (roomId.isNullOrBlank() || roomKey.isNullOrBlank()) {
+            showError("未配置房间，请先在APP中扫码配对")
+            return
+        }
+
         val total = uris.size
-        var successCount = 0
-        var failCount = 0
-
-        // 显示初始状态
-        contentDescription.value = if (total == 1) "准备上传..." else "准备上传 $total 个文件..."
-
-        for ((index, uri) in uris.withIndex()) {
-            val fileName = getFileName(uri) ?: "shared_file_${System.currentTimeMillis()}"
-            
-            // 更新当前状态
-            val progressStr = if (total > 1) "(${index + 1}/$total) " else ""
-            uploadState.value = UploadState.Uploading("${progressStr}正在上传:\n$fileName")
-            if (total == 1) {
-                contentDescription.value = fileName
-            }
-
-            // 复制到临时文件
-            val tempFile = copyUriToTempFile(uri, fileName)
-            if (tempFile == null) {
-                Log.e(TAG, "Failed to copy file: $fileName")
-                failCount++
-                continue
-            }
-
-            try {
-                // 尝试获取具体 MIME 类型
-                val specificMimeType = contentResolver.getType(uri) ?: intent.type ?: "application/octet-stream"
-                
-                // 获取 roomId 和 roomKey
-                val roomId = settingsRepository.roomIdFlow.first()
-                val roomKey = settingsRepository.roomKeyFlow.first()
-                if (roomId.isNullOrBlank()) {
-                    showError("未配置房间ID，请先在APP中连接服务器")
-                    tempFile.delete()
-                    return
-                }
-                if (roomKey.isNullOrBlank()) {
-                    showError("未配置加密密钥，请先在APP中扫码配对")
-                    tempFile.delete()
-                    return
-                }
-                
-                // Step 1: 加密文件
-                val cryptoManager = CryptoManager(roomKey)
-                val encryptedFile = File(cacheDir, "encrypted_${tempFile.name}")
-                withContext(Dispatchers.IO) {
-                    FileInputStream(tempFile).use { input ->
-                        FileOutputStream(encryptedFile).use { output ->
-                            cryptoManager.encryptFile(input, output)
-                        }
-                    }
-                }
-                Log.d(TAG, "Encrypted ${tempFile.name}: ${tempFile.length()} -> ${encryptedFile.length()} bytes")
-                
-                // Step 2: 获取 R2 上传授权 (使用加密后的文件大小)
-                val authResult = apiService?.getUploadAuth(fileName, encryptedFile.length(), "application/octet-stream")
-                if (authResult == null || authResult.isFailure) {
-                    failCount++
-                    Log.e(TAG, "Failed to get upload auth for $fileName")
-                    encryptedFile.delete()
-                    continue
-                }
-                val auth = authResult.getOrThrow()
-                
-                // Step 3: 上传加密文件到 R2
-                val uploadResult = apiService?.uploadToR2(auth.upload_url, encryptedFile, "application/octet-stream")
-                encryptedFile.delete() // 清理加密临时文件
-                if (uploadResult == null || uploadResult.isFailure) {
-                    failCount++
-                    Log.e(TAG, "Failed to upload $fileName to R2")
-                    continue
-                }
-                
-                // Step 3: 通过 Relay 通知其他客户端
-                val isImage = specificMimeType.startsWith("image/")
-                val data = mapOf(
-                    "room" to roomId,
-                    "download_url" to auth.download_url,
-                    "filename" to fileName,
-                    "content_type" to specificMimeType,
-                    "type" to (if (isImage) "image" else "file"),
-                    "timestamp" to System.currentTimeMillis()
-                )
-                
-                val relayResult = apiService?.relayEvent(roomId, "file_sync", data)
-                if (relayResult != null && relayResult.isSuccess) {
-                    successCount++
-                } else {
-                    failCount++
-                    Log.e(TAG, "Failed to relay file_sync for $fileName")
-                }
-            } catch (e: Exception) {
-                failCount++
-                Log.e(TAG, "Exception uploading $fileName: ${e.message}")
-            } finally {
-                // 清理临时文件
-                tempFile.delete()
-            }
-        }
-
-        // 最终结果处理
-        if (failCount == 0) {
-            uploadState.value = UploadState.Success
-            Toast.makeText(this, "全部上传成功", Toast.LENGTH_SHORT).show()
-            delay(500)
-            finish()
+        contentDescription.value = if (total == 1) {
+            getFileName(uris[0]) ?: "准备上传..."
         } else {
-            if (successCount > 0) {
-                Toast.makeText(this, "完成: $successCount 成功, $failCount 失败", Toast.LENGTH_LONG).show()
-                finish() // 部分成功也关闭
-            } else {
-                showError("所有文件上传失败")
-            }
+            "上传 $total 个文件..."
         }
+        uploadState.value = UploadState.Uploading("正在加入上传队列...")
+
+        // 使用 WorkManager 后台上传
+        var queuedCount = 0
+        for (uri in uris) {
+            val mimeType = contentResolver.getType(uri) ?: intent.type ?: "application/octet-stream"
+            
+            val workRequest = androidx.work.OneTimeWorkRequestBuilder<com.example.clipboardman.worker.UploadWorker>()
+                .setInputData(
+                    androidx.work.workDataOf(
+                        com.example.clipboardman.worker.UploadWorker.KEY_URI_STRING to uri.toString(),
+                        com.example.clipboardman.worker.UploadWorker.KEY_MIME_TYPE to mimeType
+                    )
+                )
+                .setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                .build()
+            
+            androidx.work.WorkManager.getInstance(this).enqueue(workRequest)
+            queuedCount++
+            Log.d(TAG, "Queued upload: $uri")
+        }
+
+        // 显示成功并立即关闭
+        uploadState.value = UploadState.Success
+        val msg = if (queuedCount == 1) "已加入上传队列" else "$queuedCount 个文件已加入上传队列"
+        Toast.makeText(this, "$msg\n详情请查看通知栏", Toast.LENGTH_SHORT).show()
+        delay(800)
+        finish()
     }
 
     /**
@@ -301,26 +224,6 @@ class ShareReceiverActivity : ComponentActivity() {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get file name: ${e.message}")
             null
-        }
-    }
-
-    /**
-     * 复制 Uri 内容到临时文件
-     */
-    private suspend fun copyUriToTempFile(uri: Uri, fileName: String): File? {
-        return withContext(Dispatchers.IO) {
-            try {
-                val tempFile = File(cacheDir, fileName)
-                contentResolver.openInputStream(uri)?.use { input ->
-                    FileOutputStream(tempFile).use { output ->
-                        input.copyTo(output)
-                    }
-                }
-                tempFile
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to copy uri to temp file: ${e.message}")
-                null
-            }
         }
     }
 
