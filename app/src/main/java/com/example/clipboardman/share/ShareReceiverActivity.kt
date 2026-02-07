@@ -99,11 +99,22 @@ class ShareReceiverActivity : ComponentActivity() {
      * 处理文本分享 - 使用 Relay API
      */
     private suspend fun handleTextShare(intent: Intent) {
-        val text = intent.getStringExtra(Intent.EXTRA_TEXT)
+        var text = intent.getStringExtra(Intent.EXTRA_TEXT)
         if (text.isNullOrBlank()) {
             showError("分享内容为空")
             return
         }
+
+        // 移除浏览器附加的 URL (如果用户只想要选中的文本)
+        // 简单逻辑：如果文本包含 http 链接且不仅仅是链接，则尝试去除链接
+        // 很多浏览器分享格式为: "选中文字 https://url..."
+        if (text.contains("http")) {
+            // 简单的正则去除 URL
+            text = text.replace(Regex("\\s*https?://\\S+"), "").trim()
+        }
+        
+        // 移除可能的首尾双引号 (某些浏览器分享会带)
+        text = text.trim().removeSurrounding("\"")
 
         contentDescription.value = text.take(50) + if (text.length > 50) "..." else ""
         uploadState.value = UploadState.Uploading("正在发送文本...")
@@ -114,6 +125,10 @@ class ShareReceiverActivity : ComponentActivity() {
             showError("未配置房间ID，请先在APP中连接服务器")
             return
         }
+        
+        // 获取 Client ID 防止回音
+        val deviceId = android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "android_unknown"
+        val clientId = "android_$deviceId"
 
         // 使用 Relay API 发送
         val data = mapOf(
@@ -123,7 +138,8 @@ class ShareReceiverActivity : ComponentActivity() {
             "timestamp" to System.currentTimeMillis()
         )
         
-        val result = apiService?.relayEvent(roomId, "clipboard_sync", data)
+        // 传递 clientId
+        val result = apiService?.relayEvent(roomId, "clipboard_sync", data, clientId)
         result?.onSuccess {
             uploadState.value = UploadState.Success
             Toast.makeText(this, "发送成功", Toast.LENGTH_SHORT).show()

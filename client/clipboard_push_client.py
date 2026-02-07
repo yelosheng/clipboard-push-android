@@ -360,23 +360,22 @@ def pairing_menu():
             return
 
 def main():
-    # Load Key if exists
-    global CRYPTO
-    if CONFIG["room_key"]:
-        CRYPTO = CryptoUtils(CONFIG["room_key"])
-
-    try:
-        sio.connect(SERVER_URL)
-    except Exception as e:
-        logger.error(f"连接服务器失败: {e}")
-        # Allow running to pairing menu even if offline
-    
     # Simple CLI Loop
     force_pair = "--pair" in sys.argv or "--reset" in sys.argv
     if force_pair or not CONFIG["room_id"]:
         pairing_menu()
         if not CONFIG["room_id"]: # User exited without pairing
             return 
+            
+    # Init Crypto with final key
+    if CONFIG["room_key"]:
+        CRYPTO = CryptoUtils(CONFIG["room_key"])
+
+    # Connect to Server
+    try:
+        sio.connect(SERVER_URL)
+    except Exception as e:
+        logger.error(f"连接服务器失败: {e}")
             
     # Main Loop
     logger.info("正在监听剪贴板推送... (按 Ctrl+C 退出)")
