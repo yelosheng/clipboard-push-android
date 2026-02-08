@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | Clipboard Man{% endblock %}
+
+{% block content %}
+<div class="dashboard-layout">
+    <!-- Sidebar / Navigation -->
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-logo">CLIPBOARD MAN</div>
+            <div class="text-meta">RELAY SERVER</div>
+        </div>
+
+        <div class="sidebar-header">
+            <small
+                style="text-transform: uppercase; font-weight: 700; letter-spacing: 0.1em; font-size: 0.75rem;">Active
+                Rooms</small>
+        </div>
+
+        <ul class="nav-list" id="room-list">
+            <!-- Room items -->
+            <li class="nav-item active" onclick="selectRoom('all')">
+                <span>All Rooms</span>
+                <span class="nav-badge">0</span>
+            </li>
+        </ul>
+
+        <div class="user-menu">
+            <div class="nav-item">
+                <span>{{ current_user.id }}</span>
+                <a href="{{ url_for('logout') }}"
+                    style="color: var(--accent-color); text-decoration: none; font-weight: 700; font-size: 0.875rem;">LOGOUT</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main View -->
+    <main class="main-view">
+        <header class="view-header">
+            <h1 id="current-room-title">Overview</h1>
+            <div class="status-indicator green" id="connection-status"></div>
+        </header>
+
+        <!-- Key Metrics -->
+        <section class="stats-grid">
+            <div class="stat-box">
+                <span class="stat-label">Total Connections</span>
+                <div class="stat-number" id="total-connections">0</div>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Active Sessions</span>
+                <div class="stat-number" id="total-sessions">0</div>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">System Uptime</span>
+                <div class="stat-number" id="uptime" style="font-size: 1.5rem; line-height: 1.6;">00:00:00</div>
+            </div>
+        </section>
+
+        <!-- Connection Table -->
+        <section class="table-wrap">
+            <h2 style="font-size: 1.25rem; border-bottom: 2px solid #000; padding-bottom: 8px;">Connected Clients</h2>
+            <table class="clean-table">
+                <thead>
+                    <tr>
+                        <th width="30%">Client ID</th>
+                        <th width="20%">Room</th>
+                        <th width="20%">Sessions</th>
+                        <th width="30%">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="client-list">
+                    <!-- Rows -->
+                    <tr>
+                        <td colspan="4" style="color: #999; padding: 24px 0;">Waiting for data...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- Activity Feed -->
+        <section class="activity-stream">
+            <h3 style="font-size: 1rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 16px;">System
+                Activity</h3>
+            <div id="activity-log">
+                <!-- Log items -->
+            </div>
+        </section>
+    </main>
+</div>
+{% endblock %}

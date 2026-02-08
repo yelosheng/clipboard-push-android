@@ -3,8 +3,9 @@ import os
 import time
 import json
 import logging
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template, redirect, url_for, flash
 from flask_socketio import SocketIO, emit, join_room, leave_room
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 import boto3
 from botocore.config import Config
 from dotenv import load_dotenv
@@ -18,13 +19,19 @@ R2_ACCOUNT_ID = os.environ.get('R2_ACCOUNT_ID', 'YOUR_ACCOUNT_ID_HERE')
 R2_ACCESS_KEY_ID = os.environ.get('R2_ACCESS_KEY_ID', 'YOUR_ACCESS_KEY_HERE')
 R2_SECRET_ACCESS_KEY = os.environ.get('R2_SECRET_ACCESS_KEY', 'YOUR_SECRET_KEY_HERE')
 R2_BUCKET_NAME = os.environ.get('R2_BUCKET_NAME', 'clipboard-man-relay')
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin') # Default password
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static', template_folder='templates')
 app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'dev_secret_key')
+
+# Initialize LoginManager
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
 
 # Initialize SocketIO with standard threading (most compatible)
 socketio = SocketIO(app, cors_allowed_origins="*")
@@ -56,10 +63,66 @@ except Exception as e:
 # Global mapping to track client_id -> list of sids
 # Structure: { 'client_id_1': {'sid1', 'sid2'}, ... }
 CLIENT_SESSIONS = {}
+# Structure: { 'client_id_1': 'room_name', ... }
+CLIENT_ROOMS = {}
+
+def get_serialized_sessions():
+    """Convert sets to lists for JSON serialization and include room info"""
+    data = {}
+    for client_id, sids in CLIENT_SESSIONS.items():
+        data[client_id] = {
+            'sids': list(sids),
+            'room': CLIENT_ROOMS.get(client_id, 'Unknown')
+        }
+    return data
+
+
+# --- Auth Logic ---
+
+class User(UserMixin):
+    def __init__(self, id):
+        self.id = id
+
+@login_manager.user_loader
+def load_user(user_id):
+    if user_id == 'admin':
+        return User(user_id)
+    return None
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    
+    if request.method == 'POST':
+        password = request.form.get('password')
+        remember = True if request.form.get('remember') else False
+        
+        if password == ADMIN_PASSWORD:
+            user = User('admin')
+            login_user(user, remember=remember)
+            return redirect(url_for('dashboard'))
+        else:
+            flash('Invalid password')
+            
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    return render_template('dashboard.html', client_sessions=get_serialized_sessions())
 
 @app.route('/')
 def index():
-    return "Clipboard Push Relay Server is Running (Port 5055). 🚀"
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    return "Clipboard Push Relay Server is Running (Port 5055). 🚀 <a href='/login'>Login</a>"
 
 # --- File Transfer Logic (R2 Presigned URLs) ---
 
@@ -121,6 +184,8 @@ def generate_upload_url():
 @socketio.on('connect')
 def on_connect():
     logger.info(f"Client connected: {request.sid}")
+    # Notify dashboard of new connection (if we want real-time list updates)
+    socketio.emit('server_stats', {'clients': len(CLIENT_SESSIONS), 'msg': 'New connection'}, room='dashboard_room')
 
 @socketio.on('disconnect')
 def on_disconnect():
@@ -131,8 +196,14 @@ def on_disconnect():
             sids.discard(request.sid)
             if not sids:
                 del CLIENT_SESSIONS[client_id]
+                # Clean up room info if no sessions left
+                if client_id in CLIENT_ROOMS:
+                    del CLIENT_ROOMS[client_id]
             logger.info(f"Removed SID {request.sid} from client {client_id}")
+            # Notify dashboard
+            socketio.emit('client_list_update', get_serialized_sessions(), room='dashboard_room')
             break
+    socketio.emit('server_stats', {'clients': len(CLIENT_SESSIONS), 'msg': 'Client disconnected'}, room='dashboard_room')
 
 @socketio.on('join')
 def on_join(data):
@@ -148,7 +219,17 @@ def on_join(data):
         if client_id not in CLIENT_SESSIONS:
             CLIENT_SESSIONS[client_id] = set()
         CLIENT_SESSIONS[client_id].add(request.sid)
-        logger.info(f"Registered client_id {client_id} with sid {request.sid}")
+        
+        # Track room for mixed dashboard view
+        if room:
+            CLIENT_ROOMS[client_id] = room
+            logger.info(f"Updated room for {client_id}: {room}")
+        else:
+            logger.warning(f"Client {client_id} joined without room info in payload")
+            
+        logger.info(f"Registered client_id {client_id} with sid {request.sid}. Current Rooms: {CLIENT_ROOMS}")
+        # Broadcast updated client list to dashboard
+        socketio.emit('client_list_update', get_serialized_sessions(), room='dashboard_room')
 
 @socketio.on('leave')
 def on_leave(data):
@@ -171,6 +252,9 @@ def handle_clipboard_push(data):
         # include_self=False is default in some versions, but explicit is good.
         emit('clipboard_sync', data, room=room, include_self=False)
         logger.info(f"Relayed clipboard data to room: {room}")
+        
+        # Notify dashboard
+        socketio.emit('activity_log', {'type': 'clipboard', 'room': room, 'data': 'Text Content'}, room='dashboard_room')
 
 @socketio.on('file_push')
 def handle_file_push(data):
@@ -182,6 +266,9 @@ def handle_file_push(data):
     if room:
         emit('file_sync', data, room=room, include_self=False)
         logger.info(f"Relayed file metadata to room: {room}")
+        
+        # Notify dashboard
+        socketio.emit('activity_log', {'type': 'file', 'room': room, 'data': 'File Content'}, room='dashboard_room')
 
 @app.route('/api/relay', methods=['POST'])
 def relay_message():
@@ -216,6 +303,9 @@ def relay_message():
             socketio.emit(event, data, room=room)
             
         logger.info(f"Relayed HTTP message to room {room}: event={event}, skipped={len(skip_sids)}")
+        
+        # Notify dashboard
+        socketio.emit('activity_log', {'type': 'api_relay', 'room': room, 'event': event}, room='dashboard_room')
         
         return jsonify({'status': 'ok'}), 200
 

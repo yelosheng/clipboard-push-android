@@ -6,3 +6,5 @@ boto3==1.34.0
 # gevent-websocket==0.10.1
 
 python-dotenv==1.0.0
+flask-login
+
