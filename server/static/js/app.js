@@ -1,4 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
+    console.log("%c SWISS DASHBOARD v2.0 LOADED ", "background: #000; color: #fff; font-size: 20px; font-weight: bold; padding: 10px;");
+
     // State
     let currentClients = {};
     let selectedRoom = 'all';
@@ -28,30 +30,37 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Socket ---
 
     socket.on('connect', () => {
-        log('SYS', 'Clean connection established.');
+        log('SYS', 'N/A', 'System', 'Clean connection established.');
         statusDot.className = 'status-indicator green';
         socket.emit('join', { room: 'dashboard_room' });
     });
 
     socket.on('disconnect', () => {
-        log('ERR', 'Connection lost.');
+        log('ERR', 'N/A', 'System', 'Connection lost.');
         statusDot.className = 'status-indicator'; // gray/black
     });
 
     socket.on('client_list_update', (clients) => {
+        console.log('Received client_list_update:', clients);
+        log('DEBUG', 'N/A', 'System', 'Received client list update');
         currentClients = clients;
         render();
     });
 
     socket.on('activity_log', (data) => {
         const room = data.room || 'Unknown';
-        const event = data.event || data.type;
-        log(event.toUpperCase(), `Activity in ${room}`);
+        const sender = data.sender || 'Unknown';
+        const type = (data.type || 'INFO').toUpperCase();
+        const content = data.content || '';
+
+        log(type, room, sender, content);
     });
 
     // --- Render ---
 
     function render() {
+        // ... (existing render logic)
+
         const rooms = {};
         let totalC = 0;
         let totalS = 0;
@@ -137,15 +146,35 @@ document.addEventListener('DOMContentLoaded', () => {
         render();
     };
 
-    function log(tag, msg) {
+    function log(type, room, sender, content) {
         const div = document.createElement('div');
         div.className = 'log-item';
+
+        const senderColor = stringToColor(sender);
+
         div.innerHTML = `
             <span class="log-time">${new Date().toLocaleTimeString('en-GB')}</span>
-            <span class="log-tag">${tag}</span>
-            <span class="log-content">${msg}</span>
+            <span class="log-tag">[${type}]</span>
+            <span style="color: ${senderColor}; font-weight: 700; margin-right: 8px;">[${sender}]</span>
+            <span class="log-content">${content}</span>
         `;
         logEl.insertBefore(div, logEl.firstChild);
-        if (logEl.children.length > 20) logEl.removeChild(logEl.lastChild);
+        if (logEl.children.length > 50) logEl.removeChild(logEl.lastChild);
+    }
+
+    function stringToColor(str) {
+        if (!str) return '#888888';
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            hash = str.charCodeAt(i) + ((hash << 5) - hash);
+        }
+
+        // Convert to easy-to-read dark colors (for white bg)
+        // We want high contrast against white, so avoid very light colors
+        const c = (hash & 0x00FFFFFF)
+            .toString(16)
+            .toUpperCase();
+
+        return '#' + "00000".substring(0, 6 - c.length) + c;
     }
 });

@@ -76,6 +76,13 @@ def get_serialized_sessions():
         }
     return data
 
+def get_client_from_sid(sid):
+    """Reverse lookup to find client_id from sid"""
+    for client_id, sids in CLIENT_SESSIONS.items():
+        if sid in sids:
+            return client_id
+    return "Unknown"
+
 
 # --- Auth Logic ---
 
@@ -217,7 +224,9 @@ def on_join(data):
         
         # If joining the dashboard, send immediate state
         if room == 'dashboard_room':
-            emit('client_list_update', get_serialized_sessions(), room=request.sid)
+            serialized_sessions = get_serialized_sessions()
+            logger.info(f"Dashboard joined. Sending immediate update to {request.sid}: {serialized_sessions}")
+            emit('client_list_update', serialized_sessions, room=request.sid)
         
     if client_id:
         if client_id not in CLIENT_SESSIONS:
@@ -233,7 +242,9 @@ def on_join(data):
             
         logger.info(f"Registered client_id {client_id} with sid {request.sid}. Current Rooms: {CLIENT_ROOMS}")
         # Broadcast updated client list to dashboard
-        socketio.emit('client_list_update', get_serialized_sessions(), room='dashboard_room')
+        serialized_sessions = get_serialized_sessions()
+        logger.info(f"Broadcasting update to dashboard_room: {serialized_sessions}")
+        socketio.emit('client_list_update', serialized_sessions, room='dashboard_room')
 
 @socketio.on('leave')
 def on_leave(data):
@@ -258,7 +269,14 @@ def handle_clipboard_push(data):
         logger.info(f"Relayed clipboard data to room: {room}")
         
         # Notify dashboard
-        socketio.emit('activity_log', {'type': 'clipboard', 'room': room, 'data': 'Text Content'}, room='dashboard_room')
+        sender = get_client_from_sid(request.sid)
+        content_preview = data.get('content', '')[:30] + '...' if data.get('content') else 'Encrypted Data'
+        socketio.emit('activity_log', {
+            'type': 'clipboard', 
+            'room': room, 
+            'sender': sender,
+            'content': content_preview
+        }, room='dashboard_room')
 
 @socketio.on('file_push')
 def handle_file_push(data):
@@ -272,7 +290,15 @@ def handle_file_push(data):
         logger.info(f"Relayed file metadata to room: {room}")
         
         # Notify dashboard
-        socketio.emit('activity_log', {'type': 'file', 'room': room, 'data': 'File Content'}, room='dashboard_room')
+        # Notify dashboard
+        sender = get_client_from_sid(request.sid)
+        filename = data.get('filename', 'Unknown File')
+        socketio.emit('activity_log', {
+            'type': 'file', 
+            'room': room, 
+            'sender': sender,
+            'content': filename
+        }, room='dashboard_room')
 
 @app.route('/api/relay', methods=['POST'])
 def relay_message():
@@ -309,7 +335,13 @@ def relay_message():
         logger.info(f"Relayed HTTP message to room {room}: event={event}, skipped={len(skip_sids)}")
         
         # Notify dashboard
-        socketio.emit('activity_log', {'type': 'api_relay', 'room': room, 'event': event}, room='dashboard_room')
+        # Notify dashboard
+        socketio.emit('activity_log', {
+            'type': 'api_relay', 
+            'room': room, 
+            'sender': sender_id or 'API',
+            'content': f"Event: {event}"
+        }, room='dashboard_room')
         
         return jsonify({'status': 'ok'}), 200
 
