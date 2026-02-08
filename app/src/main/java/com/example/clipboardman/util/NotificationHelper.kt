@@ -61,7 +61,7 @@ object NotificationHelper {
 
         // 创建自定义布局
         val remoteViews = android.widget.RemoteViews(context.packageName, R.layout.notification_service)
-        remoteViews.setTextViewText(R.id.notification_title, "Clipboard Push Plus")
+        remoteViews.setTextViewText(R.id.notification_title, "Clipboard Push")
         remoteViews.setTextViewText(R.id.notification_text, contentText)
         remoteViews.setOnClickPendingIntent(R.id.btn_push, pushPendingIntent)
 

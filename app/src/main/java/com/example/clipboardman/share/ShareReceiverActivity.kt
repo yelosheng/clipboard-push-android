@@ -142,11 +142,11 @@ class ShareReceiverActivity : ComponentActivity() {
         val result = apiService?.relayEvent(roomId, "clipboard_sync", data, clientId)
         result?.onSuccess {
             uploadState.value = UploadState.Success
-            Toast.makeText(this, "发送成功", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "推送成功", Toast.LENGTH_SHORT).show()
             delay(500)
             finish()
         }?.onFailure { error ->
-            showError("发送失败: ${error.message}")
+            showError("推送失败")
         }
     }
 

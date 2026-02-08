@@ -395,7 +395,7 @@ class MainActivity : ComponentActivity() {
         }
 
         clipboardService?.sendClipboardText(text)
-        Toast.makeText(this, "已推送至服务器", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "推送成功", Toast.LENGTH_SHORT).show()
     }
 }
 

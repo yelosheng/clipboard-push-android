@@ -140,8 +140,7 @@ class QuickPushActivity : ComponentActivity() {
                 } else {
                     // 震动反馈
                     vibrateSuccess()
-                    val preview = text.take(20) + if (text.length > 20) "..." else ""
-                    Toast.makeText(this@QuickPushActivity, "✓ $preview", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@QuickPushActivity, "推送成功", Toast.LENGTH_SHORT).show()
                 }
                 
             } catch (e: Exception) {
