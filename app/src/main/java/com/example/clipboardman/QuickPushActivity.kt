@@ -60,6 +60,9 @@ class QuickPushActivity : ComponentActivity() {
         val settingsRepository = SettingsRepository(this)
 
         CoroutineScope(Dispatchers.Main).launch {
+            // Delay to ensure window focus / notification shade collapse
+            delay(300)
+
             try {
                 // 读取剪贴板
                 val clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -85,23 +88,52 @@ class QuickPushActivity : ComponentActivity() {
                 val serverAddress = settingsRepository.serverAddressFlow.first()
                 val useHttps = settingsRepository.useHttpsFlow.first()
                 val roomId = settingsRepository.roomIdFlow.first()
+                val roomKey = settingsRepository.roomKeyFlow.first()
                 
                 if (serverAddress.isBlank() || roomId.isNullOrBlank()) {
                     Toast.makeText(this@QuickPushActivity, "未配置服务器", Toast.LENGTH_SHORT).show()
                     finish()
                     return@launch
                 }
+
+                // Encryption Logic
+                var contentToSend = text
+                var isEncrypted = false
+
+                if (!roomKey.isNullOrBlank()) {
+                    try {
+                        val cryptoManager = com.example.clipboardman.util.CryptoManager(roomKey)
+                        val encryptedBytes = cryptoManager.encrypt(text.toByteArray(Charsets.UTF_8))
+                        if (encryptedBytes != null) {
+                            contentToSend = android.util.Base64.encodeToString(encryptedBytes, android.util.Base64.NO_WRAP)
+                            isEncrypted = true
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Encryption failed", e)
+                        // Fallback to plain text? Or fail?
+                        // Let's fallback but log it
+                    }
+                }
                 
                 // 发送
                 val httpUrl = settingsRepository.getHttpBaseUrl(serverAddress, useHttps)
                 val apiService = com.example.clipboardman.data.remote.ApiService(httpUrl)
                 
-                val result = apiService.relayEvent(roomId, "clipboard_sync", mapOf(
-                    "content" to text,
+                // Get Device ID for anti-echo
+                val deviceId = android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "android_quick"
+                val clientId = "android_$deviceId"
+
+                val payload = mutableMapOf<String, Any>(
+                    "content" to contentToSend,
                     "room" to roomId,
                     "timestamp" to System.currentTimeMillis(),
                     "source" to "Android_Quick"
-                ))
+                )
+                if (isEncrypted) {
+                    payload["encrypted"] = true
+                }
+
+                val result = apiService.relayEvent(roomId, "clipboard_sync", payload, clientId)
                 
                 if (result.isFailure) {
                     Toast.makeText(this@QuickPushActivity, "发送失败", Toast.LENGTH_SHORT).show()
