@@ -62,11 +62,31 @@ class ClipboardService : Service() {
         startService()
     }
 
+    private var cryptoManager: com.example.clipboardman.util.CryptoManager? = null
+
     fun sendClipboardText(text: String) {
         serviceScope.launch {
              roomId?.let { id ->
-                 // TODO: Encrypt if E2EE enabled
-                 relayRepository.sendClipboardSync(id, text)
+                 val manager = cryptoManager
+                 if (manager != null) {
+                     try {
+                         val encryptedBytes = manager.encrypt(text.toByteArray(Charsets.UTF_8))
+                         if (encryptedBytes != null) {
+                             val encryptedBase64 = android.util.Base64.encodeToString(encryptedBytes, android.util.Base64.NO_WRAP)
+                             relayRepository.sendClipboardSync(id, encryptedBase64, true)
+                             Log.d(TAG, "Sent encrypted text")
+                         } else {
+                             Log.e(TAG, "Encryption failed, sending plain text")
+                             relayRepository.sendClipboardSync(id, text, false)
+                         }
+                     } catch (e: Exception) {
+                         Log.e(TAG, "Encryption error", e)
+                         relayRepository.sendClipboardSync(id, text, false)
+                     }
+                 } else {
+                     Log.w(TAG, "CryptoManager not ready, sending plain text")
+                     relayRepository.sendClipboardSync(id, text, false)
+                 }
              }
         }
     }
@@ -199,6 +219,7 @@ class ClipboardService : Service() {
             serverAddress = settingsRepository.serverAddressFlow.first()
             useHttps = settingsRepository.useHttpsFlow.first()
             roomId = settingsRepository.roomIdFlow.first()
+            val roomKey = settingsRepository.roomKeyFlow.first()
             
             DebugLogger.log(TAG, "Config loaded: $serverAddress / $roomId")
 
@@ -207,6 +228,19 @@ class ClipboardService : Service() {
                 DebugLogger.log(TAG, "Missing config - Addr: $serverAddress Room: $roomId")
                 updateState(ConnectionState.ERROR)
                 return@launch
+            }
+
+            // Initialize CryptoManager
+            if (!roomKey.isNullOrBlank()) {
+                try {
+                    cryptoManager = com.example.clipboardman.util.CryptoManager(roomKey)
+                    Log.d(TAG, "CryptoManager initialized")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to init CryptoManager", e)
+                }
+            } else {
+                Log.w(TAG, "Room Key missing, encryption disabled")
+                cryptoManager = null
             }
             
             DebugLogger.log(TAG, "Starting service with Addr: $serverAddress")
@@ -260,11 +294,35 @@ class ClipboardService : Service() {
     }
 
     private fun handleClipboardSync(data: JSONObject) {
-        val content = data.optString("content")
+        var content = data.optString("content")
         val timestamp = data.optString("timestamp")
         val source = data.optString("source")
-        
-        DebugLogger.log(TAG, "Received Clipboard Sync len=${content.length}")
+        val isEncrypted = data.optBoolean("encrypted", false)
+
+        DebugLogger.log(TAG, "Received Clipboard Sync len=${content.length} encrypted=$isEncrypted")
+
+        if (isEncrypted) {
+            val manager = cryptoManager
+            if (manager != null) {
+                try {
+                    val encryptedBytes = android.util.Base64.decode(content, android.util.Base64.DEFAULT)
+                    val decryptedBytes = manager.decrypt(encryptedBytes)
+                    if (decryptedBytes != null) {
+                        content = String(decryptedBytes, Charsets.UTF_8)
+                        Log.d(TAG, "Decrypted content successfully")
+                    } else {
+                        Log.e(TAG, "Decryption returned null")
+                        return // Decryption failed, ignore message
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Decryption error", e)
+                    return // Error, ignore
+                }
+            } else {
+                Log.w(TAG, "Received encrypted content but CryptoManager is null")
+                return
+            }
+        }
         
         if (content.isNotEmpty()) {
             // Save & Notify

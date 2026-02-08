@@ -291,10 +291,27 @@ def connect():
 def clipboard_sync(data):
     """收到文本同步"""
     content = data.get('content')
-    # TODO: Decrypt content if we encrypt text too (Phase 3)
+    is_encrypted = data.get('encrypted', False)
+    
     if content:
-        pyperclip.copy(content)
-        logger.info(f"已同步剪贴板文本: {content[:20]}...")
+        final_text = content
+        if is_encrypted:
+            try:
+                import base64
+                if CRYPTO:
+                    encrypted_bytes = base64.b64decode(content)
+                    decrypted_bytes = CRYPTO.decrypt(encrypted_bytes)
+                    final_text = decrypted_bytes.decode('utf-8')
+                    logger.info("已解密文本内容")
+                else:
+                    logger.warning("收到加密文本但未配置密钥，无法解密")
+                    return
+            except Exception as e:
+                logger.error(f"解密文本失败: {e}")
+                return
+
+        pyperclip.copy(final_text)
+        logger.info(f"已同步剪贴板文本: {final_text[:20]}...")
 
 @sio.event
 def file_sync(data):
@@ -360,6 +377,7 @@ def pairing_menu():
             return
 
 def main():
+    global CRYPTO
     # Simple CLI Loop
     force_pair = "--pair" in sys.argv or "--reset" in sys.argv
     if force_pair or not CONFIG["room_id"]:

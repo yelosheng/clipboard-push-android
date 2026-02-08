@@ -125,14 +125,25 @@ def send_text(text):
     # 等 Android 端 CryptoManager 上线了，再统一开启文本加密。
     # 文件必须加密，因为上云了。文本只过 Relay，不持久化，风险稍低。
     
-    console.print(f"正在发送文本: {text[:30]}...")
-    # NOTE: Relay API broadcasts raw events. Client listens for 'clipboard_sync'.
-    return push_event('clipboard_sync', {
-        'content': text,
-        'room': ROOM_ID,
-        'timestamp': time.strftime("%H:%M:%S"),
-        'source': f"PC_{os.environ.get('USERNAME', 'User')}"
-    })
+    # Encrypt text using CryptoUtils
+    try:
+        encrypted_bytes = CRYPTO.encrypt(text.encode('utf-8'))
+        # Base64 encode the encrypted bytes for JSON transmission
+        import base64
+        encrypted_content = base64.b64encode(encrypted_bytes).decode('utf-8')
+        
+        console.print(f"正在发送加密文本: {text[:10]}... ({len(encrypted_content)} chars)")
+        
+        return push_event('clipboard_sync', {
+            'content': encrypted_content,
+            'encrypted': True,
+            'room': ROOM_ID,
+            'timestamp': time.strftime("%H:%M:%S"),
+            'source': f"PC_{os.environ.get('USERNAME', 'User')}"
+        })
+    except Exception as e:
+        console.print(f"[red]加密失败: {e}[/red]")
+        return False
 
 def upload_and_send_file(file_bytes, filename):
     """加密上传文件 -> 发送链接"""
