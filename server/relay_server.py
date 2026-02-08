@@ -215,6 +215,10 @@ def on_join(data):
         emit('status', {'msg': f'Joined room: {room}'}, room=room)
         logger.info(f"Client {request.sid} joined room: {room}")
         
+        # If joining the dashboard, send immediate state
+        if room == 'dashboard_room':
+            emit('client_list_update', get_serialized_sessions(), room=request.sid)
+        
     if client_id:
         if client_id not in CLIENT_SESSIONS:
             CLIENT_SESSIONS[client_id] = set()
