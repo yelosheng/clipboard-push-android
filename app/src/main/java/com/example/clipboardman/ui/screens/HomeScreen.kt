@@ -57,6 +57,7 @@ import java.util.*
 @Composable
 fun HomeScreen(
     connectionState: ConnectionState,
+    peerCount: Int,
     serverAddress: String,
     useHttps: Boolean,
     messages: List<PushMessage>,
@@ -159,7 +160,13 @@ fun HomeScreen(
                     navigationIcon = {
                         // 显示连接状态图标
                         val (icon, tint, description) = when (connectionState) {
-                            ConnectionState.CONNECTED -> Triple(Icons.Default.Cloud, Green500, "已连接")
+                            ConnectionState.CONNECTED -> {
+                                if (peerCount > 1) {
+                                    Triple(Icons.Default.Cloud, Green500, "已连接 (可传输)")
+                                } else {
+                                    Triple(Icons.Default.Cloud, androidx.compose.ui.graphics.Color(0xFFFFC107), "已连接 (无设备)") // Yellow for Alone
+                                }
+                            }
                             ConnectionState.CONNECTING -> Triple(Icons.Default.Sync, Orange500, "连接中")
                             ConnectionState.ERROR -> Triple(Icons.Default.Warning, Red500, "连接错误")
                             ConnectionState.DISCONNECTED -> Triple(Icons.Default.CloudOff, Grey500, "未连接")

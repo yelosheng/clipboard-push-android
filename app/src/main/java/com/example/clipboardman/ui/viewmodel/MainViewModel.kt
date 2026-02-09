@@ -18,6 +18,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // 连接状态
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
+    
+    // Peer Count (0 = Alone, >0 = Paired)
+    // Note: RelayRepository reports TOTAL clients. So 1 means just us (Alone). >1 means others are there.
+    // Wait, let's verify server logic.
+    // Server: `count = sum(1 for r in CLIENT_ROOMS.values() if r == room)`
+    // If I am in the room, I am counted. So count=1 means alone.
+    private val _peerCount = MutableStateFlow(0)
+    val peerCount: StateFlow<Int> = _peerCount.asStateFlow()
 
     // 消息列表
     private val _messages = MutableStateFlow<List<PushMessage>>(emptyList())
@@ -92,6 +100,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun updateConnectionState(state: ConnectionState) {
         _connectionState.value = state
+    }
+
+    fun updatePeerCount(count: Int) {
+        _peerCount.value = count
     }
 
     /**

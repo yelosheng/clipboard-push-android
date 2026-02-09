@@ -83,6 +83,16 @@ def get_client_from_sid(sid):
             return client_id
     return "Unknown"
 
+def broadcast_room_stats(room):
+    """Broadcast the number of unique clients (devices) in the room."""
+    if not room: return
+    
+    # Count unique client_ids in this room
+    count = sum(1 for r in CLIENT_ROOMS.values() if r == room)
+    
+    socketio.emit('room_stats', {'count': count, 'room': room}, room=room)
+    logger.info(f"Broadcast room_stats to {room}: {count} clients")
+
 
 # --- Auth Logic ---
 
@@ -209,6 +219,13 @@ def on_disconnect():
             logger.info(f"Removed SID {request.sid} from client {client_id}")
             # Notify dashboard
             socketio.emit('client_list_update', get_serialized_sessions(), room='dashboard_room')
+            
+            # Broadcast room stats if they were in a room
+            if client_id in CLIENT_ROOMS:
+                room = CLIENT_ROOMS[client_id]
+                # We need to do this AFTER removing them from CLIENT_ROOMS, which happens above
+                broadcast_room_stats(room)
+                
             break
     socketio.emit('server_stats', {'clients': len(CLIENT_SESSIONS), 'msg': 'Client disconnected'}, room='dashboard_room')
 
@@ -245,6 +262,10 @@ def on_join(data):
         serialized_sessions = get_serialized_sessions()
         logger.info(f"Broadcasting update to dashboard_room: {serialized_sessions}")
         socketio.emit('client_list_update', serialized_sessions, room='dashboard_room')
+        
+        # Broadcast room stats
+        if room:
+            broadcast_room_stats(room)
 
 @socketio.on('leave')
 def on_leave(data):
@@ -253,6 +274,7 @@ def on_leave(data):
         leave_room(room)
         emit('status', {'msg': f'Left room: {room}'}, room=room)
         logger.info(f"Client left room: {room}")
+        broadcast_room_stats(room)
 
 @socketio.on('clipboard_push')
 def handle_clipboard_push(data):

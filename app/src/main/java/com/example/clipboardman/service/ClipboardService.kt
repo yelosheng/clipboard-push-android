@@ -57,6 +57,9 @@ class ClipboardService : Service() {
         return currentState
     }
 
+    private var currentPeerCount = 0
+    fun getPeerCount(): Int = currentPeerCount
+
     fun reconnect() {
         // Force reload config and reconnect
         startService()
@@ -118,6 +121,7 @@ class ClipboardService : Service() {
     private val maxMessages = 100
 
     var onStateChanged: ((ConnectionState) -> Unit)? = null
+    var onPeerCountChanged: ((Int) -> Unit)? = null
     var onMessageReceived: ((PushMessage) -> Unit)? = null
 
     private val processedMessageIds = Collections.synchronizedSet(HashSet<String>())
@@ -161,6 +165,17 @@ class ClipboardService : Service() {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error observing connection status", e)
+            }
+        }
+
+        serviceScope.launch {
+            try {
+                relayRepository.peerCount.collect { count ->
+                    currentPeerCount = count
+                    onPeerCountChanged?.invoke(count)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error observing peer count", e)
             }
         }
 

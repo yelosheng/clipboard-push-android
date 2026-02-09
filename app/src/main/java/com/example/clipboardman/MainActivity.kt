@@ -68,10 +68,16 @@ class MainActivity : ComponentActivity() {
             clipboardService?.onMessageReceived = { message ->
                 mainViewModel?.addMessage(message)
             }
+            
+            // 设置 PeerCount 回调
+            clipboardService?.onPeerCountChanged = { count ->
+                mainViewModel?.updatePeerCount(count)
+            }
 
             // 同步当前状态
             val currentState = clipboardService?.getConnectionState() ?: ConnectionState.DISCONNECTED
             mainViewModel?.updateConnectionState(currentState)
+            mainViewModel?.updatePeerCount(clipboardService?.getPeerCount() ?: 0)
             
             // 不再从 Service 内存同步消息历史
             // ViewModel 通过 messageRepository.messagesFlow.collect 持续观察，更可靠
@@ -85,6 +91,7 @@ class MainActivity : ComponentActivity() {
         override fun onServiceDisconnected(name: ComponentName?) {
             clipboardService?.onStateChanged = null
             clipboardService?.onMessageReceived = null
+            clipboardService?.onPeerCountChanged = null
             clipboardService = null
             isBound = false
         }
@@ -412,6 +419,7 @@ fun MainNavigation(
     val navController = rememberNavController()
 
     val connectionState by viewModel.connectionState.collectAsState()
+    val peerCount by viewModel.peerCount.collectAsState()
     val serverAddress by viewModel.serverAddress.collectAsState()
     val useHttps by viewModel.useHttps.collectAsState()
     val messages by viewModel.messages.collectAsState()
@@ -439,6 +447,7 @@ fun MainNavigation(
         composable("home") {
             HomeScreen(
                 connectionState = connectionState,
+                peerCount = peerCount,
                 serverAddress = serverAddress,
                 useHttps = useHttps,
                 messages = messages,

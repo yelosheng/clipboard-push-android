@@ -29,6 +29,9 @@ class RelayRepository {
     private val _connectionStatus = MutableSharedFlow<Boolean>(replay = 1)
     val connectionStatus = _connectionStatus.asSharedFlow()
 
+    private val _peerCount = MutableSharedFlow<Int>(replay = 1)
+    val peerCount = _peerCount.asSharedFlow()
+
     fun connect(serverUrl: String, roomId: String, clientId: String) {
         disconnect() // Close existing
 
@@ -109,6 +112,19 @@ class RelayRepository {
                 }
             }
             
+            socket?.on("room_stats") { args ->
+                try {
+                    if (args.isNotEmpty() && args[0] is JSONObject) {
+                        val data = args[0] as JSONObject
+                        val count = data.optInt("count", 0)
+                        Log.d("Relay", "Received room_stats: $count")
+                        _peerCount.tryEmit(count)
+                    }
+                } catch (e: Exception) {
+                    Log.e("Relay", "Error processing room_stats", e)
+                }
+            }
+            
             socket?.connect()
             
         } catch (e: URISyntaxException) {
@@ -122,7 +138,9 @@ class RelayRepository {
         socket?.disconnect()
         socket?.off()
         socket = null
+        socket = null
         _connectionStatus.tryEmit(false)
+        _peerCount.tryEmit(0)
     }
 
     fun sendClipboardSync(roomId: String, content: String, isEncrypted: Boolean = false) {
