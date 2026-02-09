@@ -215,16 +215,14 @@ def on_disconnect():
                 del CLIENT_SESSIONS[client_id]
                 # Clean up room info if no sessions left
                 if client_id in CLIENT_ROOMS:
+                    room = CLIENT_ROOMS[client_id]
                     del CLIENT_ROOMS[client_id]
+                    # Broadcast updated stats (after removal)
+                    broadcast_room_stats(room)
+            
             logger.info(f"Removed SID {request.sid} from client {client_id}")
             # Notify dashboard
             socketio.emit('client_list_update', get_serialized_sessions(), room='dashboard_room')
-            
-            # Broadcast room stats if they were in a room
-            if client_id in CLIENT_ROOMS:
-                room = CLIENT_ROOMS[client_id]
-                # We need to do this AFTER removing them from CLIENT_ROOMS, which happens above
-                broadcast_room_stats(room)
                 
             break
     socketio.emit('server_stats', {'clients': len(CLIENT_SESSIONS), 'msg': 'Client disconnected'}, room='dashboard_room')
