@@ -3,7 +3,7 @@ import qrcode
 from io import BytesIO
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QLabel, QLineEdit, QCheckBox, 
-                             QPushButton, QSystemTrayIcon, QMenu, QFrame)
+                             QPushButton, QSystemTrayIcon, QMenu, QFrame, QTextEdit)
 from PySide6.QtGui import QIcon, QPixmap, QImage, QFont, QKeyEvent
 from PySide6.QtCore import Qt, Signal
 
@@ -34,10 +34,38 @@ class HotkeyRecorderEdit(QLineEdit):
         self.setStyleSheet("background-color: #f8f9fa; border: 1px solid #ced4da; padding: 5px;")
         self.current_keys = set()
 
+    def focusInEvent(self, event):
+        self.clear()
+        self.setStyleSheet("background-color: #fff3cd; border: 1px solid #ffeeba; padding: 5px;")
+        super().focusInEvent(event)
+
+    def focusOutEvent(self, event):
+        self.setStyleSheet("background-color: #f8f9fa; border: 1px solid #ced4da; padding: 5px;")
+        if not self.text():
+            self.setText("None")
+        super().focusOutEvent(event)
+
     def keyPressEvent(self, event: QKeyEvent):
         key = event.key()
         if key == Qt.Key_Backspace or key == Qt.Key_Delete:
             self.clear()
+            return
+
+        if key in [Qt.Key_Control, Qt.Key_Alt, Qt.Key_Shift, Qt.Key_Meta]:
+            # Just updating modifiers view
+            modifiers = event.modifiers()
+            parts = []
+            if modifiers & Qt.ControlModifier: parts.append("Ctrl")
+            if modifiers & Qt.AltModifier: parts.append("Alt")
+            if modifiers & Qt.ShiftModifier: parts.append("Shift")
+            if modifiers & Qt.MetaModifier: parts.append("Win")
+            if parts:
+                self.setText("+".join(parts) + "+...")
+            return
+
+        if key == Qt.Key_Escape:
+            self.clear()
+            self.clearFocus()
             return
 
         modifiers = event.modifiers()
@@ -60,10 +88,77 @@ class HotkeyRecorderEdit(QLineEdit):
             if main_key not in parts:
                 parts.append(main_key)
             self.setText("+".join(parts))
+            self.clearFocus() # Auto-finish recording
         else:
-            # If only modifiers are pressed, show them partially
-            if parts:
-                self.setText("+".join(parts) + "+...")
+            # If modifier + unknown key, don't update to invalid state
+            pass
+
+class MainWindow(QMainWindow):
+    push_text_clicked = Signal(str)
+    settings_clicked = Signal()
+
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Clipboard Push")
+        self.setFixedSize(400, 300)
+        self.init_ui()
+
+    def init_ui(self):
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        layout = QVBoxLayout(central_widget)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
+
+        # Text Area
+        self.text_edit = QTextEdit()
+        self.text_edit.setPlaceholderText("Enter text to push... (Ctrl+Enter to send)")
+        self.text_edit.installEventFilter(self)
+        layout.addWidget(self.text_edit)
+
+        # Buttons
+        btn_layout = QHBoxLayout()
+        
+        self.settings_btn = QPushButton("Settings")
+        self.settings_btn.setFixedHeight(40)
+        self.settings_btn.clicked.connect(self.settings_clicked.emit)
+        
+        self.push_btn = QPushButton("Push")
+        self.push_btn.setFixedHeight(40)
+        # self.push_btn.setStyleSheet("background-color: #28a745; color: white; font-weight: bold;")
+        self.push_btn.clicked.connect(self.on_push)
+        
+        btn_layout.addWidget(self.settings_btn)
+        btn_layout.addWidget(self.push_btn, 1) # Push button takes more space
+        
+        layout.addLayout(btn_layout)
+        
+        # Status Label
+        self.status_label = QLabel("Ready")
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status_label.setStyleSheet("color: #666; font-size: 11px;")
+        layout.addWidget(self.status_label)
+
+        self.setFont(QFont("Segoe UI", 10))
+
+    def eventFilter(self, source, event):
+        if source == self.text_edit and event.type() == QKeyEvent.Type.KeyPress:
+            if event.key() == Qt.Key_Return and (event.modifiers() & Qt.ControlModifier):
+                self.on_push()
+                return True
+        return super().eventFilter(source, event)
+
+    def on_push(self):
+        text = self.text_edit.toPlainText()
+        if text.strip():
+            self.push_text_clicked.emit(text)
+            self.text_edit.clear()
+        else:
+            self.set_status("Please enter text", "red")
+
+    def set_status(self, text, color="#666"):
+        self.status_label.setText(text)
+        self.status_label.setStyleSheet(f"color: {color}; font-size: 11px;")
 
 class SettingsWindow(QMainWindow):
     save_clicked = Signal(dict)
@@ -74,7 +169,8 @@ class SettingsWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Clipboard Push - Settings")
-        self.setFixedSize(650, 450)
+        # self.setFixedSize(650, 450)
+        self.resize(650, 450) # Allow resizing if needed, but keep default
         self.init_ui()
 
     def init_ui(self):
@@ -88,11 +184,14 @@ class SettingsWindow(QMainWindow):
         left_layout = QVBoxLayout()
         left_layout.setSpacing(15)
 
-        # Server URL
-        left_layout.addWidget(QLabel("Server URL:"))
+        # Server URL (Hidden, configurable via config.json)
+        self.server_url_label = QLabel("Server URL:")
         self.server_url_input = QLineEdit()
         self.server_url_input.setPlaceholderText("http://your-server:5055")
-        left_layout.addWidget(self.server_url_input)
+        # left_layout.addWidget(self.server_url_label)
+        # left_layout.addWidget(self.server_url_input)
+        self.server_url_label.hide()
+        self.server_url_input.hide()
 
         # Download Path
         left_layout.addWidget(QLabel("Download Path:"))
@@ -145,12 +244,10 @@ class SettingsWindow(QMainWindow):
 
         self.save_btn = QPushButton("Save Settings")
         self.save_btn.setFixedHeight(35)
-        self.save_btn.setStyleSheet("background-color: #0078d4; color: white; border: none; font-weight: bold;")
         self.save_btn.clicked.connect(self.on_save)
         
         self.push_btn = QPushButton("Push Manual")
         self.push_btn.setFixedHeight(35)
-        self.push_btn.setStyleSheet("background-color: #28a745; color: white; border: none; font-weight: bold;")
         self.push_btn.clicked.connect(self.push_clicked.emit)
 
         self.reconnect_btn = QPushButton("Reconnect")

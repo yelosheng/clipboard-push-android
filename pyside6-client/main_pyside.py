@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QFileDialog
 from PySide6.QtGui import QIcon, QAction
 from PySide6.QtCore import Qt, Slot, QTimer
 
-from ui_manager import SettingsWindow
+from ui_manager import SettingsWindow, MainWindow
 from worker_threads import NetworkWorker, HotkeyWorker
 from crypto_utils import CryptoUtils
 from loguru import logger
@@ -49,14 +49,25 @@ class ClipboardApp:
         self.icon = QIcon(str(Path(__file__).parent / "icon.png"))
         self.app.setWindowIcon(self.icon)
 
-        self.ui = SettingsWindow()
-        self.ui.setWindowIcon(self.icon)
+        self.icon = QIcon(str(Path(__file__).parent / "icon.png"))
+        self.app.setWindowIcon(self.icon)
+
+        # MainWindow
+        self.main_window = MainWindow()
+        self.main_window.setWindowIcon(self.icon)
+        
+        # SettingsWindow
+        self.settings_window = SettingsWindow()
+        self.settings_window.setWindowIcon(self.icon)
+        
         self.setup_tray()
         self.setup_connections()
         
         self.net_worker = NetworkWorker(self.config)
         self.setup_network_worker()
         self.net_worker.start()
+        
+        self.main_window.show()
 
         self.hotkey_worker = None
         self.restart_hotkey_worker()
@@ -104,7 +115,7 @@ class ClipboardApp:
             logger.error(f"Failed to save config: {e}")
 
     def setup_tray(self):
-        self.tray = QSystemTrayIcon(self.ui)
+        self.tray = QSystemTrayIcon(self.app)
         self.tray.setIcon(self.icon)
         
         menu = QMenu()
@@ -119,6 +130,11 @@ class ClipboardApp:
         
         menu.addAction(push_action)
         menu.addSeparator()
+        
+        show_main = QAction("Open Main Window", self.app)
+        show_main.triggered.connect(self.main_window.show)
+        menu.addAction(show_main)
+        
         menu.addAction(show_action)
         menu.addAction(quit_action)
         
@@ -128,17 +144,23 @@ class ClipboardApp:
 
     def on_tray_activated(self, reason):
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
-            self.show_settings()
+            self.main_window.showNormal()
+            self.main_window.activateWindow()
 
     def setup_connections(self):
-        self.ui.save_clicked.connect(self.on_settings_saved)
-        self.ui.reconnect_clicked.connect(self.on_reconnect_clicked)
-        self.ui.browse_clicked.connect(self.on_browse_clicked)
-        self.ui.push_clicked.connect(self.on_hotkey_triggered)
+        # Settings
+        self.settings_window.save_clicked.connect(self.on_settings_saved)
+        self.settings_window.reconnect_clicked.connect(self.on_reconnect_clicked)
+        self.settings_window.browse_clicked.connect(self.on_browse_clicked)
+        self.settings_window.push_clicked.connect(self.on_hotkey_triggered)
+        
+        # Main
+        self.main_window.push_text_clicked.connect(self.on_manual_text_push)
+        self.main_window.settings_clicked.connect(self.show_settings)
 
     def setup_network_worker(self):
-        self.net_worker.connected.connect(lambda: self.ui.set_status("Connected", "green"))
-        self.net_worker.disconnected.connect(lambda: self.ui.set_status("Disconnected", "red"))
+        self.net_worker.connected.connect(lambda: self.update_status("Connected", "green"))
+        self.net_worker.disconnected.connect(lambda: self.update_status("Disconnected", "red"))
         self.net_worker.clipboard_received.connect(self.on_clipboard_received)
         self.net_worker.file_received.connect(self.on_file_received)
 
@@ -154,12 +176,12 @@ class ClipboardApp:
             logger.info(f"Hotkey listener started: {hs}")
 
     def show_settings(self):
-        self.ui.server_url_input.setText(self.config.get("relay_server_url", ""))
-        self.ui.download_path_input.setText(self.config.get("download_path", ""))
-        self.ui.hotkey_input.setText(self.config.get("push_hotkey", "Ctrl+F6"))
-        self.ui.cb_images.setChecked(self.config.get("auto_copy_image", True))
-        self.ui.cb_files.setChecked(self.config.get("auto_copy_file", True))
-        self.ui.cb_startup.setChecked(self.config.get("auto_start", False))
+        self.settings_window.server_url_input.setText(self.config.get("relay_server_url", ""))
+        self.settings_window.download_path_input.setText(self.config.get("download_path", ""))
+        self.settings_window.hotkey_input.setText(self.config.get("push_hotkey", "Ctrl+F6"))
+        self.settings_window.cb_images.setChecked(self.config.get("auto_copy_image", True))
+        self.settings_window.cb_files.setChecked(self.config.get("auto_copy_file", True))
+        self.settings_window.cb_startup.setChecked(self.config.get("auto_start", False))
         
         # QR Code - Try to show even if just generated
         rid = self.config.get("room_id")
@@ -170,17 +192,21 @@ class ClipboardApp:
                 "room": rid,
                 "key": rk
             })
-            self.ui.qr_label.set_qr_content(qr_data)
+            self.settings_window.qr_label.set_qr_content(qr_data)
         
         # Ensure status reflects current state
         if self.net_worker.sio.connected:
-            self.ui.set_status("Connected", "green")
+            self.settings_window.set_status("Connected", "green")
         else:
-            self.ui.set_status("Disconnected", "red")
+            self.settings_window.set_status("Disconnected", "red")
 
-        self.ui.show()
-        self.ui.raise_()
-        self.ui.activateWindow()
+        self.settings_window.show()
+        self.settings_window.raise_()
+        self.settings_window.activateWindow()
+
+    def update_status(self, text, color):
+        self.settings_window.set_status(text, color)
+        self.main_window.set_status(text, color)
 
     @Slot(dict)
     def on_settings_saved(self, data):
@@ -205,9 +231,9 @@ class ClipboardApp:
         self.net_worker.force_reconnect()
 
     def on_browse_clicked(self):
-        path = QFileDialog.getExistingDirectory(self.ui, "Select Download Directory", self.config.get("download_path", ""))
+        path = QFileDialog.getExistingDirectory(self.settings_window, "Select Download Directory", self.config.get("download_path", ""))
         if path:
-            self.ui.download_path_input.setText(path)
+            self.settings_window.download_path_input.setText(path)
 
     @Slot(str, bool)
     def on_clipboard_received(self, content, is_encrypted):
@@ -293,6 +319,12 @@ class ClipboardApp:
         if text and text.strip():
             self.perform_push_text(text)
 
+    def on_manual_text_push(self, text):
+        if self.perform_push_text(text):
+            self.main_window.set_status("Text Pushed Successfully", "green")
+        else:
+            self.main_window.set_status("Push Failed", "red")
+
     def perform_push_text(self, text):
         try:
             enc_bytes = self.crypto.encrypt(text.encode('utf-8'))
@@ -310,8 +342,12 @@ class ClipboardApp:
                 "client_id": self.config.get("device_id")
             }
             url = f"{self.config['relay_server_url']}/api/relay"
-            requests.post(url, json=payload, timeout=5, verify=False)
-            logger.info("Pushed text sync")
+            resp = requests.post(url, json=payload, timeout=5, verify=False)
+            logger.info(f"Push response: {resp.status_code} - {resp.text}")
+
+            if 200 <= resp.status_code < 300:
+                logger.success("Text pushed successfully")
+                return True
         except Exception as e:
             logger.error(f"Text push error: {e}")
 
@@ -397,6 +433,12 @@ class ClipboardApp:
         self.net_worker.stop()
         if self.hotkey_worker:
             self.hotkey_worker.stop()
+        
+        if self.tray:
+            self.tray.hide()
+            
+        self.settings_window.close()
+        self.main_window.close()
         self.app.quit()
 
     def run(self):
