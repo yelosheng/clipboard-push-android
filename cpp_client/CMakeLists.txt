@@ -48,7 +48,7 @@ FetchContent_MakeAvailable(sioclient)
 
 # Source Files
 file(GLOB_RECURSE SOURCES "src/*.cpp")
-file(GLOB_RECURSE HEADERS "include/*.hpp")
+file(GLOB_RECURSE HEADERS "include/*.hpp" "include/*.h")
 
 # Executable (Win32 GUI app)
 add_executable(${PROJECT_NAME} WIN32 ${SOURCES} ${HEADERS})

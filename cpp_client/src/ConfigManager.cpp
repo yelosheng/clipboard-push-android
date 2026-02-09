@@ -1,4 +1,4 @@
-#include "ConfigManager.hpp"
+#include "../include/ConfigManager.hpp"
 #include <filesystem>
 #include <fstream>
 #include <random>
@@ -27,6 +27,15 @@ std::string GenerateDeviceID() {
   return "pc_" + std::string(user) + "_" + tmp_s;
 }
 
+// Helper for safe string extraction
+std::string GetJsonString(const nlohmann::json &j, const std::string &key,
+                          const std::string &def) {
+  if (j.contains(key) && j[key].is_string()) {
+    return j[key].get<std::string>();
+  }
+  return def;
+}
+
 ConfigManager &ConfigManager::Instance() {
   static ConfigManager instance;
   return instance;
@@ -44,11 +53,18 @@ bool ConfigManager::Load(const std::string &path) {
     nlohmann::json j;
     f >> j;
 
-    m_config.server_url = j.value("server_url", "http://localhost:5000");
-    m_config.download_path = j.value("download_path", "Downloads");
-    m_config.device_id = j.value("device_id", GenerateDeviceID());
-    m_config.room_id = j.value("room_id", "");
-    m_config.room_key = j.value("room_key", "");
+    m_config.server_url = GetJsonString(j, "relay_server_url", "");
+    if (m_config.server_url.empty()) {
+      m_config.server_url =
+          GetJsonString(j, "server_url", "http://localhost:5000");
+    }
+
+    m_config.download_path = GetJsonString(j, "download_path", "Downloads");
+    m_config.device_id = GetJsonString(j, "device_id", GenerateDeviceID());
+    m_config.room_id = GetJsonString(j, "room_id", "");
+    m_config.room_key = GetJsonString(j, "room_key", "");
+
+    // Boolean and number types usually deduce correctly
     m_config.auto_copy_image = j.value("auto_copy_image", true);
     m_config.auto_copy_file = j.value("auto_copy_file", true);
     m_config.auto_start = j.value("auto_start", false);
