@@ -1,0 +1,10 @@
+{
+  "name": "clipboard-push",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "cpr",
+    "nlohmann-json",
+    "spdlog",
+    "ixwebsocket"
+  ]
+}
