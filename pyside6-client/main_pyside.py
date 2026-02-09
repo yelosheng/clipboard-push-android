@@ -36,6 +36,11 @@ class ClipboardApp:
         self.app = QApplication(sys.argv)
         self.app.setQuitOnLastWindowClosed(False)
         
+        # Windows Taskbar Icon Fix
+        if sys.platform == 'win32':
+            myappid = u'huang.clipboardman.pyside.client'
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+
         self.load_config()
         self.crypto = None
         if self.config.get("room_key"):
@@ -217,7 +222,7 @@ class ClipboardApp:
                     return
             
             pyperclip.copy(final_text)
-            self.tray.showMessage("Clipboard Man", f"Received Text: {final_text[:50]}...", QSystemTrayIcon.MessageIcon.Information)
+            self.tray.showMessage("Clipboard Push", f"Received Text: {final_text[:50]}...", QSystemTrayIcon.MessageIcon.Information)
         except Exception as e:
             logger.error(f"Clipboard sync error: {e}")
 
@@ -256,7 +261,7 @@ class ClipboardApp:
             elif self.config.get("auto_copy_file", True):
                 self.set_clipboard_files([path_str])
             
-            self.tray.showMessage("Clipboard Man", f"Received File: {filename}", QSystemTrayIcon.MessageIcon.Information)
+            self.tray.showMessage("Clipboard Push", f"Received File: {filename}", QSystemTrayIcon.MessageIcon.Information)
             logger.success(f"File saved: {path_str}")
         except Exception as e:
             logger.error(f"File sync error: {e}")

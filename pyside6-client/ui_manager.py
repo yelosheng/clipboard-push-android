@@ -34,7 +34,7 @@ class SettingsWindow(QMainWindow):
     
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Clipboard Man - Settings")
+        self.setWindowTitle("Clipboard Push - Settings")
         self.setFixedSize(650, 450)
         self.init_ui()
 
