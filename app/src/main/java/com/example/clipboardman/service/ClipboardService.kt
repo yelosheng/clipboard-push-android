@@ -173,6 +173,10 @@ class ClipboardService : Service() {
                 relayRepository.peerCount.collect { count ->
                     currentPeerCount = count
                     onPeerCountChanged?.invoke(count)
+                    // Update notification to reflect peer count change (Yellow -> Green)
+                    if (currentState == ConnectionState.CONNECTED) {
+                        NotificationHelper.updateServiceNotification(this@ClipboardService, currentState, serverAddress, count)
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error observing peer count", e)
@@ -266,7 +270,8 @@ class ClipboardService : Service() {
             val notification = NotificationHelper.buildServiceNotification(
                 this@ClipboardService,
                 ConnectionState.CONNECTING,
-                serverAddress
+                serverAddress,
+                currentPeerCount
             )
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -425,7 +430,7 @@ class ClipboardService : Service() {
         Log.d(TAG, "State: $state")
         DebugLogger.log(TAG, "State changed: $state")
         currentState = state
-        NotificationHelper.updateServiceNotification(this, state, serverAddress)
+        NotificationHelper.updateServiceNotification(this, state, serverAddress, currentPeerCount)
         onStateChanged?.invoke(state)
     }
 

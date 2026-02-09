@@ -10,6 +10,11 @@ import com.example.clipboardman.ClipboardManApp
 import com.example.clipboardman.MainActivity
 import com.example.clipboardman.R
 import com.example.clipboardman.data.model.ConnectionState
+import android.graphics.Color
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.DrawableCompat
 
 /**
  * 通知助手
@@ -29,14 +34,35 @@ object NotificationHelper {
     fun buildServiceNotification(
         context: Context,
         state: ConnectionState,
-        serverAddress: String
+        serverAddress: String,
+        peerCount: Int = 0
     ): Notification {
         val contentText = when (state) {
-            ConnectionState.CONNECTED -> "已连接"
+            ConnectionState.CONNECTED -> {
+                if (peerCount > 1) "已连接 (可传输)" else "已连接 (无设备)"
+            }
             ConnectionState.CONNECTING -> "正在连接..."
             ConnectionState.DISCONNECTED -> "未连接"
             ConnectionState.ERROR -> "连接错误"
         }
+        
+        val color = when (state) {
+            ConnectionState.CONNECTED -> {
+                if (peerCount > 1) Color.GREEN else Color.YELLOW
+            }
+            ConnectionState.CONNECTING -> Color.parseColor("#FFA500") // Orange
+            ConnectionState.ERROR -> Color.RED
+            ConnectionState.DISCONNECTED -> Color.GRAY
+        }
+
+        // Determine icon resource based on state
+        val iconResId = when (state) {
+            ConnectionState.CONNECTED -> R.drawable.ic_cloud_black_24dp
+            ConnectionState.CONNECTING -> R.drawable.ic_cloud_black_24dp // Use same cloud for connecting, maybe sync later
+            else -> R.drawable.ic_cloud_off_black_24dp
+        }
+
+        val largeIconBitmap = bitmapFromVector(context, iconResId, color)
 
         val pendingIntent = PendingIntent.getActivity(
             context,
@@ -63,6 +89,7 @@ object NotificationHelper {
         val remoteViews = android.widget.RemoteViews(context.packageName, R.layout.notification_service)
         remoteViews.setTextViewText(R.id.notification_title, "Clipboard Push")
         remoteViews.setTextViewText(R.id.notification_text, contentText)
+        remoteViews.setImageViewBitmap(R.id.notification_icon, largeIconBitmap)
         remoteViews.setOnClickPendingIntent(R.id.btn_push, pushPendingIntent)
 
         return NotificationCompat.Builder(context, ClipboardManApp.NOTIFICATION_CHANNEL_ID)
@@ -72,9 +99,28 @@ object NotificationHelper {
             .setStyle(NotificationCompat.DecoratedCustomViewStyle())
             .setOngoing(true)
             .setSilent(true)
+            .setColor(color) // Keep accent color for text
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
+    }
+
+    private fun bitmapFromVector(context: Context, vectorResId: Int, color: Int): Bitmap? {
+        val drawable = ContextCompat.getDrawable(context, vectorResId) ?: return null
+        val wrappedDrawable = DrawableCompat.wrap(drawable).mutate()
+        
+        // Apply tint
+        DrawableCompat.setTint(wrappedDrawable, color)
+        
+        val bitmap = Bitmap.createBitmap(
+            drawable.intrinsicWidth,
+            drawable.intrinsicHeight,
+            Bitmap.Config.ARGB_8888
+        )
+        val canvas = Canvas(bitmap)
+        drawable.setBounds(0, 0, canvas.width, canvas.height)
+        drawable.draw(canvas)
+        return bitmap
     }
 
     /**
@@ -83,9 +129,10 @@ object NotificationHelper {
     fun updateServiceNotification(
         context: Context,
         state: ConnectionState,
-        serverAddress: String
+        serverAddress: String,
+        peerCount: Int = 0
     ) {
-        val notification = buildServiceNotification(context, state, serverAddress)
+        val notification = buildServiceNotification(context, state, serverAddress, peerCount)
         val notificationManager = context.getSystemService(NotificationManager::class.java)
         notificationManager.notify(SERVICE_NOTIFICATION_ID, notification)
     }
