@@ -67,3 +67,6 @@ cpp_client/vcpkg_installed/
 CMakeUserPresets.json
 compile_commands.json
 cpp_client/logs/
+lib/catch
+lib/rapidjson
+lib/websocketpp

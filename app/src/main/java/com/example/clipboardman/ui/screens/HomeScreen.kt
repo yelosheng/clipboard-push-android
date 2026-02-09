@@ -16,6 +16,14 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.mutableFloatStateOf
@@ -55,7 +63,8 @@ fun HomeScreen(
     onSettingsClick: () -> Unit,
     onMessageClick: (PushMessage) -> Unit,
     onDeleteMessages: (Set<String>) -> Unit = {},
-    onPushClipboard: () -> Unit
+    onPushClipboard: () -> Unit,
+    onReconnectClick: () -> Unit = {}
 ) {
     // 构建基础URL
     val baseUrl = remember(serverAddress, useHttps) {
@@ -149,19 +158,37 @@ fun HomeScreen(
                     title = { }, // 不显示标题
                     navigationIcon = {
                         // 显示连接状态图标
-                        val statusColor = when (connectionState) {
-                            ConnectionState.CONNECTED -> Green500
-                            ConnectionState.CONNECTING -> Orange500
-                            ConnectionState.ERROR -> Red500
-                            ConnectionState.DISCONNECTED -> Grey500
+                        val (icon, tint, description) = when (connectionState) {
+                            ConnectionState.CONNECTED -> Triple(Icons.Default.Cloud, Green500, "已连接")
+                            ConnectionState.CONNECTING -> Triple(Icons.Default.Sync, Orange500, "连接中")
+                            ConnectionState.ERROR -> Triple(Icons.Default.Warning, Red500, "连接错误")
+                            ConnectionState.DISCONNECTED -> Triple(Icons.Default.CloudOff, Grey500, "未连接")
                         }
-                        Box(
-                            modifier = Modifier
-                                .padding(start = 16.dp, end = 8.dp)
-                                .size(12.dp)
-                                .clip(CircleShape)
-                                .background(statusColor)
-                        )
+
+                        IconButton(
+                            onClick = {
+                                if (connectionState != ConnectionState.CONNECTED) {
+                                    onReconnectClick()
+                                } else {
+                                    // Connected toast or info?
+                                }
+                            }
+                        ) {
+                            if (connectionState == ConnectionState.CONNECTING) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    color = tint,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = description,
+                                    tint = tint,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                        }
                     },
                     actions = {
                         // 推送剪贴板按钮
@@ -195,7 +222,37 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // 移除了 ConnectionStatusBar
+            // 状态横幅
+            AnimatedVisibility(
+                visible = connectionState == ConnectionState.ERROR || (connectionState == ConnectionState.DISCONNECTED && serverAddress.isNotBlank()),
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(if(connectionState == ConnectionState.ERROR) Red500 else Orange500)
+                        .clickable { onReconnectClick() }
+                        .padding(vertical = 8.dp, horizontal = 16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if(connectionState == ConnectionState.ERROR) Icons.Default.Warning else Icons.Default.CloudOff,
+                            contentDescription = null,
+                            tint = androidx.compose.ui.graphics.Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if(connectionState == ConnectionState.ERROR) "连接错误 - 点击重试" else "未连接 - 点击重连",
+                            color = androidx.compose.ui.graphics.Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
             
             // 消息列表
             if (messages.isEmpty()) {
