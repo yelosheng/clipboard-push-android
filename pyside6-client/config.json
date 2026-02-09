@@ -1,0 +1,11 @@
+{
+    "relay_server_url": "http://kxkl.tk:5055",
+    "download_path": "D:/Downloads",
+    "device_id": "pc_Huang_9983",
+    "room_id": "room_1770619983",
+    "room_key": "AF9mmjXwn2QWu0RHnaTkd3qCerMoCfcGzfYGFeUGPHM=",
+    "push_hotkey": "Ctrl+F6",
+    "auto_copy_image": true,
+    "auto_copy_file": true,
+    "auto_start": false
+}
