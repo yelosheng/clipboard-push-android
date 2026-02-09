@@ -1,8 +1,11 @@
+PySide6==6.6.1
+pynput==1.7.6
 python-socketio[client]==5.10.0
 requests==2.31.0
 pyperclip==1.8.2
-rich==13.7.0
-pillow==10.1.0
-# pywin32==306 (Already installed in system)
-cryptography==41.0.7
+pillow==10.2.0
+cryptography==42.0.2
 qrcode==7.4.2
+loguru==0.7.2
+numpy<2
+pywin32

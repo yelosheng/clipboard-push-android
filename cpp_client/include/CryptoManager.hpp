@@ -1,8 +1,5 @@
 #pragma once
-#include <optional>
-#include <string>
-#include <vector>
-
+#include "Common.hpp"
 
 class CryptoManager {
 public:

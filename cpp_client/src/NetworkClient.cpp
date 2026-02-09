@@ -1,12 +1,12 @@
 #include "NetworkClient.hpp"
 #include "Base64.hpp"
 #include "ClipboardManager.hpp"
+#include "Common.hpp"
 #include "ConfigManager.hpp"
 #include "CryptoManager.hpp"
 #include <cpr/cpr.h>
-#include <filesystem> // C++17
+#include <filesystem>
 #include <fstream>
-#include <spdlog/spdlog.h>
 
 
 using namespace sio;
@@ -30,7 +30,15 @@ void NetworkClient::Start() {
   m_client.connect(url);
 }
 
-void NetworkClient::Stop() { m_client.close(); }
+void NetworkClient::Stop() {
+  m_client.sync_close();
+  m_client.clear_con_listeners();
+}
+
+void NetworkClient::Reconnect() {
+  Stop();
+  Start();
+}
 
 bool NetworkClient::IsConnected() const { return m_connected; }
 

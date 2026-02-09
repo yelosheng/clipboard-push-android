@@ -4,7 +4,11 @@ project(clipboard-man-cpp)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_definitions(-DUNICODE -D_UNICODE)
+add_definitions(-DUNICODE -D_UNICODE -DWIN32_LEAN_AND_MEAN -DNOMINMAX)
+
+if(MSVC)
+    add_compile_options(/utf-8)
+endif()
 
 # Dependencies
 
@@ -15,6 +19,7 @@ set(OPENSSL_ROOT_DIR "${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows")
 find_package(cpr CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
+find_package(fmt CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED)
 
 # Header-only libs (Manual find)
@@ -28,9 +33,21 @@ endif()
 if(NOT RAPIDJSON_INCLUDE_DIR)
     message(FATAL_ERROR "rapidjson not found!")
 endif()
-if(NOT ASIO_INCLUDE_DIR)
-    message(FATAL_ERROR "asio not found!")
+
+# Manual find for libqrencode
+find_path(QRENCODE_INCLUDE_DIR qrencode.h)
+find_library(QRENCODE_LIBRARY_RELEASE NAMES qrencode libqrencode)
+find_library(QRENCODE_LIBRARY_DEBUG NAMES qrencode d libqrencode d qrencoded libqrencoded)
+
+if(NOT QRENCODE_LIBRARY_RELEASE)
+    set(QRENCODE_LIBRARY_RELEASE ${QRENCODE_LIBRARY_DEBUG})
 endif()
+
+if(NOT QRENCODE_INCLUDE_DIR OR NOT QRENCODE_LIBRARY_RELEASE)
+    message(FATAL_ERROR "libqrencode not found!")
+endif()
+
+include_directories(${QRENCODE_INCLUDE_DIR})
 
 include_directories(${WEBSOCKETPP_INCLUDE_DIR} ${RAPIDJSON_INCLUDE_DIR} ${ASIO_INCLUDE_DIR})
 
@@ -47,8 +64,32 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(sioclient)
 
 # Source Files
-file(GLOB_RECURSE SOURCES "src/*.cpp")
-file(GLOB_RECURSE HEADERS "include/*.hpp" "include/*.h")
+set(SOURCES
+    src/main.cpp
+    src/Window.cpp
+    src/MainWindow.cpp
+    src/TrayIcon.cpp
+    src/ClipboardManager.cpp
+    src/ConfigManager.cpp
+    src/CryptoManager.cpp
+    src/HotkeyManager.cpp
+    src/NetworkClient.cpp
+    src/Base64.cpp
+    src/app.manifest
+)
+
+set(HEADERS
+    include/Common.hpp
+    include/Window.hpp
+    include/MainWindow.hpp
+    include/TrayIcon.hpp
+    include/ClipboardManager.hpp
+    include/ConfigManager.hpp
+    include/CryptoManager.hpp
+    include/HotkeyManager.hpp
+    include/NetworkClient.hpp
+    include/Base64.hpp
+)
 
 # Executable (Win32 GUI app)
 add_executable(${PROJECT_NAME} WIN32 ${SOURCES} ${HEADERS})
@@ -63,11 +104,13 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${sioclient_SOURCE_DIR}/src)
 target_link_libraries(${PROJECT_NAME} PRIVATE 
     cpr::cpr
     nlohmann_json::nlohmann_json
-    spdlog::spdlog
     sioclient
+    spdlog::spdlog
+    fmt::fmt
     OpenSSL::SSL
     OpenSSL::Crypto
-    user32 kernel32 gdi32 shell32 gdiplus shlwapi ole32 ws2_32 crypt32 bcrypt comctl32 comdlg32 advapi32
+    ${QRENCODE_LIBRARY_RELEASE}
+    user32 kernel32 gdi32 shell32 gdiplus shlwapi ole32 ws2_32 crypt32 bcrypt comctl32 comdlg32 advapi32 dhcpcsvc
 )
 
 

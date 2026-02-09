@@ -8,6 +8,7 @@
         "websocketpp",
         "rapidjson",
         "asio",
-        "openssl"
+        "openssl",
+        "libqrencode"
     ]
 }

@@ -4,14 +4,22 @@
 #include <string>
 #include <vector>
 
-
 class NetworkClient {
 public:
+private:
   NetworkClient();
+
+public:
   ~NetworkClient();
+
+  static NetworkClient &Instance() {
+    static NetworkClient instance;
+    return instance;
+  }
 
   void Start();
   void Stop();
+  void Reconnect();
 
   // Status
   bool IsConnected() const;

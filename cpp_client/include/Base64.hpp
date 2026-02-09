@@ -1,6 +1,5 @@
 #pragma once
-#include <string>
-#include <vector>
+#include "Common.hpp"
 
 class Base64 {
 public:

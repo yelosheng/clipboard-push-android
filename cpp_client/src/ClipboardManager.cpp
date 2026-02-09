@@ -1,9 +1,6 @@
 #include "ClipboardManager.hpp"
-#include <codecvt> // For wstring/string conversion (C++17 deprecated but common, or use Win32 MultiByteToWideChar)
+#include "Common.hpp"
 #include <shlobj.h>
-#include <spdlog/spdlog.h>
-#include <windows.h>
-
 
 // Helper: UTF-8 to Wide
 std::wstring ToWide(const std::string &str) {

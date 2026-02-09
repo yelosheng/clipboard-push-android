@@ -1,11 +1,9 @@
 #include "CryptoManager.hpp"
 #include "Base64.hpp"
+#include "Common.hpp"
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/rand.h>
-#include <spdlog/spdlog.h>
-#include <stdexcept>
-
 
 // AES-256-GCM Parameters
 constexpr int IV_SIZE = 12;

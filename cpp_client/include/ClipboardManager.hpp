@@ -1,8 +1,5 @@
 #pragma once
-#include <functional>
-#include <string>
-#include <vector>
-
+#include "Common.hpp"
 
 class ClipboardManager {
 public:

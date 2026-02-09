@@ -1,7 +1,8 @@
 #pragma once
+#include "Common.hpp"
 #include <functional>
 #include <map>
-#include <windows.h>
+
 
 class HotkeyManager {
 public:

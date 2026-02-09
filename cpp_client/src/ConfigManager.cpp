@@ -1,10 +1,8 @@
-#include "../include/ConfigManager.hpp"
-#include <filesystem>
+#include "ConfigManager.hpp"
+#include "Common.hpp"
 #include <fstream>
+#include <nlohmann/json.hpp>
 #include <random>
-#include <spdlog/spdlog.h>
-#include <sstream>
-#include <windows.h>
 
 // Helper to generate random ID if needed
 std::string GenerateDeviceID() {
@@ -63,6 +61,7 @@ bool ConfigManager::Load(const std::string &path) {
     m_config.device_id = GetJsonString(j, "device_id", GenerateDeviceID());
     m_config.room_id = GetJsonString(j, "room_id", "");
     m_config.room_key = GetJsonString(j, "room_key", "");
+    m_config.push_hotkey = GetJsonString(j, "push_hotkey", "Alt+V");
 
     // Boolean and number types usually deduce correctly
     m_config.auto_copy_image = j.value("auto_copy_image", true);
@@ -86,6 +85,7 @@ bool ConfigManager::Save(const std::string &path) {
     j["device_id"] = m_config.device_id;
     j["room_id"] = m_config.room_id;
     j["room_key"] = m_config.room_key;
+    j["push_hotkey"] = m_config.push_hotkey;
     j["auto_copy_image"] = m_config.auto_copy_image;
     j["auto_copy_file"] = m_config.auto_copy_file;
     j["auto_start"] = m_config.auto_start;

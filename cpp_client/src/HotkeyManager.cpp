@@ -1,5 +1,6 @@
 #include "HotkeyManager.hpp"
-#include <spdlog/spdlog.h>
+#include "Common.hpp"
+
 
 HotkeyManager &HotkeyManager::Instance() {
   static HotkeyManager instance;

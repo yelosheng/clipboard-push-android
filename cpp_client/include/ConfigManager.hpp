@@ -3,13 +3,13 @@
 #include <string>
 #include <vector>
 
-
 struct AppConfig {
   std::string server_url = "http://localhost:5000";
   std::string download_path;
   std::string device_id;
   std::string room_id;
   std::string room_key;
+  std::string push_hotkey = "Alt+V";
   bool auto_copy_image = true;
   bool auto_copy_file = true;
   bool auto_start = false;

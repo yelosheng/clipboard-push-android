@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings</title>
+    <style>
+        :root {
+            --bg-color: #f3f3f3;
+            --text-color: #000000;
+            --input-bg: #ffffff;
+            --input-border: #d9d9d9;
+            --input-border-hover: #b3b3b3;
+            --input-border-focus: #0067c0;
+            --btn-bg: #ffffff;
+            --btn-border: #d0d0d0;
+            --btn-hover: #e0e0e0;
+            --primary: #0067c0;
+            /* Windows Blue */
+        }
+
+        body {
+            font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            font-size: 14px;
+            user-select: none;
+            cursor: default;
+        }
+
+        .window {
+            max-width: 500px;
+            margin: 0 auto;
+            /* Border for preview purposes */
+            border: 1px solid #ccc;
+            background: #f9f9f9;
+            padding-bottom: 20px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .title-bar {
+            padding: 10px 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #fff;
+            border-bottom: 1px solid #eee;
+            margin-bottom: 20px;
+        }
+
+        .title-icon {
+            width: 16px;
+            height: 16px;
+            background: #ddd;
+            /* Placeholder for icon */
+            border-radius: 2px;
+        }
+
+        .form-container {
+            padding: 0 25px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 120px 1fr;
+            align-items: center;
+        }
+
+        label {
+            color: #333;
+        }
+
+        input[type="text"] {
+            padding: 5px 8px;
+            border: 1px solid var(--input-border);
+            border-radius: 2px;
+            font-family: inherit;
+            font-size: 14px;
+            background: var(--input-bg);
+            outline: none;
+        }
+
+        input[type="text"]:hover {
+            border-color: var(--input-border-hover);
+        }
+
+        input[type="text"]:focus {
+            border-color: var(--input-border-focus);
+            border-width: 2px;
+            padding: 4px 7px;
+        }
+
+        .checkbox-group {
+            margin-top: 10px;
+            margin-left: 120px;
+            /* Align with input start */
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+
+        input[type="checkbox"] {
+            accent-color: var(--primary);
+            width: 16px;
+            height: 16px;
+            margin: 0;
+        }
+
+        .status-row {
+            margin-top: 10px;
+            display: grid;
+            grid-template-columns: 120px 1fr;
+            align-items: center;
+        }
+
+        .button-bar {
+            margin-top: 30px;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        button {
+            width: 100px;
+            padding: 6px 0;
+            background: var(--btn-bg);
+            border: 1px solid var(--btn-border);
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: var(--btn-hover);
+        }
+
+        button.primary {
+            border-color: var(--primary);
+            color: var(--primary);
+            /* Sometimes windows uses outline, or solid fill. Screenshot looks simplified. */
+            /* Let's try to match screenshot: looks like white bg with standard border */
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="window">
+        <div class="title-bar">
+            <div class="title-icon" style="background:linear-gradient(135deg, #ddd, #999)"></div>
+            <span>Settings</span>
+            <!-- Close button simulation -->
+            <span style="margin-left:auto; font-size:16px; color:#666">✕</span>
+        </div>
+
+        <div class="form-container">
+
+            <div class="form-row">
+                <label>Server URL:</label>
+                <input type="text" value="http://192.168.2.63:9661">
+            </div>
+
+            <div class="form-row">
+                <label>Download Path:</label>
+                <input type="text" value="Z:/ReceivedFiles">
+            </div>
+
+            <div class="form-row">
+                <label>Push Hotkey:</label>
+                <input type="text" value="F6">
+            </div>
+
+            <div class="checkbox-group">
+                <div class="checkbox-row">
+                    <input type="checkbox" checked id="chk1">
+                    <label for="chk1">Auto Copy Received Images</label>
+                </div>
+                <div class="checkbox-row">
+                    <input type="checkbox" checked id="chk2">
+                    <label for="chk2">Auto Copy Received Files</label>
+                </div>
+                <div class="checkbox-row">
+                    <input type="checkbox" checked id="chk3">
+                    <label for="chk3">Start on Boot (Run at login)</label>
+                </div>
+            </div>
+
+            <div class="status-row">
+                <label>Status:</label>
+                <span>Connected</span>
+            </div>
+
+            <div class="button-bar">
+                <button class="primary">Save</button>
+                <button>Cancel</button>
+            </div>
+
+        </div>
+    </div>
+
+</body>
+
+</html>
