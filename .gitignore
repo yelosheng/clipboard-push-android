@@ -50,3 +50,20 @@ Thumbs.db
 
 # Claude
 .claude/
+
+# C++ / Client
+cpp_client/build/
+cpp_client/build_win32/
+cpp_client/vcpkg_installed/
+*.exe
+*.dll
+*.lib
+*.pdb
+*.ilk
+*.obj
+*.sln
+*.vcxproj
+*.vcxproj.user
+CMakeUserPresets.json
+compile_commands.json
+cpp_client/logs/

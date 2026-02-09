@@ -1,0 +1,13 @@
+{
+    "name": "clipboard-man-cpp",
+    "version-string": "0.1.0",
+    "dependencies": [
+        "cpr",
+        "nlohmann-json",
+        "spdlog",
+        "websocketpp",
+        "rapidjson",
+        "asio",
+        "openssl"
+    ]
+}

@@ -1,0 +1,86 @@
+#include "ConfigManager.hpp"
+#include <filesystem>
+#include <fstream>
+#include <random>
+#include <spdlog/spdlog.h>
+#include <sstream>
+#include <windows.h>
+
+// Helper to generate random ID if needed
+std::string GenerateDeviceID() {
+  static const char alphanum[] = "0123456789abcdef";
+  std::string tmp_s;
+  tmp_s.reserve(8);
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_int_distribution<> dis(0, 15);
+
+  for (int i = 0; i < 8; ++i) {
+    tmp_s += alphanum[dis(gen)];
+  }
+
+  char user[256];
+  DWORD len = 256;
+  if (!GetUserNameA(user, &len))
+    strcpy(user, "User");
+
+  return "pc_" + std::string(user) + "_" + tmp_s;
+}
+
+ConfigManager &ConfigManager::Instance() {
+  static ConfigManager instance;
+  return instance;
+}
+
+bool ConfigManager::Load(const std::string &path) {
+  try {
+    if (!std::filesystem::exists(path)) {
+      // Defaults
+      m_config.device_id = GenerateDeviceID();
+      return Save(path);
+    }
+
+    std::ifstream f(path);
+    nlohmann::json j;
+    f >> j;
+
+    m_config.server_url = j.value("server_url", "http://localhost:5000");
+    m_config.download_path = j.value("download_path", "Downloads");
+    m_config.device_id = j.value("device_id", GenerateDeviceID());
+    m_config.room_id = j.value("room_id", "");
+    m_config.room_key = j.value("room_key", "");
+    m_config.auto_copy_image = j.value("auto_copy_image", true);
+    m_config.auto_copy_file = j.value("auto_copy_file", true);
+    m_config.auto_start = j.value("auto_start", false);
+    m_config.hotkey_mod = j.value("hotkey_mod", 0);
+    m_config.hotkey_key = j.value("hotkey_key", 0);
+
+    return true;
+  } catch (const std::exception &e) {
+    spdlog::error("Config load failed: {}", e.what());
+    return false;
+  }
+}
+
+bool ConfigManager::Save(const std::string &path) {
+  try {
+    nlohmann::json j;
+    j["server_url"] = m_config.server_url;
+    j["download_path"] = m_config.download_path;
+    j["device_id"] = m_config.device_id;
+    j["room_id"] = m_config.room_id;
+    j["room_key"] = m_config.room_key;
+    j["auto_copy_image"] = m_config.auto_copy_image;
+    j["auto_copy_file"] = m_config.auto_copy_file;
+    j["auto_start"] = m_config.auto_start;
+    j["hotkey_mod"] = m_config.hotkey_mod;
+    j["hotkey_key"] = m_config.hotkey_key;
+
+    std::ofstream f(path);
+    f << j.dump(4);
+    return true;
+  } catch (const std::exception &e) {
+    spdlog::error("Config save failed: {}", e.what());
+    return false;
+  }
+}
