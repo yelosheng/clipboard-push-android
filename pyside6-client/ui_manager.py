@@ -30,7 +30,8 @@ class SettingsWindow(QMainWindow):
     save_clicked = Signal(dict)
     reconnect_clicked = Signal()
     browse_clicked = Signal()
-
+    push_clicked = Signal()
+    
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Clipboard Man - Settings")
@@ -88,12 +89,31 @@ class SettingsWindow(QMainWindow):
         self.status_label.setStyleSheet("color: #666;")
         left_layout.addWidget(self.status_label)
 
-        # Buttons
-        btn_layout = QHBoxLayout()
+        left_layout.addStretch()
+
+        # Right side: QR Code
+        right_layout = QVBoxLayout()
+        right_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+        
+        right_layout.addWidget(QLabel("Scan to Pair Mobile"))
+        self.qr_label = QRCodeLabel()
+        right_layout.addWidget(self.qr_label)
+        
+        right_layout.addSpacing(20)
+
+        # Buttons on the right
+        btn_layout = QVBoxLayout()
+        btn_layout.setSpacing(10)
+
         self.save_btn = QPushButton("Save Settings")
         self.save_btn.setFixedHeight(35)
         self.save_btn.setStyleSheet("background-color: #0078d4; color: white; border: none; font-weight: bold;")
         self.save_btn.clicked.connect(self.on_save)
+        
+        self.push_btn = QPushButton("Push Manual")
+        self.push_btn.setFixedHeight(35)
+        self.push_btn.setStyleSheet("background-color: #28a745; color: white; border: none; font-weight: bold;")
+        self.push_btn.clicked.connect(self.push_clicked.emit)
 
         self.reconnect_btn = QPushButton("Reconnect")
         self.reconnect_btn.setFixedHeight(35)
@@ -104,18 +124,11 @@ class SettingsWindow(QMainWindow):
         self.cancel_btn.clicked.connect(self.hide)
         
         btn_layout.addWidget(self.save_btn)
+        btn_layout.addWidget(self.push_btn)
         btn_layout.addWidget(self.reconnect_btn)
         btn_layout.addWidget(self.cancel_btn)
-        left_layout.addLayout(btn_layout)
-
-        # Right side: QR Code
-        right_layout = QVBoxLayout()
-        right_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
         
-        right_layout.addWidget(QLabel("Scan to Pair Mobile"))
-        self.qr_label = QRCodeLabel()
-        right_layout.addWidget(self.qr_label)
-        
+        right_layout.addLayout(btn_layout)
         right_layout.addStretch()
 
         main_layout.addLayout(left_layout, 2)

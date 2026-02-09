@@ -103,14 +103,18 @@ class ClipboardApp:
         self.tray.setIcon(self.icon)
         
         menu = QMenu()
+        push_action = QAction("Push Clipboard", self.app)
+        push_action.triggered.connect(self.on_hotkey_triggered)
+        
         show_action = QAction("Settings", self.app)
         show_action.triggered.connect(self.show_settings)
         
         quit_action = QAction("Quit", self.app)
         quit_action.triggered.connect(self.quit_app)
         
-        menu.addAction(show_action)
+        menu.addAction(push_action)
         menu.addSeparator()
+        menu.addAction(show_action)
         menu.addAction(quit_action)
         
         self.tray.setContextMenu(menu)
@@ -125,6 +129,7 @@ class ClipboardApp:
         self.ui.save_clicked.connect(self.on_settings_saved)
         self.ui.reconnect_clicked.connect(self.on_reconnect_clicked)
         self.ui.browse_clicked.connect(self.on_browse_clicked)
+        self.ui.push_clicked.connect(self.on_hotkey_triggered)
 
     def setup_network_worker(self):
         self.net_worker.connected.connect(lambda: self.ui.set_status("Connected", "green"))
