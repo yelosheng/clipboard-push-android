@@ -7,5 +7,5 @@
     "push_hotkey": "Ctrl+F6",
     "auto_copy_image": true,
     "auto_copy_file": true,
-    "auto_start": false
+    "auto_start": true
 }

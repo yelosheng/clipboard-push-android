@@ -4,7 +4,7 @@ from io import BytesIO
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QLabel, QLineEdit, QCheckBox, 
                              QPushButton, QSystemTrayIcon, QMenu, QFrame)
-from PySide6.QtGui import QIcon, QPixmap, QImage, QFont
+from PySide6.QtGui import QIcon, QPixmap, QImage, QFont, QKeyEvent
 from PySide6.QtCore import Qt, Signal
 
 class QRCodeLabel(QLabel):
@@ -25,6 +25,45 @@ class QRCodeLabel(QLabel):
         image = QImage.fromData(buffer.getvalue())
         pixmap = QPixmap.fromImage(image)
         self.setPixmap(pixmap.scaled(self.size(), Qt.AspectRatioMode.KeepAspectRatio))
+
+class HotkeyRecorderEdit(QLineEdit):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setPlaceholderText("Press keys to set hotkey...")
+        self.setReadOnly(True)
+        self.setStyleSheet("background-color: #f8f9fa; border: 1px solid #ced4da; padding: 5px;")
+        self.current_keys = set()
+
+    def keyPressEvent(self, event: QKeyEvent):
+        key = event.key()
+        if key == Qt.Key_Backspace or key == Qt.Key_Delete:
+            self.clear()
+            return
+
+        modifiers = event.modifiers()
+        parts = []
+        if modifiers & Qt.ControlModifier: parts.append("Ctrl")
+        if modifiers & Qt.AltModifier: parts.append("Alt")
+        if modifiers & Qt.ShiftModifier: parts.append("Shift")
+        if modifiers & Qt.MetaModifier: parts.append("Win")
+
+        # Handle the main key
+        main_key = ""
+        if Qt.Key_F1 <= key <= Qt.Key_F12:
+            main_key = f"F{key - Qt.Key_F1 + 1}"
+        elif Qt.Key_A <= key <= Qt.Key_Z:
+            main_key = chr(key)
+        elif key == Qt.Key_Space:
+            main_key = "Space"
+        
+        if main_key:
+            if main_key not in parts:
+                parts.append(main_key)
+            self.setText("+".join(parts))
+        else:
+            # If only modifiers are pressed, show them partially
+            if parts:
+                self.setText("+".join(parts) + "+...")
 
 class SettingsWindow(QMainWindow):
     save_clicked = Signal(dict)
@@ -69,9 +108,8 @@ class SettingsWindow(QMainWindow):
         left_layout.addLayout(path_layout)
 
         # Push Hotkey
-        left_layout.addWidget(QLabel("Push Hotkey:"))
-        self.hotkey_input = QLineEdit()
-        self.hotkey_input.setPlaceholderText("Alt+V")
+        left_layout.addWidget(QLabel("Push Hotkey (Click and press keys):"))
+        self.hotkey_input = HotkeyRecorderEdit()
         left_layout.addWidget(self.hotkey_input)
 
         # Checkboxes

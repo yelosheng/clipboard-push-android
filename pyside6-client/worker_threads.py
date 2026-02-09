@@ -82,41 +82,61 @@ class HotkeyWorker(QThread):
 
     def __init__(self, hotkey_str):
         super().__init__()
-        self.hotkey_str = hotkey_str # e.g. "<alt>+v"
+        self.hotkey_str = hotkey_str.lower()
         self.listener = None
+        self.pressed_keys = set()
+        self.target_combination = self.parse_combination(self.hotkey_str)
+        self.running = True
 
-    def run(self):
-        # Translate from user format "Alt+V" to pynput format "<alt>+v"
-        pynput_key = self.translate_hotkey(self.hotkey_str)
-        if not pynput_key:
-            return
-
-        with keyboard.GlobalHotKeys({pynput_key: self.on_activate}) as self.listener:
-            self.listener.join()
-
-    def on_activate(self):
-        logger.info("Hotkey triggered!")
-        self.triggered.emit()
-
-    def translate_hotkey(self, hs):
-        if not hs: return None
-        parts = hs.lower().split('+')
-        translated = []
+    def parse_combination(self, hs):
+        parts = hs.split('+')
+        target = set()
         for p in parts:
             p = p.strip()
-            # Modifiers
-            if p == 'alt': translated.append('<alt>')
-            elif p in ['ctrl', 'control']: translated.append('<ctrl>')
-            elif p == 'shift': translated.append('<shift>')
-            elif p in ['win', 'cmd', 'command']: translated.append('<cmd>')
-            # Function keys: handle f1-f12
+            if p == 'ctrl': target.add(keyboard.Key.ctrl_l)
+            elif p == 'alt': target.add(keyboard.Key.alt_l)
+            elif p == 'shift': target.add(keyboard.Key.shift_l)
+            elif p == 'win': target.add(keyboard.Key.cmd)
             elif p.startswith('f') and p[1:].isdigit():
-                translated.append(f'<{p}>')
-            else:
-                translated.append(p)
-        return '+'.join(translated)
+                f_key = getattr(keyboard.Key, p, None)
+                if f_key: target.add(f_key)
+            elif len(p) == 1:
+                target.add(keyboard.KeyCode.from_char(p))
+        return target
+
+    def run(self):
+        logger.info(f"Starting Hotkey listener for: {self.hotkey_str}")
+        try:
+            with keyboard.Listener(on_press=self.on_press, on_release=self.on_release) as self.listener:
+                self.listener.join()
+        except Exception as e:
+            logger.error(f"Hotkey Listener error: {e}")
+
+    def on_press(self, key):
+        # Normalize key for comparison
+        norm_key = key
+        # Handle simple char keys
+        if hasattr(key, 'char') and key.char:
+            norm_key = keyboard.KeyCode.from_char(key.char.lower())
+        
+        self.pressed_keys.add(norm_key)
+        
+        # Check if target combination is met
+        if all(k in self.pressed_keys for k in self.target_combination):
+            # Only trigger if the target combination is exactly what's pressed (or at least all target keys are down)
+            # To avoid stuck keys, we check if at least one non-modifier key is in the set
+            self.triggered.emit()
+
+    def on_release(self, key):
+        norm_key = key
+        if hasattr(key, 'char') and key.char:
+            norm_key = keyboard.KeyCode.from_char(key.char.lower())
+        
+        if norm_key in self.pressed_keys:
+            self.pressed_keys.remove(norm_key)
 
     def stop(self):
+        self.running = False
         if self.listener:
             self.listener.stop()
         self.wait()
