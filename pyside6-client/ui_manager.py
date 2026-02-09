@@ -119,17 +119,18 @@ class MainWindow(QMainWindow):
         # Buttons
         btn_layout = QHBoxLayout()
         
-        self.settings_btn = QPushButton("Settings")
-        self.settings_btn.setFixedHeight(40)
-        self.settings_btn.clicked.connect(self.settings_clicked.emit)
-        
         self.push_btn = QPushButton("Push")
         self.push_btn.setFixedHeight(40)
-        # self.push_btn.setStyleSheet("background-color: #28a745; color: white; font-weight: bold;")
         self.push_btn.clicked.connect(self.on_push)
         
-        btn_layout.addWidget(self.settings_btn)
+        self.settings_btn = QPushButton("⚙")
+        self.settings_btn.setFixedSize(40, 40)
+        self.settings_btn.setToolTip("Settings")
+        self.settings_btn.setFont(QFont("Segoe UI", 12)) 
+        self.settings_btn.clicked.connect(self.settings_clicked.emit)
+        
         btn_layout.addWidget(self.push_btn, 1) # Push button takes more space
+        btn_layout.addWidget(self.settings_btn)
         
         layout.addLayout(btn_layout)
         
