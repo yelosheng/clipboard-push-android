@@ -150,26 +150,89 @@ bool Clipboard::SetFiles(const std::vector<std::string>& files) {
 bool Clipboard::SetImage(const std::vector<uint8_t>& pngData) {
     if (pngData.empty()) return false;
     
-    // Load PNG to Bitmap
     IStream* stream = SHCreateMemStream(pngData.data(), (UINT)pngData.size());
     if (!stream) return false;
     
     Gdiplus::Bitmap bmp(stream);
-    HBITMAP hBitmap = NULL;
-    Gdiplus::Color bg(255, 255, 255); // Background color for transparency flattening? Or just use default
-    bmp.GetHBITMAP(bg, &hBitmap);
     stream->Release();
-    
-    if (!hBitmap) return false;
 
-    if (!OpenClipboard(NULL)) {
-        DeleteObject(hBitmap);
-        return false;
+    CLSID bmpClsid;
+    if (GetEncoderClsid(L"image/bmp", &bmpClsid) < 0) return false;
+
+    IStream* memStream = NULL;
+    CreateStreamOnHGlobal(NULL, TRUE, &memStream);
+    if (!memStream) return false;
+
+    bmp.Save(memStream, &bmpClsid, NULL);
+
+    HGLOBAL hGlobal = NULL;
+    GetHGlobalFromStream(memStream, &hGlobal);
+    
+    void* pBmpData = GlobalLock(hGlobal);
+    size_t bmpSize = GlobalSize(hGlobal);
+
+    // Skip BITMAPFILEHEADER (14 bytes) to get DIB
+    if (bmpSize > 14) {
+        size_t dibSize = bmpSize - 14;
+        HGLOBAL hDib = GlobalAlloc(GMEM_MOVEABLE, dibSize);
+        if (hDib) {
+            void* pDib = GlobalLock(hDib);
+            memcpy(pDib, (char*)pBmpData + 14, dibSize);
+            GlobalUnlock(hDib);
+
+            if (OpenClipboard(NULL)) {
+                EmptyClipboard();
+                SetClipboardData(CF_DIB, hDib);
+                CloseClipboard();
+            }
+        }
     }
-    EmptyClipboard();
-    SetClipboardData(CF_BITMAP, hBitmap); // Windows owns it now
-    CloseClipboard();
+
+    GlobalUnlock(hGlobal);
+    memStream->Release();
     return true;
+}
+
+bool Clipboard::SetImageFromFile(const std::string& filePath) {
+    std::wstring wPath = Utils::ToWide(filePath);
+    Gdiplus::Bitmap bmp(wPath.c_str());
+    
+    CLSID bmpClsid;
+    if (GetEncoderClsid(L"image/bmp", &bmpClsid) < 0) return false;
+
+    IStream* memStream = NULL;
+    CreateStreamOnHGlobal(NULL, TRUE, &memStream);
+    if (!memStream) return false;
+
+    bmp.Save(memStream, &bmpClsid, NULL);
+
+    HGLOBAL hGlobal = NULL;
+    GetHGlobalFromStream(memStream, &hGlobal);
+    
+    void* pBmpData = GlobalLock(hGlobal);
+    size_t bmpSize = GlobalSize(hGlobal);
+
+    bool success = false;
+    if (bmpSize > 14) {
+        size_t dibSize = bmpSize - 14;
+        HGLOBAL hDib = GlobalAlloc(GMEM_MOVEABLE, dibSize);
+        if (hDib) {
+            void* pDib = GlobalLock(hDib);
+            memcpy(pDib, (char*)pBmpData + 14, dibSize);
+            GlobalUnlock(hDib);
+
+            if (OpenClipboard(NULL)) {
+                EmptyClipboard();
+                SetClipboardData(CF_DIB, hDib);
+                CloseClipboard();
+                success = true;
+            }
+        }
+    }
+
+    GlobalUnlock(hGlobal);
+    memStream->Release();
+    return success;
 }
 
 }

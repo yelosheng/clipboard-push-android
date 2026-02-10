@@ -83,7 +83,7 @@ void OnRemoteFileReceived(const nlohmann::json& data) {
         // Auto copy to clipboard
         g_isProcessingRemoteSync = true;
         if (type == "image" && config.auto_copy_image) {
-            Platform::Clipboard::SetImage(*decData);
+            Platform::Clipboard::SetImageFromFile(filePath.string());
         } else if (config.auto_copy_file) {
             Platform::Clipboard::SetFiles({filePath.string()});
         }
@@ -125,18 +125,85 @@ void PushText(const std::string& text) {
         
         nlohmann::json j;
         j["room"] = config.room_id;
+        j["event"] = "clipboard_sync";
         j["client_id"] = config.device_id;
-        j["content"] = b64;
-        j["encrypted"] = true;
-        j["timestamp"] = GetCurrentTimestamp();
+        
+        nlohmann::json data;
+        data["content"] = b64;
+        data["encrypted"] = true;
+        data["timestamp"] = GetCurrentTimestamp();
+        data["source"] = config.device_id;
+        
+        j["data"] = data;
 
         auto res = ClipboardPush::Network::HttpClient::Post(url, j.dump());
         if (res.status == 200) {
             LOG_INFO("Push success");
         } else {
-            LOG_ERROR("Push failed: %d", res.status);
+            LOG_ERROR("Push failed: %d, Response: %s", res.status, res.body.c_str());
         }
     }
+}
+
+void PushFileData(const std::vector<uint8_t>& data, const std::string& filename, const std::string& fileType) {
+    auto& config = ClipboardPush::Config::Instance().Data();
+    if (config.room_key.empty()) return;
+
+    auto key = ClipboardPush::Crypto::DecodeKey(config.room_key);
+    auto enc = ClipboardPush::Crypto::Encrypt(key, data);
+    if (!enc) return;
+
+    // 1. Request upload auth
+    std::string authUrl = config.relay_server_url + "/api/file/upload_auth";
+    nlohmann::json authPayload;
+    authPayload["filename"] = filename;
+    authPayload["content_length"] = enc->size();
+    
+    auto authRes = ClipboardPush::Network::HttpClient::Post(authUrl, authPayload.dump());
+    if (authRes.status != 200) {
+        LOG_ERROR("Upload auth failed: %d", authRes.status);
+        return;
+    }
+
+    try {
+        auto authJ = nlohmann::json::parse(authRes.body);
+        std::string uploadUrl = authJ.value("upload_url", "");
+        std::string downloadUrl = authJ.value("download_url", "");
+
+        if (uploadUrl.empty()) return;
+
+        // 2. Upload file
+        LOG_INFO("Uploading file...");
+        auto putRes = ClipboardPush::Network::HttpClient::Put(uploadUrl, *enc);
+        if (putRes.status != 200) {
+            LOG_ERROR("File upload failed: %d", putRes.status);
+            return;
+        }
+
+        // 3. Relay notification
+        std::string relayUrl = config.relay_server_url + "/api/relay";
+        nlohmann::json relayPayload;
+        relayPayload["room"] = config.room_id;
+        relayPayload["event"] = "file_sync";
+        relayPayload["client_id"] = config.device_id;
+        
+        nlohmann::json d;
+        d["download_url"] = downloadUrl;
+        d["filename"] = filename;
+        d["type"] = fileType;
+        d["timestamp"] = GetCurrentTimestamp();
+        relayPayload["data"] = d;
+
+        ClipboardPush::Network::HttpClient::Post(relayUrl, relayPayload.dump());
+        LOG_INFO("File sync pushed successfully");
+    } catch (...) {
+        LOG_ERROR("Failed to process upload response");
+    }
+}
+
+void PushImage(const std::vector<uint8_t>& pngData) {
+    std::string filename = "img_" + std::to_string(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now())) + ".png";
+    PushFileData(pngData, filename, "image");
 }
 
 } // namespace ClipboardPush
@@ -163,6 +230,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             break;
         case IDM_TRAY_SETTINGS:
             ClipboardPush::UI::SettingsWindow::Instance().Show();
+            break;
+        case IDM_TRAY_PUSH:
+            {
+                LOG_INFO("Manual Tray Push Triggered");
+                auto cb = ClipboardPush::Platform::Clipboard::Get();
+                if (cb.type == ClipboardPush::Platform::ClipboardType::Text && !cb.text.empty()) {
+                    ClipboardPush::PushText(cb.text);
+                    ClipboardPush::UI::TrayIcon::Instance().ShowMessage(L"Clipboard Pushed", L"Text content sent successfully");
+                } else if (cb.type == ClipboardPush::Platform::ClipboardType::Image) {
+                    ClipboardPush::PushImage(cb.image_data);
+                    ClipboardPush::UI::TrayIcon::Instance().ShowMessage(L"Clipboard Pushed", L"Image content sent successfully");
+                }
+            }
             break;
         case IDC_SETTINGS_RECONNECT:
             {
@@ -265,12 +345,7 @@ int main() {
     // Setup Clipboard Monitor
     ClipboardPush::Platform::ClipboardMonitor::Instance().SetCallback([]() {
         if (g_isProcessingRemoteSync) return;
-        
-        LOG_INFO("Local clipboard changed, pushing...");
-        auto cb = ClipboardPush::Platform::Clipboard::Get();
-        if (cb.type == ClipboardPush::Platform::ClipboardType::Text && !cb.text.empty()) {
-            ClipboardPush::PushText(cb.text);
-        }
+        LOG_DEBUG("Local clipboard changed (automatic sync is disabled)");
     });
     ClipboardPush::Platform::ClipboardMonitor::Instance().Start(hWnd);
 
@@ -280,7 +355,10 @@ int main() {
         auto cb = ClipboardPush::Platform::Clipboard::Get();
         if (cb.type == ClipboardPush::Platform::ClipboardType::Text && !cb.text.empty()) {
             ClipboardPush::PushText(cb.text);
-            ClipboardPush::UI::TrayIcon::Instance().ShowMessage(L"Clipboard Pushed", L"Content sent via hotkey");
+            ClipboardPush::UI::TrayIcon::Instance().ShowMessage(L"Clipboard Pushed", L"Text content sent via hotkey");
+        } else if (cb.type == ClipboardPush::Platform::ClipboardType::Image) {
+            ClipboardPush::PushImage(cb.image_data);
+            ClipboardPush::UI::TrayIcon::Instance().ShowMessage(L"Clipboard Pushed", L"Image content sent via hotkey");
         }
     });
     ClipboardPush::Platform::Hotkey::Instance().Register(hWnd, data.push_hotkey);

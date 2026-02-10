@@ -22,6 +22,7 @@ public:
     static bool SetText(const std::string& text);
     static bool SetFiles(const std::vector<std::string>& files);
     static bool SetImage(const std::vector<uint8_t>& pngData);
+    static bool SetImageFromFile(const std::string& filePath);
 };
 
 }

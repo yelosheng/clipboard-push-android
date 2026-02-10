@@ -50,7 +50,13 @@ UrlComponents ParseUrl(const std::string& url) {
     UrlComponents res;
     res.host = std::wstring(urlComp.lpszHostName, urlComp.dwHostNameLength);
     res.port = urlComp.nPort;
+    
+    // Combine path and query string (ExtraInfo contains ?params)
     res.path = std::wstring(urlComp.lpszUrlPath, urlComp.dwUrlPathLength);
+    if (urlComp.dwExtraInfoLength > 0) {
+        res.path += std::wstring(urlComp.lpszExtraInfo, urlComp.dwExtraInfoLength);
+    }
+
     res.secure = (urlComp.nScheme == INTERNET_SCHEME_HTTPS || isWss);
     return res;
 }
@@ -241,8 +247,33 @@ std::optional<std::vector<uint8_t>> HttpClient::Get(const std::string& url) {
     return responseData;
 }
 
-// Implement Put stub to avoid link errors
-HttpResponse HttpClient::Put(const std::string& url, const std::vector<uint8_t>& data) { return {0,""}; }
+HttpResponse HttpClient::Put(const std::string& url, const std::vector<uint8_t>& data) {
+    auto comp = ParseUrl(url);
+    if (comp.host.empty()) return {0, ""};
+
+    WinHttpHandle hSession = WinHttpOpen(L"ClipboardPush/3.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!hSession.isValid()) return {0, ""};
+
+    WinHttpHandle hConnect = WinHttpConnect(hSession, comp.host.c_str(), comp.port, 0);
+    if (!hConnect.isValid()) return {0, ""};
+
+    DWORD flags = comp.secure ? WINHTTP_FLAG_SECURE : 0;
+    // Use NULL for accept types to avoid sending "Accept: */*" which can break some signatures
+    WinHttpHandle hRequest = WinHttpOpenRequest(hConnect, L"PUT", comp.path.c_str(), NULL, WINHTTP_NO_REFERER, NULL, flags);
+    if (!hRequest.isValid()) return {0, ""};
+
+    if (!WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, (LPVOID)data.data(), (DWORD)data.size(), (DWORD)data.size(), 0)) {
+        return {0, ""};
+    }
+
+    if (!WinHttpReceiveResponse(hRequest, NULL)) return {0, ""};
+
+    DWORD statusCode = 0;
+    DWORD size = sizeof(statusCode);
+    WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &statusCode, &size, WINHTTP_NO_HEADER_INDEX);
+
+    return {(int)statusCode, ""};
+}
 
 }
 }
