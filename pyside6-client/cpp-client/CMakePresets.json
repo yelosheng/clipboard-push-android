@@ -1,0 +1,54 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 21,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "x64-windows-base",
+            "hidden": true,
+            "generator": "Ninja",
+            "architecture": {
+                "value": "x64",
+                "strategy": "external"
+            },
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": {
+                    "type": "FILEPATH",
+                    "value": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+                },
+                "VCPKG_TARGET_TRIPLET": "x64-windows"
+            }
+        },
+        {
+            "name": "x64-windows-debug",
+            "displayName": "x64 Windows Debug",
+            "inherits": "x64-windows-base",
+            "binaryDir": "${sourceDir}/build/x64-windows-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "x64-windows-release",
+            "displayName": "x64 Windows Release",
+            "inherits": "x64-windows-base",
+            "binaryDir": "${sourceDir}/build/x64-windows-release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "x64-windows-debug",
+            "configurePreset": "x64-windows-debug"
+        },
+        {
+            "name": "x64-windows-release",
+            "configurePreset": "x64-windows-release"
+        }
+    ]
+}
