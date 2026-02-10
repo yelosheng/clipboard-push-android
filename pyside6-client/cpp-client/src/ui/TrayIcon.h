@@ -27,6 +27,7 @@ signals:
     void settingsClicked();
     void quitClicked();
     void activated();
+    void messageClicked();
 
 private slots:
     void onActivated(QSystemTrayIcon::ActivationReason reason);

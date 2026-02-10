@@ -14,6 +14,8 @@ TrayIcon::TrayIcon(QObject* parent)
 
     connect(m_trayIcon, &QSystemTrayIcon::activated,
             this, &TrayIcon::onActivated);
+    connect(m_trayIcon, &QSystemTrayIcon::messageClicked,
+            this, &TrayIcon::messageClicked);
 }
 
 TrayIcon::~TrayIcon() {

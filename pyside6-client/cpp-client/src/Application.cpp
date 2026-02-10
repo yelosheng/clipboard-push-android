@@ -137,6 +137,8 @@ void Application::setupConnections() {
             this, &Application::showSettings);
     connect(m_trayIcon.get(), &TrayIcon::quitClicked,
             this, &Application::quit);
+    connect(m_trayIcon.get(), &TrayIcon::messageClicked,
+            m_mainWindow.get(), &MainWindow::show);
     connect(m_trayIcon.get(), &TrayIcon::activated,
             this, &Application::onTrayActivated);
 
