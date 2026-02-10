@@ -33,6 +33,12 @@ std::vector<uint8_t> FromBase64(const std::string& data) {
     return out;
 }
 
+std::string GenerateKeyBase64() {
+    std::vector<uint8_t> key(32);
+    BCryptGenRandom(NULL, key.data(), (ULONG)key.size(), BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+    return ToBase64(key);
+}
+
 std::vector<uint8_t> DecodeKey(const std::string& base64Key) {
     return FromBase64(base64Key);
 }

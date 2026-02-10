@@ -35,11 +35,11 @@ void SettingsWindow::LoadSettings() {
     CheckDlgButton(m_hWnd, IDC_SETTINGS_STARTUP, data.auto_start ? BST_CHECKED : BST_UNCHECKED);
     CheckDlgButton(m_hWnd, IDC_SETTINGS_MINIMIZED, data.start_minimized ? BST_CHECKED : BST_UNCHECKED);
 
-    // Update QR
+    // Update QR - using the requested JSON format
     nlohmann::json j;
-    j["server"] = data.relay_server_url;
-    j["room"] = data.room_id;
     j["key"] = data.room_key;
+    j["room"] = data.room_id;
+    j["server"] = data.relay_server_url;
     UpdateQR(j.dump());
 }
 
@@ -60,6 +60,9 @@ void SettingsWindow::SaveSettings() {
     
     Config::Instance().Save();
     LOG_INFO("Settings saved");
+
+    // Signal main logic to update
+    SendMessageW(GetWindow(m_hWnd, GW_OWNER), WM_COMMAND, IDC_SETTINGS_SAVE, 0);
 }
 
 void SettingsWindow::UpdateQR(const std::string& content) {
@@ -118,6 +121,10 @@ INT_PTR CALLBACK SettingsWindow::DialogProc(HWND hDlg, UINT message, WPARAM wPar
         case IDC_SETTINGS_SAVE:
             pThis->SaveSettings();
             ShowWindow(hDlg, SW_HIDE);
+            return (INT_PTR)TRUE;
+        case IDC_SETTINGS_RECONNECT:
+            LOG_INFO("Reconnect Button Clicked");
+            // Logic for reconnection will be implemented in Phase 6
             return (INT_PTR)TRUE;
         case IDC_SETTINGS_BROWSE: {
             BROWSEINFOW bi = { 0 };

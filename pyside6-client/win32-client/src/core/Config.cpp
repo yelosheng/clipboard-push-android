@@ -1,6 +1,7 @@
 #include "Config.h"
 #include "Utils.h"
 #include "Logger.h"
+#include "Crypto.h"
 #include <fstream>
 #include <filesystem>
 #include <shlobj.h>
@@ -69,6 +70,14 @@ bool Config::Load() {
         m_data.auto_start = j.value("auto_start", m_data.auto_start);
         m_data.start_minimized = j.value("start_minimized", m_data.start_minimized);
         
+        // Generate credentials if missing
+        if (m_data.room_id.empty() || m_data.room_key.empty()) {
+            LOG_INFO("Credentials missing, generating new room...");
+            if (m_data.room_id.empty()) m_data.room_id = "room_" + std::to_string(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+            if (m_data.room_key.empty()) m_data.room_key = Crypto::GenerateKeyBase64();
+            Save();
+        }
+
         if (m_data.device_id.empty()) InitializeDefaults();
         
         LOG_INFO("Config loaded from %s", path.c_str());

@@ -1,7 +1,10 @@
 #include "MainWindow.h"
 #include "Resource.h"
 #include "SettingsWindow.h"
+#include "core/Config.h"
+#include "core/Utils.h"
 #include "core/Logger.h"
+#include "core/SyncLogic.h"
 
 namespace ClipboardPush {
 namespace UI {
@@ -33,7 +36,17 @@ INT_PTR CALLBACK MainWindow::DialogProc(HWND hDlg, UINT message, WPARAM wParam, 
     case WM_COMMAND:
         switch (LOWORD(wParam)) {
         case IDC_MAIN_PUSH:
-            LOG_INFO("Push Button Clicked");
+            {
+                HWND hEdit = GetDlgItem(hDlg, IDC_MAIN_TEXT);
+                int len = GetWindowTextLengthW(hEdit);
+                if (len > 0) {
+                    std::wstring wText(len + 1, 0);
+                    GetWindowTextW(hEdit, &wText[0], len + 1);
+                    wText.resize(len);
+                    ClipboardPush::PushText(Utils::ToUtf8(wText));
+                    MainWindow::Instance().SetStatus(L"Pushed Successfully");
+                }
+            }
             return (INT_PTR)TRUE;
         case IDC_MAIN_SETTINGS:
             SettingsWindow::Instance().Show();

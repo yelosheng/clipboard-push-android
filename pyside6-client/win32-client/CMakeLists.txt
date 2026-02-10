@@ -28,8 +28,10 @@ set(SOURCES
     src/core/Config.cpp
     src/core/Crypto.cpp
     src/core/Network.cpp
+    src/core/SocketIOService.cpp
     src/platform/Platform.cpp
     src/platform/Clipboard.cpp
+    src/platform/ClipboardMonitor.cpp
     src/platform/Hotkey.cpp
     src/ui/TrayIcon.cpp
     src/ui/MainWindow.cpp
@@ -39,7 +41,7 @@ set(SOURCES
 # Resources
 set(RESOURCES src/ClipboardPush.rc)
 
-add_executable(ClipboardPushWin32 WIN32
+add_executable(ClipboardPushWin32
     ${SOURCES}
     ${RESOURCES}
 )

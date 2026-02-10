@@ -1,17 +1,76 @@
 #include <windows.h>
 #include "core/Logger.h"
 #include "core/Config.h"
+#include "core/Utils.h"
+#include "core/SyncLogic.h"
 #include "platform/Platform.h"
 #include "platform/Clipboard.h"
 #include "platform/Hotkey.h"
+#include "core/SocketIOService.h"
+#include "platform/ClipboardMonitor.h"
 #include "ui/TrayIcon.h"
 #include "ui/MainWindow.h"
 #include "ui/SettingsWindow.h"
 #include "ui/Resource.h"
 
+#include "core/Crypto.h"
+#include "core/Network.h"
+#include <chrono>
+#include <iomanip>
+#include <sstream>
+#include <thread>
+
 #define WM_TRAYICON (WM_USER + 1)
 
+// Global state for sync logic
+static bool g_isProcessingRemoteSync = false;
+
+namespace ClipboardPush {
+
+std::string GetCurrentTimestamp() {
+    auto now = std::chrono::system_clock::now();
+    auto in_time_t = std::chrono::system_clock::to_time_t(now);
+    std::tm tm_struct;
+    localtime_s(&tm_struct, &in_time_t);
+    std::stringstream ss;
+    ss << std::put_time(&tm_struct, "%H:%M:%S");
+    return ss.str();
+}
+
+void PushText(const std::string& text) {
+    auto& config = ClipboardPush::Config::Instance().Data();
+    if (config.room_key.empty()) return;
+
+    auto key = ClipboardPush::Crypto::DecodeKey(config.room_key);
+    std::vector<uint8_t> plain(text.begin(), text.end());
+    auto enc = ClipboardPush::Crypto::Encrypt(key, plain);
+    
+    if (enc) {
+        std::string b64 = ClipboardPush::Crypto::ToBase64(*enc);
+        std::string url = config.relay_server_url + "/api/relay";
+        
+        nlohmann::json j;
+        j["room"] = config.room_id;
+        j["client_id"] = config.device_id;
+        j["content"] = b64;
+        j["encrypted"] = true;
+        j["timestamp"] = GetCurrentTimestamp();
+
+        auto res = ClipboardPush::Network::HttpClient::Post(url, j.dump());
+        if (res.status == 200) {
+            LOG_INFO("Push success");
+        } else {
+            LOG_ERROR("Push failed: %d", res.status);
+        }
+    }
+}
+
+} // namespace ClipboardPush
+
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    // Handle Clipboard Monitoring
+    ClipboardPush::Platform::ClipboardMonitor::Instance().HandleMessage(message, wParam, lParam);
+
     switch (message) {
     case WM_TRAYICON:
         if (LOWORD(lParam) == WM_RBUTTONUP) {
@@ -21,15 +80,30 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
         break;
     case WM_COMMAND:
-        if (LOWORD(wParam) == IDM_TRAY_EXIT) {
+        switch (LOWORD(wParam)) {
+        case IDM_TRAY_EXIT:
             PostQuitMessage(0);
-        } else if (LOWORD(wParam) == IDM_TRAY_OPEN) {
+            break;
+        case IDM_TRAY_OPEN:
             ClipboardPush::UI::MainWindow::Instance().Show();
-        } else if (LOWORD(wParam) == IDM_TRAY_SETTINGS) {
+            break;
+        case IDM_TRAY_SETTINGS:
             ClipboardPush::UI::SettingsWindow::Instance().Show();
-        } else if (LOWORD(wParam) == IDM_TRAY_PUSH) {
-            LOG_INFO("Manual Push Triggered");
-            ClipboardPush::UI::TrayIcon::Instance().ShowMessage(L"Clipboard Push", L"Push logic is under development...");
+            break;
+        case IDC_SETTINGS_RECONNECT:
+            {
+                auto& d = ClipboardPush::Config::Instance().Data();
+                ClipboardPush::SocketIOService::Instance().Connect(d.relay_server_url, d.room_id, d.device_id);
+            }
+            break;
+        case IDC_SETTINGS_SAVE:
+            {
+                LOG_INFO("Settings saved signal received, updating components...");
+                auto& d = ClipboardPush::Config::Instance().Data();
+                ClipboardPush::Platform::Hotkey::Instance().Register(hWnd, d.push_hotkey);
+                ClipboardPush::SocketIOService::Instance().Connect(d.relay_server_url, d.room_id, d.device_id);
+            }
+            break;
         }
         break;
     case WM_HOTKEY:
@@ -44,7 +118,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     return 0;
 }
 
-int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
+int main() {
+    HINSTANCE hInstance = GetModuleHandle(NULL);
     ClipboardPush::Platform::Init();
     ClipboardPush::Config::Instance().Load();
     auto& data = ClipboardPush::Config::Instance().Data();
@@ -65,10 +140,71 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     ClipboardPush::UI::SettingsWindow::Instance().Create(hInstance);
     ClipboardPush::UI::TrayIcon::Instance().Init(hWnd, hInstance);
 
+    // Setup Socket.IO
+    auto& sio = ClipboardPush::SocketIOService::Instance();
+    sio.SetCallbacks(
+        [](const std::string& content, bool encrypted) {
+            if (content.empty()) return;
+            
+            g_isProcessingRemoteSync = true;
+            std::string finalText = content;
+
+            if (encrypted) {
+                auto& config = ClipboardPush::Config::Instance().Data();
+                auto key = ClipboardPush::Crypto::DecodeKey(config.room_key);
+                auto encData = ClipboardPush::Crypto::FromBase64(content);
+                auto dec = ClipboardPush::Crypto::Decrypt(key, encData);
+                if (dec) {
+                    finalText = std::string(dec->begin(), dec->end());
+                } else {
+                    LOG_ERROR("Failed to decrypt remote content");
+                    g_isProcessingRemoteSync = false;
+                    return;
+                }
+            }
+
+            ClipboardPush::Platform::Clipboard::SetText(finalText);
+            
+            std::wstring wMsg = L"Synced: " + ClipboardPush::Utils::ToWide(finalText.substr(0, 30));
+            if (finalText.length() > 30) wMsg += L"...";
+            ClipboardPush::UI::TrayIcon::Instance().ShowMessage(L"Clipboard Received", wMsg);
+            
+            // Brief delay to ensure WM_CLIPBOARDUPDATE is ignored
+            std::thread([]() {
+                std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                g_isProcessingRemoteSync = false;
+            }).detach();
+        },
+        [](const nlohmann::json& data) {
+            LOG_INFO("Received file sync (logic to be added)");
+        },
+        [](bool connected) {
+            std::wstring status = connected ? L"Connected" : L"Disconnected";
+            ClipboardPush::UI::MainWindow::Instance().SetStatus(status);
+        }
+    );
+    sio.Connect(data.relay_server_url, data.room_id, data.device_id);
+
+    // Setup Clipboard Monitor
+    ClipboardPush::Platform::ClipboardMonitor::Instance().SetCallback([]() {
+        if (g_isProcessingRemoteSync) return;
+        
+        LOG_INFO("Local clipboard changed, pushing...");
+        auto cb = ClipboardPush::Platform::Clipboard::Get();
+        if (cb.type == ClipboardPush::Platform::ClipboardType::Text && !cb.text.empty()) {
+            ClipboardPush::PushText(cb.text);
+        }
+    });
+    ClipboardPush::Platform::ClipboardMonitor::Instance().Start(hWnd);
+
     // Register Hotkey
     ClipboardPush::Platform::Hotkey::Instance().SetCallback([]() {
         LOG_INFO("Hotkey Triggered!");
-        ClipboardPush::UI::TrayIcon::Instance().ShowMessage(L"Hotkey Triggered", L"Scanning clipboard...");
+        auto cb = ClipboardPush::Platform::Clipboard::Get();
+        if (cb.type == ClipboardPush::Platform::ClipboardType::Text && !cb.text.empty()) {
+            ClipboardPush::PushText(cb.text);
+            ClipboardPush::UI::TrayIcon::Instance().ShowMessage(L"Clipboard Pushed", L"Content sent via hotkey");
+        }
     });
     ClipboardPush::Platform::Hotkey::Instance().Register(hWnd, data.push_hotkey);
 
@@ -86,6 +222,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
         DispatchMessage(&msg);
     }
 
+    ClipboardPush::Platform::ClipboardMonitor::Instance().Stop(hWnd);
     ClipboardPush::UI::TrayIcon::Instance().Remove();
     ClipboardPush::Platform::Shutdown();
     return 0;
