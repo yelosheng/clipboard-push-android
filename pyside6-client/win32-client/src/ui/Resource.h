@@ -1,0 +1,33 @@
+#pragma once
+
+#ifndef IDC_STATIC
+#define IDC_STATIC              -1
+#endif
+
+#define IDI_APP_ICON            101
+#define IDR_TRAY_MENU           102
+
+#define IDM_TRAY_OPEN           40001
+#define IDM_TRAY_SETTINGS       40002
+#define IDM_TRAY_PUSH           40003
+#define IDM_TRAY_EXIT           40004
+
+// Dialog IDs
+#define IDD_MAINWINDOW          201
+#define IDD_SETTINGSWINDOW      202
+
+// Control IDs
+#define IDC_MAIN_TEXT           1001
+#define IDC_MAIN_PUSH           1002
+#define IDC_MAIN_SETTINGS       1003
+#define IDC_MAIN_STATUS         1004
+
+#define IDC_SETTINGS_PATH       2001
+#define IDC_SETTINGS_BROWSE     2002
+#define IDC_SETTINGS_HOTKEY     2003
+#define IDC_SETTINGS_IMAGES     2004
+#define IDC_SETTINGS_FILES      2005
+#define IDC_SETTINGS_STARTUP    2006
+#define IDC_SETTINGS_MINIMIZED  2007
+#define IDC_SETTINGS_SAVE       2008
+#define IDC_SETTINGS_QR         2009

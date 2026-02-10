@@ -1,0 +1,57 @@
+#include "ui/Resource.h"
+#include <windows.h>
+#include <commctrl.h>
+
+// Icon
+IDI_APP_ICON ICON "resources/app_icon.ico"
+
+// Tray Menu
+IDR_TRAY_MENU MENU
+BEGIN
+    POPUP "Tray"
+    BEGIN
+        MENUITEM "Push Clipboard", IDM_TRAY_PUSH
+        MENUITEM SEPARATOR
+        MENUITEM "Open Main Window", IDM_TRAY_OPEN
+        MENUITEM "Settings", IDM_TRAY_SETTINGS
+        MENUITEM SEPARATOR
+        MENUITEM "Exit", IDM_TRAY_EXIT
+    END
+END
+
+// Main Window Dialog
+IDD_MAINWINDOW DIALOGEX 0, 0, 250, 150
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Clipboard Push v3.0"
+FONT 9, "Segoe UI", 400, 0, 0x1
+BEGIN
+    EDITTEXT        IDC_MAIN_TEXT, 7, 7, 236, 100, ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL
+    PUSHBUTTON      "Push Content", IDC_MAIN_PUSH, 7, 112, 80, 14
+    PUSHBUTTON      "Settings", IDC_MAIN_SETTINGS, 95, 112, 50, 14
+    LTEXT           "Status: Ready", IDC_MAIN_STATUS, 7, 134, 236, 8
+END
+
+// Settings Window Dialog
+IDD_SETTINGSWINDOW DIALOGEX 0, 0, 320, 220
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Settings"
+FONT 9, "Segoe UI", 400, 0, 0x1
+BEGIN
+    LTEXT           "Download Path:", IDC_STATIC, 7, 10, 60, 8
+    EDITTEXT        IDC_SETTINGS_PATH, 7, 20, 230, 14, ES_AUTOHSCROLL
+    PUSHBUTTON      "...", IDC_SETTINGS_BROWSE, 240, 20, 20, 14
+    
+    LTEXT           "Push Hotkey:", IDC_STATIC, 7, 40, 60, 8
+    EDITTEXT        IDC_SETTINGS_HOTKEY, 7, 50, 100, 14, ES_AUTOHSCROLL
+    
+    CONTROL         "Auto Copy Received Images", IDC_SETTINGS_IMAGES, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 7, 75, 120, 10
+    CONTROL         "Auto Copy Received Files", IDC_SETTINGS_FILES, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 7, 90, 120, 10
+    CONTROL         "Start on Boot", IDC_SETTINGS_STARTUP, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 7, 105, 120, 10
+    CONTROL         "Start Minimized to Tray", IDC_SETTINGS_MINIMIZED, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 7, 120, 120, 10
+    
+    DEFPUSHBUTTON   "Save Settings", IDC_SETTINGS_SAVE, 7, 145, 80, 14
+    
+    // QR Code Area (Custom draw)
+    GROUPBOX        "Scan to Pair Mobile", IDC_STATIC, 160, 45, 153, 168
+    CONTROL         "", IDC_SETTINGS_QR, "Static", SS_OWNERDRAW, 170, 60, 133, 133
+END
