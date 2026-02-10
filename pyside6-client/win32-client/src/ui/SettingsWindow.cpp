@@ -5,17 +5,91 @@
 #include "core/Logger.h"
 #include "qrcodegen.hpp"
 #include <shlobj.h>
+#include <commctrl.h>
+#include <vector>
+#include <string>
+
+#pragma comment(lib, "comctl32.lib")
 
 namespace ClipboardPush {
 namespace UI {
+
+// Helper to get key name
+std::wstring GetKeyName(UINT vk) {
+    if (vk >= 'A' && vk <= 'Z') return std::wstring(1, (wchar_t)vk);
+    if (vk >= VK_F1 && vk <= VK_F12) return L"F" + std::to_wstring(vk - VK_F1 + 1);
+    // Add more common keys if needed
+    switch(vk) {
+        case VK_SPACE: return L"Space";
+        case VK_INSERT: return L"Insert";
+        case VK_DELETE: return L"Delete";
+        case VK_HOME: return L"Home";
+        case VK_END: return L"End";
+    }
+    return L"";
+}
+
+// Subclass procedure for Hotkey Edit control
+LRESULT CALLBACK HotkeyEditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    static bool isRecording = false;
+
+    switch (uMsg) {
+    case WM_SETFOCUS:
+        isRecording = true;
+        SetWindowTextW(hWnd, L"Press keys...");
+        return 0;
+
+    case WM_KILLFOCUS:
+        isRecording = false;
+        if (GetWindowTextLengthW(hWnd) == 0 || GetWindowTextLengthW(hWnd) > 20) {
+            // Restore from config if empty
+            SetWindowTextW(hWnd, Utils::ToWide(Config::Instance().Data().push_hotkey).c_str());
+        }
+        return 0;
+
+    case WM_SYSKEYDOWN:
+    case WM_KEYDOWN: {
+        if (!isRecording) break;
+
+        UINT vk = (UINT)wParam;
+        // Ignore standalone modifiers
+        if (vk == VK_CONTROL || vk == VK_SHIFT || vk == VK_MENU || vk == VK_LWIN || vk == VK_RWIN) {
+            return 0;
+        }
+
+        std::wstring hotkey;
+        if (GetKeyState(VK_CONTROL) < 0) hotkey += L"Ctrl+";
+        if (GetKeyState(VK_MENU) < 0) hotkey += L"Alt+";
+        if (GetKeyState(VK_SHIFT) < 0) hotkey += L"Shift+";
+        if (GetKeyState(VK_LWIN) < 0 || GetKeyState(VK_RWIN) < 0) hotkey += L"Win+";
+
+        std::wstring keyName = GetKeyName(vk);
+        if (!keyName.empty()) {
+            hotkey += keyName;
+            SetWindowTextW(hWnd, hotkey.c_str());
+            // Move focus away to finish recording
+            SetFocus(GetParent(hWnd));
+        }
+        return 0;
+    }
+    case WM_CHAR:
+        return 0; // Disable character input
+    }
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
 
 SettingsWindow& SettingsWindow::Instance() {
     static SettingsWindow instance;
     return instance;
 }
 
-bool SettingsWindow::Create(HINSTANCE hInstance) {
-    m_hWnd = CreateDialogParamW(hInstance, MAKEINTRESOURCEW(IDD_SETTINGSWINDOW), NULL, DialogProc, (LPARAM)this);
+bool SettingsWindow::Create(HINSTANCE hInstance, HWND hParent) {
+    m_hParent = hParent;
+    m_hWnd = CreateDialogParamW(hInstance, MAKEINTRESOURCEW(IDD_SETTINGSWINDOW), hParent, DialogProc, (LPARAM)this);
+    if (m_hWnd) {
+        HWND hHotkey = GetDlgItem(m_hWnd, IDC_SETTINGS_HOTKEY);
+        SetWindowSubclass(hHotkey, HotkeyEditSubclassProc, 0, 0);
+    }
     return m_hWnd != NULL;
 }
 
@@ -121,10 +195,19 @@ INT_PTR CALLBACK SettingsWindow::DialogProc(HWND hDlg, UINT message, WPARAM wPar
         case IDC_SETTINGS_SAVE:
             pThis->SaveSettings();
             ShowWindow(hDlg, SW_HIDE);
+            SendMessageW(pThis->m_hParent, WM_COMMAND, IDC_SETTINGS_SAVE, 0);
             return (INT_PTR)TRUE;
         case IDC_SETTINGS_RECONNECT:
             LOG_INFO("Reconnect Button Clicked");
-            // Logic for reconnection will be implemented in Phase 6
+            SendMessageW(pThis->m_hParent, WM_COMMAND, IDC_SETTINGS_RECONNECT, 0);
+            return (INT_PTR)TRUE;
+        case IDC_SETTINGS_RESET:
+            if (MessageBoxW(hDlg, L"This will generate a NEW Room ID and Key.\nYou will need to re-scan the QR code on all devices.\n\nContinue?", L"Reset Connection", MB_YESNO | MB_ICONWARNING) == IDYES) {
+                Config::Instance().GenerateNewCredentials();
+                pThis->LoadSettings(); // Refresh UI and QR
+                // Force reconnect with new credentials
+                SendMessageW(pThis->m_hParent, WM_COMMAND, IDC_SETTINGS_SAVE, 0);
+            }
             return (INT_PTR)TRUE;
         case IDC_SETTINGS_BROWSE: {
             BROWSEINFOW bi = { 0 };

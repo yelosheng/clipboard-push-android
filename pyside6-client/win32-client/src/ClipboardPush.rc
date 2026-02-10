@@ -51,6 +51,7 @@ BEGIN
     
     DEFPUSHBUTTON   "Save Settings", IDC_SETTINGS_SAVE, 7, 145, 80, 14
     PUSHBUTTON      "Reconnect", IDC_SETTINGS_RECONNECT, 95, 145, 50, 14
+    PUSHBUTTON      "Reset Keys", IDC_SETTINGS_RESET, 7, 165, 80, 14
     
     // QR Code Area (Custom draw)
     GROUPBOX        "Scan to Pair Mobile", IDC_STATIC, 160, 45, 153, 168

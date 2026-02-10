@@ -47,6 +47,23 @@ void Config::InitializeDefaults() {
     }
 }
 
+void Config::GenerateNewCredentials() {
+    m_data.room_id = "room_" + std::to_string(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+    m_data.room_key = Crypto::GenerateKeyBase64();
+    // Also regenerate device ID to ensure clean slate
+    wchar_t buffer[UNLEN + 1];
+    DWORD size = UNLEN + 1;
+    std::wstring username = L"user";
+    if (GetUserNameW(buffer, &size)) username = buffer;
+    
+    auto now = std::chrono::system_clock::now();
+    auto seconds = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
+    m_data.device_id = "pc_" + Utils::ToUtf8(username) + "_" + std::to_string(seconds % 10000);
+    
+    Save();
+    LOG_INFO("Credentials reset. New Room: %s", m_data.room_id.c_str());
+}
+
 bool Config::Load() {
     std::string path = GetConfigPath();
     std::ifstream file(path);

@@ -28,6 +28,9 @@ public:
     
     // Set default download path and device ID if empty
     void InitializeDefaults();
+    
+    // Reset room ID and Key
+    void GenerateNewCredentials();
 
 private:
     Config() = default;

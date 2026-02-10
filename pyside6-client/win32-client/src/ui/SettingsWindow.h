@@ -10,7 +10,7 @@ class SettingsWindow {
 public:
     static SettingsWindow& Instance();
 
-    bool Create(HINSTANCE hInstance);
+    bool Create(HINSTANCE hInstance, HWND hParent);
     void Show(bool show = true);
     HWND GetHWND() const { return m_hWnd; }
 
@@ -23,6 +23,7 @@ private:
     void UpdateQR(const std::string& content);
 
     HWND m_hWnd = NULL;
+    HWND m_hParent = NULL;
     std::vector<bool> m_qrModules;
     int m_qrSize = 0;
 };

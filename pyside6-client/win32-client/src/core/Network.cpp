@@ -146,13 +146,34 @@ void WebSocketClient::SetCallbacks(OnOpenCallback onOpen, OnMessageCallback onMe
 }
 
 void WebSocketClient::Connect(const std::string& url) {
-    if (m_impl->running) Close();
+    // 1. Stop existing thread
+    if (m_impl->running) {
+        m_impl->running = false;
+        if (m_impl->hWebSocket) {
+            WinHttpWebSocketShutdown(m_impl->hWebSocket, WINHTTP_WEB_SOCKET_SUCCESS_CLOSE_STATUS, NULL, 0);
+        }
+        // Use detach to avoid blocking UI thread. The thread will exit when handles are closed.
+        if (m_impl->receiveThread.joinable()) {
+            m_impl->receiveThread.detach();
+        }
+    }
 
     auto comp = ParseUrl(url);
     if (comp.host.empty()) {
         if (m_impl->onError) m_impl->onError("Invalid URL");
         return;
     }
+
+    // 2. Clean up handles
+    if (m_impl->hWebSocket) WinHttpCloseHandle(m_impl->hWebSocket);
+    if (m_impl->hRequest) WinHttpCloseHandle(m_impl->hRequest);
+    if (m_impl->hConnect) WinHttpCloseHandle(m_impl->hConnect);
+    if (m_impl->hSession) WinHttpCloseHandle(m_impl->hSession);
+    
+    m_impl->hWebSocket = NULL;
+    m_impl->hRequest = NULL;
+    m_impl->hConnect = NULL;
+    m_impl->hSession = NULL;
 
     m_impl->hSession = WinHttpOpen(L"ClipboardPush/3.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!m_impl->hSession) return;
@@ -178,6 +199,11 @@ void WebSocketClient::Connect(const std::string& url) {
     m_impl->running = true;
     if (m_impl->onOpen) m_impl->onOpen();
 
+    // CRITICAL: Ensure old thread is detached before overwriting the object
+    if (m_impl->receiveThread.joinable()) {
+        m_impl->receiveThread.detach();
+    }
+
     m_impl->receiveThread = std::thread([this]() {
         BYTE buffer[4096];
         DWORD bytesRead = 0;
@@ -186,8 +212,10 @@ void WebSocketClient::Connect(const std::string& url) {
         while (m_impl->running) {
             DWORD error = WinHttpWebSocketReceive(m_impl->hWebSocket, buffer, sizeof(buffer), &bytesRead, &bufferType);
             if (error != ERROR_SUCCESS) {
-                m_impl->running = false;
-                if (m_impl->onError) m_impl->onError("WebSocket Receive Error");
+                if (m_impl->running) {
+                    m_impl->running = false;
+                    if (m_impl->onError) m_impl->onError("WebSocket Receive Error");
+                }
                 break;
             }
             

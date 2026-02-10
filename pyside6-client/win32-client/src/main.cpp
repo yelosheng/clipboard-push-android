@@ -248,6 +248,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case IDC_SETTINGS_RECONNECT:
             {
                 auto& d = ClipboardPush::Config::Instance().Data();
+                ClipboardPush::SocketIOService::Instance().Disconnect();
                 ClipboardPush::SocketIOService::Instance().Connect(d.relay_server_url, d.room_id, d.device_id);
             }
             break;
@@ -256,6 +257,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 LOG_INFO("Settings saved signal received, updating components...");
                 auto& d = ClipboardPush::Config::Instance().Data();
                 ClipboardPush::Platform::Hotkey::Instance().Register(hWnd, d.push_hotkey);
+                ClipboardPush::SocketIOService::Instance().Disconnect();
                 ClipboardPush::SocketIOService::Instance().Connect(d.relay_server_url, d.room_id, d.device_id);
             }
             break;
@@ -292,7 +294,7 @@ int main() {
 
     // Init UI
     ClipboardPush::UI::MainWindow::Instance().Create(hInstance);
-    ClipboardPush::UI::SettingsWindow::Instance().Create(hInstance);
+    ClipboardPush::UI::SettingsWindow::Instance().Create(hInstance, hWnd);
     ClipboardPush::UI::TrayIcon::Instance().Init(hWnd, hInstance);
 
     // Setup Socket.IO
