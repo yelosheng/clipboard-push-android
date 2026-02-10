@@ -8,12 +8,13 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 # Find required packages
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network WebSockets)
 find_package(OpenSSL REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(cpr CONFIG REQUIRED)
-find_package(sioclient CONFIG REQUIRED)
+find_package(unofficial-nayuki-qr-code-generator CONFIG REQUIRED)
+# find_package(sioclient CONFIG REQUIRED)
 
 # Source files
 set(SOURCES
@@ -66,13 +67,15 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::Gui
     Qt6::Widgets
     Qt6::Network
+    Qt6::WebSockets
     OpenSSL::SSL
     OpenSSL::Crypto
     nlohmann_json::nlohmann_json
     spdlog::spdlog
     cpr::cpr
-    sioclient::sioclient
-    sioclient::sioclient_tls
+    unofficial::nayuki-qr-code-generator::nayuki-qr-code-generator
+    # sioclient::sioclient
+    # sioclient::sioclient_tls
 )
 
 # Include directories

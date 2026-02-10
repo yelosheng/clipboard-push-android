@@ -13,11 +13,6 @@ int main(int argc, char* argv[]) {
 
     LOG_INFO("Clipboard Push starting...");
 
-#ifdef _WIN32
-    // Enable high DPI support
-    SetProcessDPIAware();
-#endif
-
     QApplication app(argc, argv);
     app.setApplicationName("Clipboard Push");
     app.setApplicationVersion("1.0.0");

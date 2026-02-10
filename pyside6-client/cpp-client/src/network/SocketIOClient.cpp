@@ -1,21 +1,32 @@
 #include "SocketIOClient.h"
 #include "core/Logger.h"
 
-#include <sio_client.h>
 #include <QJsonDocument>
-#include <QMetaObject>
+#include <QJsonArray>
+#include <QUrl>
+#include <QUrlQuery>
 
 namespace ClipboardPush {
 
 SocketIOClient::SocketIOClient(QObject* parent)
     : QObject(parent)
-    , m_client(std::make_unique<sio::client>())
 {
-    setupEventHandlers();
+    connect(&m_webSocket, &QWebSocket::connected, this, &SocketIOClient::onConnected);
+    connect(&m_webSocket, &QWebSocket::disconnected, this, &SocketIOClient::onDisconnected);
+    connect(&m_webSocket, &QWebSocket::textMessageReceived, this, &SocketIOClient::onTextMessageReceived);
+    
+    // Explicitly use the overload for errorOccurred in Qt6
+    connect(&m_webSocket, &QWebSocket::errorOccurred, [this](QAbstractSocket::SocketError error) {
+        this->onError(error);
+    });
+
+    m_reconnectTimer.setInterval(5000);
+    connect(&m_reconnectTimer, &QTimer::timeout, this, &SocketIOClient::onReconnectTimer);
 }
 
 SocketIOClient::~SocketIOClient() {
-    disconnect();
+    m_manuallyDisconnected = true;
+    m_webSocket.close();
 }
 
 void SocketIOClient::setServerUrl(const QString& url) {
@@ -27,174 +38,135 @@ void SocketIOClient::setRoomCredentials(const QString& roomId, const QString& cl
     m_clientId = clientId;
 }
 
-void SocketIOClient::setupEventHandlers() {
-    // Connection opened
-    m_client->set_open_listener([this]() {
-        LOG_INFO("Socket.IO connected");
-        m_connected = true;
-
-        // Thread-safe signal emission
-        QMetaObject::invokeMethod(this, [this]() {
-            emit connected();
-            joinRoom();
-        }, Qt::QueuedConnection);
-    });
-
-    // Connection closed
-    m_client->set_close_listener([this](sio::client::close_reason const& reason) {
-        LOG_INFO("Socket.IO disconnected");
-        m_connected = false;
-
-        QMetaObject::invokeMethod(this, [this]() {
-            emit disconnected();
-        }, Qt::QueuedConnection);
-    });
-
-    // Connection failed
-    m_client->set_fail_listener([this]() {
-        LOG_ERROR("Socket.IO connection failed");
-        m_connected = false;
-
-        QMetaObject::invokeMethod(this, [this]() {
-            emit errorOccurred("Connection failed");
-            emit disconnected();
-        }, Qt::QueuedConnection);
-    });
-
-    // Socket events
-    m_client->set_socket_open_listener([this](const std::string& nsp) {
-        // Register event handlers on default namespace
-        auto socket = m_client->socket();
-
-        // clipboard_sync event
-        socket->on("clipboard_sync", [this](sio::event& ev) {
-            try {
-                auto msg = ev.get_message();
-                if (msg->get_flag() != sio::message::flag_object) {
-                    return;
-                }
-
-                auto obj = msg->get_map();
-                std::string content;
-                bool isEncrypted = false;
-
-                auto contentIt = obj.find("content");
-                if (contentIt != obj.end() && contentIt->second->get_flag() == sio::message::flag_string) {
-                    content = contentIt->second->get_string();
-                }
-
-                auto encryptedIt = obj.find("encrypted");
-                if (encryptedIt != obj.end() && encryptedIt->second->get_flag() == sio::message::flag_boolean) {
-                    isEncrypted = encryptedIt->second->get_bool();
-                }
-
-                if (!content.empty()) {
-                    QString qContent = QString::fromStdString(content);
-                    QMetaObject::invokeMethod(this, [this, qContent, isEncrypted]() {
-                        emit clipboardReceived(qContent, isEncrypted);
-                    }, Qt::QueuedConnection);
-                }
-            } catch (const std::exception& e) {
-                LOG_ERROR("Error handling clipboard_sync: {}", e.what());
-            }
-        });
-
-        // file_sync event
-        socket->on("file_sync", [this](sio::event& ev) {
-            try {
-                auto msg = ev.get_message();
-                if (msg->get_flag() != sio::message::flag_object) {
-                    return;
-                }
-
-                auto obj = msg->get_map();
-                QJsonObject jsonData;
-
-                // Extract fields
-                auto urlIt = obj.find("download_url");
-                if (urlIt != obj.end() && urlIt->second->get_flag() == sio::message::flag_string) {
-                    jsonData["download_url"] = QString::fromStdString(urlIt->second->get_string());
-                }
-
-                auto filenameIt = obj.find("filename");
-                if (filenameIt != obj.end() && filenameIt->second->get_flag() == sio::message::flag_string) {
-                    jsonData["filename"] = QString::fromStdString(filenameIt->second->get_string());
-                }
-
-                auto typeIt = obj.find("type");
-                if (typeIt != obj.end() && typeIt->second->get_flag() == sio::message::flag_string) {
-                    jsonData["type"] = QString::fromStdString(typeIt->second->get_string());
-                }
-
-                QMetaObject::invokeMethod(this, [this, jsonData]() {
-                    emit fileReceived(jsonData);
-                }, Qt::QueuedConnection);
-            } catch (const std::exception& e) {
-                LOG_ERROR("Error handling file_sync: {}", e.what());
-            }
-        });
-    });
-}
-
-void SocketIOClient::joinRoom() {
-    if (!m_connected || m_roomId.isEmpty()) {
-        return;
-    }
-
-    auto socket = m_client->socket();
-
-    // Create join message
-    auto msg = sio::object_message::create();
-    msg->get_map()["room"] = sio::string_message::create(m_roomId.toStdString());
-    msg->get_map()["client_id"] = sio::string_message::create(m_clientId.toStdString());
-
-    socket->emit("join", msg);
-    LOG_INFO("Joined room: {}", m_roomId.toStdString());
-}
-
 void SocketIOClient::connectToServer() {
-    if (m_serverUrl.isEmpty()) {
-        LOG_ERROR("Cannot connect: no server URL set");
-        return;
-    }
-
-    if (m_connected) {
-        LOG_DEBUG("Already connected");
-        return;
-    }
-
-    LOG_INFO("Connecting to: {}", m_serverUrl.toStdString());
-
-    // Enable auto-reconnect
-    m_client->set_reconnect_attempts(0);  // Infinite retries
-    m_client->set_reconnect_delay(5000);  // 5 seconds
-    m_client->set_reconnect_delay_max(10000);
-
-    try {
-        m_client->connect(m_serverUrl.toStdString());
-    } catch (const std::exception& e) {
-        LOG_ERROR("Connection error: {}", e.what());
-        QMetaObject::invokeMethod(this, [this, msg = QString::fromUtf8(e.what())]() {
-            emit errorOccurred(msg);
-        }, Qt::QueuedConnection);
-    }
+    if (m_serverUrl.isEmpty()) return;
+    
+    m_manuallyDisconnected = false;
+    
+    // Convert HTTP URL to WebSocket URL
+    QUrl url(m_serverUrl);
+    if (url.scheme() == "http") url.setScheme("ws");
+    else if (url.scheme() == "https") url.setScheme("wss");
+    
+    // Add Socket.IO parameters
+    url.setPath("/socket.io/");
+    QUrlQuery query;
+    query.addQueryItem("EIO", "4");
+    query.addQueryItem("transport", "websocket");
+    url.setQuery(query);
+    
+    LOG_INFO("Connecting to WebSocket: {}", url.toString().toStdString());
+    m_webSocket.open(url);
 }
 
 void SocketIOClient::disconnect() {
-    if (m_client) {
-        m_client->sync_close();
-        m_connected = false;
-    }
+    m_manuallyDisconnected = true;
+    m_reconnectTimer.stop();
+    m_webSocket.close();
 }
 
 void SocketIOClient::forceReconnect() {
-    LOG_INFO("Forcing reconnection...");
     disconnect();
     connectToServer();
 }
 
 bool SocketIOClient::isConnected() const {
     return m_connected;
+}
+
+void SocketIOClient::onConnected() {
+    LOG_INFO("WebSocket Connected");
+    // Socket.IO Handshake: send '40' to open the engine.io session on the default namespace
+    sendPacket("40");
+}
+
+void SocketIOClient::onDisconnected() {
+    LOG_INFO("WebSocket Disconnected");
+    m_connected = false;
+    emit disconnected();
+    
+    if (!m_manuallyDisconnected) {
+        m_reconnectTimer.start();
+    }
+}
+
+void SocketIOClient::onTextMessageReceived(const QString& message) {
+    // Socket.IO Packet format: <engine.io type><socket.io type>[<data>]
+    // Engine.IO types: 0: open, 1: close, 2: ping, 3: pong, 4: message
+    // Socket.IO types: 0: connect, 1: disconnect, 2: event, 3: ack, 4: error
+    
+    if (message.isEmpty()) return;
+    
+    char engineType = message[0].toLatin1();
+    
+    if (engineType == '2') { // Ping
+        sendPacket("3"); // Pong
+    } else if (engineType == '4') { // Message
+        handleSocketIOPacket(message.mid(1));
+    } else if (engineType == '0') { // Open
+        LOG_DEBUG("Engine.IO session opened");
+    }
+}
+
+void SocketIOClient::handleSocketIOPacket(const QString& packet) {
+    if (packet.isEmpty()) return;
+    
+    char socketType = packet[0].toLatin1();
+    QString data = packet.mid(1);
+    
+    if (socketType == '0') { // Connect
+        LOG_INFO("Socket.IO Session Connected");
+        m_connected = true;
+        emit connected();
+        joinRoom();
+    } else if (socketType == '2') { // Event
+        QJsonDocument doc = QJsonDocument::fromJson(data.toUtf8());
+        if (doc.isArray()) {
+            QJsonArray arr = doc.array();
+            QString eventName = arr.at(0).toString();
+            QJsonObject eventData = arr.at(1).toObject();
+            
+            if (eventName == "clipboard_sync") {
+                QString content = eventData["content"].toString();
+                bool encrypted = eventData["encrypted"].toBool(false);
+                emit clipboardReceived(content, encrypted);
+            } else if (eventName == "file_sync") {
+                emit fileReceived(eventData);
+            }
+        }
+    }
+}
+
+void SocketIOClient::sendPacket(const QString& packet) {
+    if (m_webSocket.isValid()) {
+        m_webSocket.sendTextMessage(packet);
+    }
+}
+
+void SocketIOClient::joinRoom() {
+    if (m_roomId.isEmpty()) return;
+    
+    QJsonArray args;
+    args.append("join");
+    QJsonObject joinData;
+    joinData["room"] = m_roomId;
+    joinData["client_id"] = m_clientId;
+    args.append(joinData);
+    
+    // 42 is Message type (4) + Event type (2)
+    sendPacket("42" + QString::fromUtf8(QJsonDocument(args).toJson(QJsonDocument::Compact)));
+}
+
+void SocketIOClient::onError(QAbstractSocket::SocketError error) {
+    QString errorStr = m_webSocket.errorString();
+    LOG_ERROR("WebSocket Error: {}", errorStr.toStdString());
+    emit errorOccurred(errorStr);
+}
+
+void SocketIOClient::onReconnectTimer() {
+    if (!m_connected && !m_manuallyDisconnected) {
+        connectToServer();
+    }
 }
 
 } // namespace ClipboardPush

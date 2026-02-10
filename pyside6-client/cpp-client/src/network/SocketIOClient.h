@@ -3,15 +3,8 @@
 #include <QObject>
 #include <QString>
 #include <QJsonObject>
-#include <memory>
-#include <atomic>
-#include <thread>
-
-// Forward declarations for socket.io
-namespace sio {
-    class client;
-    class message;
-}
+#include <QtWebSockets/QWebSocket>
+#include <QTimer>
 
 namespace ClipboardPush {
 
@@ -38,15 +31,26 @@ signals:
     void fileReceived(const QJsonObject& data);
     void errorOccurred(const QString& error);
 
+private slots:
+    void onConnected();
+    void onDisconnected();
+    void onTextMessageReceived(const QString& message);
+    void onError(QAbstractSocket::SocketError error);
+    void onReconnectTimer();
+
 private:
-    void setupEventHandlers();
+    void sendPacket(const QString& packet);
+    void handleSocketIOPacket(const QString& packet);
     void joinRoom();
 
-    std::unique_ptr<sio::client> m_client;
+    QWebSocket m_webSocket;
     QString m_serverUrl;
     QString m_roomId;
     QString m_clientId;
-    std::atomic<bool> m_connected{false};
+    bool m_connected = false;
+    bool m_manuallyDisconnected = false;
+    
+    QTimer m_reconnectTimer;
 };
 
 } // namespace ClipboardPush
