@@ -204,9 +204,45 @@ void WebSocketClient::Close() {
     if (m_impl->hWebSocket) WinHttpWebSocketShutdown(m_impl->hWebSocket, WINHTTP_WEB_SOCKET_SUCCESS_CLOSE_STATUS, NULL, 0);
 }
 
-// Implement Put and Get stubs to avoid link errors
+std::optional<std::vector<uint8_t>> HttpClient::Get(const std::string& url) {
+    auto comp = ParseUrl(url);
+    if (comp.host.empty()) return std::nullopt;
+
+    WinHttpHandle hSession = WinHttpOpen(L"ClipboardPush/3.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!hSession.isValid()) return std::nullopt;
+
+    WinHttpHandle hConnect = WinHttpConnect(hSession, comp.host.c_str(), comp.port, 0);
+    if (!hConnect.isValid()) return std::nullopt;
+
+    DWORD flags = comp.secure ? WINHTTP_FLAG_SECURE : 0;
+    WinHttpHandle hRequest = WinHttpOpenRequest(hConnect, L"GET", comp.path.c_str(), NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
+    if (!hRequest.isValid()) return std::nullopt;
+
+    if (!WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0)) {
+        return std::nullopt;
+    }
+
+    if (!WinHttpReceiveResponse(hRequest, NULL)) return std::nullopt;
+
+    std::vector<uint8_t> responseData;
+    DWORD dwSize = 0;
+    do {
+        dwSize = 0;
+        if (!WinHttpQueryDataAvailable(hRequest, &dwSize)) break;
+        if (dwSize == 0) break;
+        
+        std::vector<uint8_t> buffer(dwSize);
+        DWORD dwDownloaded = 0;
+        if (WinHttpReadData(hRequest, buffer.data(), dwSize, &dwDownloaded)) {
+            responseData.insert(responseData.end(), buffer.begin(), buffer.begin() + dwDownloaded);
+        }
+    } while (dwSize > 0);
+
+    return responseData;
+}
+
+// Implement Put stub to avoid link errors
 HttpResponse HttpClient::Put(const std::string& url, const std::vector<uint8_t>& data) { return {0,""}; }
-std::optional<std::vector<uint8_t>> HttpClient::Get(const std::string& url) { return std::nullopt; }
 
 }
 }

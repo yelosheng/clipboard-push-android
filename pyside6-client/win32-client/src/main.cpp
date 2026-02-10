@@ -20,10 +20,84 @@
 #include <sstream>
 #include <thread>
 
+#include <filesystem>
+#include <fstream>
+
 #define WM_TRAYICON (WM_USER + 1)
+
+using namespace ClipboardPush;
+namespace fs = std::filesystem;
 
 // Global state for sync logic
 static bool g_isProcessingRemoteSync = false;
+
+// Forward declarations
+void PushText(const std::string& text);
+
+void OnRemoteFileReceived(const nlohmann::json& data) {
+    try {
+        std::string url = data.value("download_url", "");
+        std::string filename = data.value("filename", "received_file");
+        std::string type = data.value("type", "file");
+
+        if (url.empty()) return;
+
+        LOG_INFO("Downloading file: %s", filename.c_str());
+        auto encData = Network::HttpClient::Get(url);
+        if (!encData) {
+            LOG_ERROR("Failed to download file");
+            return;
+        }
+
+        auto& config = Config::Instance().Data();
+        auto key = Crypto::DecodeKey(config.room_key);
+        auto decData = Crypto::Decrypt(key, *encData);
+        if (!decData) {
+            LOG_ERROR("Failed to decrypt file");
+            return;
+        }
+
+        // Ensure download path exists
+        fs::path downloadDir(config.download_path);
+        if (!fs::exists(downloadDir)) {
+            fs::create_directories(downloadDir);
+        }
+
+        // Handle duplicate filenames
+        fs::path filePath = downloadDir / filename;
+        int count = 1;
+        std::string stem = filePath.stem().string();
+        std::string ext = filePath.extension().string();
+        while (fs::exists(filePath)) {
+            filePath = downloadDir / (stem + "_" + std::to_string(count++) + ext);
+        }
+
+        // Save file
+        std::ofstream outfile(filePath, std::ios::binary);
+        outfile.write((char*)decData->data(), decData->size());
+        outfile.close();
+
+        LOG_INFO("File saved to %s", filePath.string().c_str());
+        UI::TrayIcon::Instance().ShowMessage(L"File Received", Utils::ToWide(filename));
+
+        // Auto copy to clipboard
+        g_isProcessingRemoteSync = true;
+        if (type == "image" && config.auto_copy_image) {
+            Platform::Clipboard::SetImage(*decData);
+        } else if (config.auto_copy_file) {
+            Platform::Clipboard::SetFiles({filePath.string()});
+        }
+        
+        // Reset sync flag after a short delay
+        std::thread([]() {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            g_isProcessingRemoteSync = false;
+        }).detach();
+
+    } catch (const std::exception& e) {
+        LOG_ERROR("Error in file sync: %s", e.what());
+    }
+}
 
 namespace ClipboardPush {
 
@@ -176,7 +250,10 @@ int main() {
             }).detach();
         },
         [](const nlohmann::json& data) {
-            LOG_INFO("Received file sync (logic to be added)");
+            // Run in a separate thread to not block the socket service
+            std::thread([data]() {
+                OnRemoteFileReceived(data);
+            }).detach();
         },
         [](bool connected) {
             std::wstring status = connected ? L"Connected" : L"Disconnected";
