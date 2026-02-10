@@ -27,14 +27,23 @@ struct UrlComponents {
 };
 
 UrlComponents ParseUrl(const std::string& url) {
-    std::wstring wurl = Utils::ToWide(url);
+    std::string normalizedUrl = url;
+    bool isWss = (url.substr(0, 6) == "wss://");
+    bool isWs = (url.substr(0, 5) == "ws://");
+    
+    if (isWss) normalizedUrl.replace(0, 3, "http"); // wss:// -> https://
+    else if (isWs) normalizedUrl.replace(0, 2, "http"); // ws:// -> http://
+
+    std::wstring wurl = Utils::ToWide(normalizedUrl);
     URL_COMPONENTS urlComp;
     ZeroMemory(&urlComp, sizeof(urlComp));
     urlComp.dwStructSize = sizeof(urlComp);
     urlComp.dwHostNameLength = (DWORD)-1;
     urlComp.dwUrlPathLength = (DWORD)-1;
+    urlComp.dwSchemeLength = (DWORD)-1;
 
     if (!WinHttpCrackUrl(wurl.c_str(), (DWORD)wurl.length(), 0, &urlComp)) {
+        LOG_ERROR("WinHttpCrackUrl failed for %s", url.c_str());
         return {};
     }
 
@@ -42,11 +51,7 @@ UrlComponents ParseUrl(const std::string& url) {
     res.host = std::wstring(urlComp.lpszHostName, urlComp.dwHostNameLength);
     res.port = urlComp.nPort;
     res.path = std::wstring(urlComp.lpszUrlPath, urlComp.dwUrlPathLength);
-    res.secure = (urlComp.nScheme == INTERNET_SCHEME_HTTPS);
-    // Manual check for wss since INTERNET_SCHEME_WSS might not be defined
-    if (!res.secure && url.size() > 4 && url.substr(0, 4) == "wss:") {
-        res.secure = true;
-    }
+    res.secure = (urlComp.nScheme == INTERNET_SCHEME_HTTPS || isWss);
     return res;
 }
 

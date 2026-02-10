@@ -25,6 +25,10 @@ inline void Log(Level level, const char* format, ...) {
 
     OutputDebugStringA(buffer);
     OutputDebugStringA("\n");
+    
+    // Also print to console
+    printf("%s\n", buffer);
+    fflush(stdout);
 }
 
 }
