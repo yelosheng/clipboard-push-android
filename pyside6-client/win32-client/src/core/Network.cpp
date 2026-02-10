@@ -68,6 +68,10 @@ HttpResponse HttpClient::Post(const std::string& url, const std::string& body, c
     WinHttpHandle hSession = WinHttpOpen(L"ClipboardPush/3.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!hSession.isValid()) return {0, ""};
 
+    // Enable TLS 1.2+
+    DWORD protocols = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2 | WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3;
+    WinHttpSetOption(hSession, WINHTTP_OPTION_SECURE_PROTOCOLS, &protocols, sizeof(protocols));
+
     WinHttpHandle hConnect = WinHttpConnect(hSession, comp.host.c_str(), comp.port, 0);
     if (!hConnect.isValid()) return {0, ""};
 
@@ -153,6 +157,10 @@ void WebSocketClient::Connect(const std::string& url) {
     m_impl->hSession = WinHttpOpen(L"ClipboardPush/3.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!m_impl->hSession) return;
 
+    // Enable TLS 1.2+
+    DWORD protocols = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2 | WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3;
+    WinHttpSetOption(m_impl->hSession, WINHTTP_OPTION_SECURE_PROTOCOLS, &protocols, sizeof(protocols));
+
     m_impl->hConnect = WinHttpConnect(m_impl->hSession, comp.host.c_str(), comp.port, 0);
     if (!m_impl->hConnect) return;
 
@@ -217,6 +225,10 @@ std::optional<std::vector<uint8_t>> HttpClient::Get(const std::string& url) {
     WinHttpHandle hSession = WinHttpOpen(L"ClipboardPush/3.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!hSession.isValid()) return std::nullopt;
 
+    // Enable TLS 1.2+
+    DWORD protocols = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2 | WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3;
+    WinHttpSetOption(hSession, WINHTTP_OPTION_SECURE_PROTOCOLS, &protocols, sizeof(protocols));
+
     WinHttpHandle hConnect = WinHttpConnect(hSession, comp.host.c_str(), comp.port, 0);
     if (!hConnect.isValid()) return std::nullopt;
 
@@ -254,6 +266,10 @@ HttpResponse HttpClient::Put(const std::string& url, const std::vector<uint8_t>&
     WinHttpHandle hSession = WinHttpOpen(L"ClipboardPush/3.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!hSession.isValid()) return {0, ""};
 
+    // Enable TLS 1.2+
+    DWORD protocols = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2 | WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3;
+    WinHttpSetOption(hSession, WINHTTP_OPTION_SECURE_PROTOCOLS, &protocols, sizeof(protocols));
+
     WinHttpHandle hConnect = WinHttpConnect(hSession, comp.host.c_str(), comp.port, 0);
     if (!hConnect.isValid()) return {0, ""};
 
@@ -262,7 +278,9 @@ HttpResponse HttpClient::Put(const std::string& url, const std::vector<uint8_t>&
     WinHttpHandle hRequest = WinHttpOpenRequest(hConnect, L"PUT", comp.path.c_str(), NULL, WINHTTP_NO_REFERER, NULL, flags);
     if (!hRequest.isValid()) return {0, ""};
 
-    if (!WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, (LPVOID)data.data(), (DWORD)data.size(), (DWORD)data.size(), 0)) {
+    std::wstring headers = L"Content-Type: application/octet-stream";
+    
+    if (!WinHttpSendRequest(hRequest, headers.c_str(), (DWORD)headers.length(), (LPVOID)data.data(), (DWORD)data.size(), (DWORD)data.size(), 0)) {
         return {0, ""};
     }
 

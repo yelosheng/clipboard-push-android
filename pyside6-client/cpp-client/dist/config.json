@@ -1,7 +1,7 @@
 {
     "auto_copy_file": true,
     "auto_copy_image": true,
-    "auto_start": true,
+    "auto_start": false,
     "device_id": "pc_Huang_8896",
     "download_path": "Z:/ReceivedFiles",
     "push_hotkey": "F6",

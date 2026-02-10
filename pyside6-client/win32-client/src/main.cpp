@@ -157,7 +157,8 @@ void PushFileData(const std::vector<uint8_t>& data, const std::string& filename,
     std::string authUrl = config.relay_server_url + "/api/file/upload_auth";
     nlohmann::json authPayload;
     authPayload["filename"] = filename;
-    authPayload["content_length"] = enc->size();
+    authPayload["size"] = enc->size();
+    authPayload["content_type"] = "application/octet-stream";
     
     auto authRes = ClipboardPush::Network::HttpClient::Post(authUrl, authPayload.dump());
     if (authRes.status != 200) {
