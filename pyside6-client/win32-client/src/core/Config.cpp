@@ -45,6 +45,11 @@ void Config::InitializeDefaults() {
         }
         m_data.device_id = "pc_" + Utils::ToUtf8(username) + "_win32";
     }
+
+    // Generate room credentials if not already present
+    if (m_data.room_id.empty() || m_data.room_key.empty()) {
+        GenerateNewCredentials();
+    }
 }
 
 void Config::GenerateNewCredentials() {

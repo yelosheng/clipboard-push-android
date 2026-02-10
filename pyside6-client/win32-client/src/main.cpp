@@ -256,6 +256,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             {
                 LOG_INFO("Settings saved signal received, updating components...");
                 auto& d = ClipboardPush::Config::Instance().Data();
+                ClipboardPush::Utils::SetAutoStart(d.auto_start);
                 ClipboardPush::Platform::Hotkey::Instance().Register(hWnd, d.push_hotkey);
                 ClipboardPush::SocketIOService::Instance().Disconnect();
                 ClipboardPush::SocketIOService::Instance().Connect(d.relay_server_url, d.room_id, d.device_id);
@@ -275,11 +276,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     return 0;
 }
 
-int main() {
-    HINSTANCE hInstance = GetModuleHandle(NULL);
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
     ClipboardPush::Platform::Init();
     ClipboardPush::Config::Instance().Load();
     auto& data = ClipboardPush::Config::Instance().Data();
+    
+    // Sync auto-start state
+    ClipboardPush::Utils::SetAutoStart(data.auto_start);
     
     // Create a dummy window to handle messages
     const wchar_t CLASS_NAME[] = L"ClipboardPushMessageWindow";
@@ -338,9 +341,15 @@ int main() {
                 OnRemoteFileReceived(data);
             }).detach();
         },
-        [](bool connected) {
-            std::wstring status = connected ? L"Connected" : L"Disconnected";
-            ClipboardPush::UI::MainWindow::Instance().SetStatus(status);
+        [](ConnectionStatus status) {
+            std::wstring statusStr;
+            switch(status) {
+                case ConnectionStatus::Connected: statusStr = L"Connected"; break;
+                case ConnectionStatus::Disconnected: statusStr = L"Disconnected"; break;
+                case ConnectionStatus::Connecting: statusStr = L"Connecting..."; break;
+                case ConnectionStatus::Retrying: statusStr = L"Retrying in 5s..."; break;
+            }
+            ClipboardPush::UI::MainWindow::Instance().SetStatus(statusStr);
         }
     );
     sio.Connect(data.relay_server_url, data.room_id, data.device_id);

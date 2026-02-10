@@ -25,10 +25,9 @@ STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | DS_CENTER | WS_POPUP | WS_CAPTI
 CAPTION "Clipboard Push v3.0"
 FONT 9, "Segoe UI", 400, 0, 0x1
 BEGIN
-    EDITTEXT        IDC_MAIN_TEXT, 7, 7, 236, 100, ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL
-    PUSHBUTTON      "Push Content", IDC_MAIN_PUSH, 108, 112, 80, 14
-    PUSHBUTTON      "Settings", IDC_MAIN_SETTINGS, 193, 112, 50, 14
-    LTEXT           "Status: Ready", IDC_MAIN_STATUS, 7, 134, 236, 8
+    EDITTEXT        IDC_MAIN_TEXT, 7, 7, 236, 120, ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL
+    PUSHBUTTON      "Push Content", IDC_MAIN_PUSH, 108, 132, 80, 14
+    PUSHBUTTON      "Settings", IDC_MAIN_SETTINGS, 193, 132, 50, 14
 END
 
 // Settings Window Dialog
@@ -50,8 +49,8 @@ BEGIN
     CONTROL         "Start Minimized to Tray", IDC_SETTINGS_MINIMIZED, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 7, 120, 120, 10
     
     DEFPUSHBUTTON   "Save Settings", IDC_SETTINGS_SAVE, 7, 145, 80, 14
-    PUSHBUTTON      "Reconnect", IDC_SETTINGS_RECONNECT, 95, 145, 50, 14
-    PUSHBUTTON      "Reset Keys", IDC_SETTINGS_RESET, 7, 165, 80, 14
+    PUSHBUTTON      "Reconnect", IDC_SETTINGS_RECONNECT, 7, 164, 80, 14
+    PUSHBUTTON      "Reset Keys", IDC_SETTINGS_RESET, 7, 183, 80, 14
     
     // QR Code Area (Custom draw)
     GROUPBOX        "Scan to Pair Mobile", IDC_STATIC, 160, 45, 153, 168

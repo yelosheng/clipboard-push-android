@@ -231,6 +231,9 @@ void WebSocketClient::Connect(const std::string& url) {
                     m_impl->onMessage(msg);
                 }
             }
+            
+            // Yield to allow other threads (like Send) to run smoothly in Release mode
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     });
 }

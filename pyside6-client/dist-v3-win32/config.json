@@ -1,12 +1,12 @@
 {
     "auto_copy_file": true,
     "auto_copy_image": true,
-    "auto_start": false,
-    "device_id": "pc_Huang_win32",
-    "download_path": "D:\\Downloads",
+    "auto_start": true,
+    "device_id": "pc_Huang_628",
+    "download_path": "D:\\Downloads\\ClipboardMan",
     "push_hotkey": "Ctrl+F6",
-    "relay_server_url": "https://kxkl.tk:12505",
-    "room_id": "",
-    "room_key": "",
-    "start_minimized": false
+    "relay_server_url": "https://kxkl.tk:12505/",
+    "room_id": "room_1770720628",
+    "room_key": "69GeubMeYWfZkRlRmLjkMehbnvWOTAedXszU3wxrHCo=",
+    "start_minimized": true
 }

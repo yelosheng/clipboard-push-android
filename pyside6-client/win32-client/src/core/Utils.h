@@ -21,5 +21,27 @@ inline std::string ToUtf8(const std::wstring& wstr) {
     return strTo;
 }
 
+inline bool SetAutoStart(bool enabled) {
+    HKEY hKey;
+    const wchar_t* path = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+    const wchar_t* name = L"ClipboardPushWin32";
+    
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, path, 0, KEY_SET_VALUE, &hKey) != ERROR_SUCCESS) {
+        return false;
+    }
+
+    if (enabled) {
+        wchar_t appPath[MAX_PATH];
+        GetModuleFileNameW(NULL, appPath, MAX_PATH);
+        std::wstring cmd = L"\"" + std::wstring(appPath) + L"\"";
+        RegSetValueExW(hKey, name, 0, REG_SZ, (BYTE*)cmd.c_str(), (DWORD)((cmd.length() + 1) * sizeof(wchar_t)));
+    } else {
+        RegDeleteValueW(hKey, name);
+    }
+
+    RegCloseKey(hKey);
+    return true;
+}
+
 }
 }

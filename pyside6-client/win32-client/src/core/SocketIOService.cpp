@@ -1,5 +1,7 @@
 #include "SocketIOService.h"
 #include "Logger.h"
+#include <thread>
+#include <chrono>
 
 namespace ClipboardPush {
 
@@ -17,26 +19,31 @@ SocketIOService::SocketIOService() {
         [this](const std::string& msg) { OnMessage(msg); },
         [this]() { 
             LOG_INFO("WS Disconnected");
-            m_connected = false;
-            if (m_onStatus) m_onStatus(false);
+            SetStatus(ConnectionStatus::Disconnected);
+            ScheduleReconnect();
         },
         [this](const std::string& err) {
             LOG_ERROR("WS Error: %s", err.c_str());
-            m_connected = false;
-            if (m_onStatus) m_onStatus(false);
+            SetStatus(ConnectionStatus::Disconnected);
+            ScheduleReconnect();
         }
     );
 }
 
 void SocketIOService::Connect(const std::string& url, const std::string& roomId, const std::string& clientId) {
+    m_serverUrl = url;
     m_roomId = roomId;
     m_clientId = clientId;
+    m_manuallyStopped = false;
+    
+    SetStatus(ConnectionStatus::Connecting);
     
     // Convert http to ws, https to wss
     std::string wsUrl = url;
     size_t pos = wsUrl.find("http");
     if (pos == 0) {
-        wsUrl.replace(0, 4, "ws");
+        if (wsUrl.size() > 5 && wsUrl[4] == 's') wsUrl.replace(0, 5, "wss");
+        else wsUrl.replace(0, 4, "ws");
     }
     
     // Append Socket.IO path
@@ -48,13 +55,35 @@ void SocketIOService::Connect(const std::string& url, const std::string& roomId,
 }
 
 void SocketIOService::Disconnect() {
+    m_manuallyStopped = true;
     m_ws.Close();
+    SetStatus(ConnectionStatus::Disconnected);
 }
 
 void SocketIOService::SetCallbacks(ClipboardCallback onClipboard, FileCallback onFile, StatusCallback onStatus) {
     m_onClipboard = onClipboard;
     m_onFile = onFile;
     m_onStatus = onStatus;
+}
+
+void SocketIOService::SetStatus(ConnectionStatus status) {
+    m_status = status;
+    if (m_onStatus) m_onStatus(status);
+}
+
+void SocketIOService::ScheduleReconnect() {
+    if (m_manuallyStopped) return;
+    
+    SetStatus(ConnectionStatus::Retrying);
+    
+    // Create a background thread to wait and reconnect
+    std::thread([this]() {
+        LOG_INFO("Reconnecting in 5 seconds...");
+        std::this_thread::sleep_for(std::chrono::seconds(5));
+        if (!m_manuallyStopped && m_status != ConnectionStatus::Connected) {
+            Connect(m_serverUrl, m_roomId, m_clientId);
+        }
+    }).detach();
 }
 
 void SocketIOService::OnMessage(const std::string& message) {
@@ -74,8 +103,7 @@ void SocketIOService::HandlePacket(const std::string& packet) {
     char socketType = packet[0];
     if (socketType == '0') { // Connect success
         LOG_INFO("Socket.IO Connected");
-        m_connected = true;
-        if (m_onStatus) m_onStatus(true);
+        SetStatus(ConnectionStatus::Connected);
         JoinRoom();
     } else if (socketType == '2') { // Event
         try {

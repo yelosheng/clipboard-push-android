@@ -8,6 +8,7 @@
 #include <commctrl.h>
 
 #pragma comment(lib, "comctl32.lib")
+#pragma comment(linker,"\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
 namespace ClipboardPush {
 namespace UI {
@@ -31,6 +32,12 @@ LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
 }
 
 bool MainWindow::Create(HINSTANCE hInstance) {
+    // Ensure common controls are initialized
+    INITCOMMONCONTROLSEX icex;
+    icex.dwSize = sizeof(INITCOMMONCONTROLSEX);
+    icex.dwICC = ICC_WIN95_CLASSES;
+    InitCommonControlsEx(&icex);
+
     m_hWnd = CreateDialogParamW(hInstance, MAKEINTRESOURCEW(IDD_MAINWINDOW), NULL, DialogProc, (LPARAM)this);
     if (m_hWnd) {
         HWND hEdit = GetDlgItem(m_hWnd, IDC_MAIN_TEXT);
@@ -45,13 +52,32 @@ void MainWindow::Show(bool show) {
 }
 
 void MainWindow::SetStatus(const std::wstring& status) {
-    SetDlgItemTextW(m_hWnd, IDC_MAIN_STATUS, (L"Status: " + status).c_str());
+    std::wstring title = L"Clipboard Push v3.0 - " + status;
+    SetWindowTextW(m_hWnd, title.c_str());
 }
 
 INT_PTR CALLBACK MainWindow::DialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
-    case WM_INITDIALOG:
+    case WM_INITDIALOG: {
+        // Add Tooltip for Push Button during initialization
+        HWND hButton = GetDlgItem(hDlg, IDC_MAIN_PUSH);
+        HWND hwndTip = CreateWindowExW(NULL, TOOLTIPS_CLASSW, NULL,
+            WS_POPUP | TTS_ALWAYSTIP | TTS_BALLOON,
+            CW_USEDEFAULT, CW_USEDEFAULT,
+            CW_USEDEFAULT, CW_USEDEFAULT,
+            hDlg, NULL, GetModuleHandle(NULL), NULL);
+
+        if (hwndTip) {
+            TOOLINFOW toolInfo = { 0 };
+            toolInfo.cbSize = sizeof(toolInfo);
+            toolInfo.hwnd = hDlg;
+            toolInfo.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
+            toolInfo.uId = (UINT_PTR)hButton;
+            toolInfo.lpszText = (LPWSTR)L"Ctrl+Enter to send";
+            SendMessageW(hwndTip, TTM_ADDTOOLW, 0, (LPARAM)&toolInfo);
+        }
         return (INT_PTR)TRUE;
+    }
 
     case WM_COMMAND:
         switch (LOWORD(wParam)) {
