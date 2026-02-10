@@ -28,6 +28,7 @@ public:
     bool autoCopyImage() const { return m_autoCopyImage; }
     bool autoCopyFile() const { return m_autoCopyFile; }
     bool autoStart() const { return m_autoStart; }
+    bool startMinimized() const { return m_startMinimized; }
 
     // Setters
     void setRelayServerUrl(const QString& url);
@@ -39,6 +40,7 @@ public:
     void setAutoCopyImage(bool enabled);
     void setAutoCopyFile(bool enabled);
     void setAutoStart(bool enabled);
+    void setStartMinimized(bool enabled);
 
     // Utility
     bool isValid() const;
@@ -67,6 +69,7 @@ private:
     bool m_autoCopyImage = true;
     bool m_autoCopyFile = true;
     bool m_autoStart = false;
+    bool m_startMinimized = false;
 };
 
 } // namespace ClipboardPush

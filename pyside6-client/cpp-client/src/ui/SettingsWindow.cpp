@@ -57,9 +57,11 @@ void SettingsWindow::setupUi() {
     m_cbImages = new QCheckBox("Auto Copy Received Images", this);
     m_cbFiles = new QCheckBox("Auto Copy Received Files", this);
     m_cbStartup = new QCheckBox("Start on Boot", this);
+    m_cbStartMinimized = new QCheckBox("Start Minimized to Tray", this);
     leftLayout->addWidget(m_cbImages);
     leftLayout->addWidget(m_cbFiles);
     leftLayout->addWidget(m_cbStartup);
+    leftLayout->addWidget(m_cbStartMinimized);
 
     leftLayout->addStretch();
 
@@ -130,6 +132,7 @@ void SettingsWindow::onSaveClicked() {
     data.autoCopyImage = m_cbImages->isChecked();
     data.autoCopyFile = m_cbFiles->isChecked();
     data.autoStart = m_cbStartup->isChecked();
+    data.startMinimized = m_cbStartMinimized->isChecked();
 
     emit saveClicked(data);
 }
@@ -156,6 +159,10 @@ void SettingsWindow::setAutoCopyFile(bool enabled) {
 
 void SettingsWindow::setAutoStart(bool enabled) {
     m_cbStartup->setChecked(enabled);
+}
+
+void SettingsWindow::setStartMinimized(bool enabled) {
+    m_cbStartMinimized->setChecked(enabled);
 }
 
 void SettingsWindow::setQRContent(const QString& content) {

@@ -19,6 +19,7 @@
 #include <QJsonObject>
 #include <QDateTime>
 #include <QThread>
+#include <QSettings>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -77,8 +78,13 @@ Application::Application(QApplication* app)
     // Setup hotkey
     restartHotkeyListener();
 
+    // Setup auto-start
+    updateAutoStartRegistration(m_config->autoStart());
+
     // Show UI
-    m_mainWindow->show();
+    if (!m_config->startMinimized()) {
+        m_mainWindow->show();
+    }
     m_trayIcon->show();
 }
 
@@ -151,6 +157,7 @@ void Application::showSettings() {
     m_settingsWindow->setAutoCopyImage(m_config->autoCopyImage());
     m_settingsWindow->setAutoCopyFile(m_config->autoCopyFile());
     m_settingsWindow->setAutoStart(m_config->autoStart());
+    m_settingsWindow->setStartMinimized(m_config->startMinimized());
 
     // Generate QR code
     if (!m_config->roomId().isEmpty() && !m_config->roomKey().isEmpty()) {
@@ -321,7 +328,11 @@ void Application::onSettingsSaved(const SettingsData& data) {
     m_config->setAutoCopyImage(data.autoCopyImage);
     m_config->setAutoCopyFile(data.autoCopyFile);
     m_config->setAutoStart(data.autoStart);
+    m_config->setStartMinimized(data.startMinimized);
     m_config->save();
+
+    // Update auto-start registration
+    updateAutoStartRegistration(data.autoStart);
 
     // Update crypto
     if (!m_config->roomKey().isEmpty()) {
@@ -490,6 +501,22 @@ bool Application::pushFileData(const QByteArray& data, const QString& filename,
     }
 
     return result;
+}
+
+void Application::updateAutoStartRegistration(bool enabled) {
+#ifdef _WIN32
+    QSettings settings("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", QSettings::NativeFormat);
+    QString appName = "ClipboardPush";
+    QString appPath = QDir::toNativeSeparators(QCoreApplication::applicationFilePath());
+
+    if (enabled) {
+        settings.setValue(appName, "\"" + appPath + "\"");
+        LOG_INFO("Auto-start registered: {}", appPath.toStdString());
+    } else {
+        settings.remove(appName);
+        LOG_INFO("Auto-start unregistered");
+    }
+#endif
 }
 
 } // namespace ClipboardPush

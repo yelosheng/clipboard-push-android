@@ -34,6 +34,7 @@ void Config::setDefaults() {
     m_autoCopyImage = true;
     m_autoCopyFile = true;
     m_autoStart = false;
+    m_startMinimized = false;
 }
 
 QString Config::getDefaultDownloadPath() {
@@ -117,6 +118,7 @@ bool Config::load(const QString& path) {
     m_autoCopyImage = obj.value("auto_copy_image").toBool(m_autoCopyImage);
     m_autoCopyFile = obj.value("auto_copy_file").toBool(m_autoCopyFile);
     m_autoStart = obj.value("auto_start").toBool(m_autoStart);
+    m_startMinimized = obj.value("start_minimized").toBool(m_startMinimized);
 
     // Generate room if missing
     if (m_roomId.isEmpty() || m_roomKey.isEmpty()) {
@@ -143,6 +145,7 @@ bool Config::save() {
     obj["auto_copy_image"] = m_autoCopyImage;
     obj["auto_copy_file"] = m_autoCopyFile;
     obj["auto_start"] = m_autoStart;
+    obj["start_minimized"] = m_startMinimized;
 
     QJsonDocument doc(obj);
 
@@ -224,6 +227,13 @@ void Config::setAutoCopyFile(bool enabled) {
 void Config::setAutoStart(bool enabled) {
     if (m_autoStart != enabled) {
         m_autoStart = enabled;
+        emit configChanged();
+    }
+}
+
+void Config::setStartMinimized(bool enabled) {
+    if (m_startMinimized != enabled) {
+        m_startMinimized = enabled;
         emit configChanged();
     }
 }

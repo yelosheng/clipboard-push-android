@@ -18,6 +18,7 @@ struct SettingsData {
     bool autoCopyImage = true;
     bool autoCopyFile = true;
     bool autoStart = false;
+    bool startMinimized = false;
 };
 
 class SettingsWindow : public QMainWindow {
@@ -33,6 +34,7 @@ public:
     void setAutoCopyImage(bool enabled);
     void setAutoCopyFile(bool enabled);
     void setAutoStart(bool enabled);
+    void setStartMinimized(bool enabled);
     void setQRContent(const QString& content);
     void setStatus(const QString& text, const QString& color = "#666");
 
@@ -56,6 +58,7 @@ private:
     QCheckBox* m_cbImages = nullptr;
     QCheckBox* m_cbFiles = nullptr;
     QCheckBox* m_cbStartup = nullptr;
+    QCheckBox* m_cbStartMinimized = nullptr;
     QPushButton* m_browseBtn = nullptr;
     QPushButton* m_saveBtn = nullptr;
     QPushButton* m_pushBtn = nullptr;

@@ -50,6 +50,7 @@ private:
     void updateStatus(const QString& text, const QString& color);
     void showSettings();
     void restartHotkeyListener();
+    void updateAutoStartRegistration(bool enabled);
 
     // Push operations
     bool pushText(const QString& text);
