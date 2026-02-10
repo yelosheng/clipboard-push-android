@@ -3,7 +3,7 @@ import os
 import time
 import json
 import logging
-from flask import Flask, request, jsonify, render_template, redirect, url_for, flash
+from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, send_from_directory
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 import boto3
@@ -140,6 +140,11 @@ def index():
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
     return "Clipboard Push Relay Server is Running (Port 5055). 🚀 <a href='/login'>Login</a>"
+
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.path.join(app.root_path, 'static'),
+                               'favicon.png', mimetype='image/vnd.microsoft.icon')
 
 # --- File Transfer Logic (R2 Presigned URLs) ---
 
