@@ -82,13 +82,15 @@ void SocketIOService::ScheduleReconnect() {
     // Create a background thread to wait and reconnect
     std::thread([this]() {
         for (int i = 5; i > 0; --i) {
-            if (m_manuallyStopped || m_status == ConnectionStatus::Connected) return;
+            bool isConnected = (m_status == ConnectionStatus::ConnectedLonely || m_status == ConnectionStatus::ConnectedSynced);
+            if (m_manuallyStopped || isConnected) return;
             
             if (m_onCountdown) m_onCountdown(i);
             std::this_thread::sleep_for(std::chrono::seconds(1));
         }
         
-        if (!m_manuallyStopped && m_status != ConnectionStatus::Connected) {
+        bool isConnected = (m_status == ConnectionStatus::ConnectedLonely || m_status == ConnectionStatus::ConnectedSynced);
+        if (!m_manuallyStopped && !isConnected) {
             LOG_INFO("Reconnection timer expired, trying to connect...");
             Connect(m_serverUrl, m_roomId, m_clientId);
         }
@@ -98,6 +100,7 @@ void SocketIOService::ScheduleReconnect() {
 void SocketIOService::OnMessage(const std::string& message) {
     if (message.empty()) return;
 
+    LOG_DEBUG("WS Msg: %s", message.c_str());
     m_lastActivityTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 
     char engineType = message[0];
@@ -120,7 +123,8 @@ void SocketIOService::StartWatchdog() {
             uint64_t now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
             
             // If connected but no activity for 45 seconds, force reconnect
-            if (m_status == ConnectionStatus::Connected && (now - m_lastActivityTime > 45)) {
+            bool isConnected = (m_status == ConnectionStatus::ConnectedLonely || m_status == ConnectionStatus::ConnectedSynced);
+            if (isConnected && (now - m_lastActivityTime > 45)) {
                 LOG_INFO("Watchdog: Connection is silent for too long. Forcing reconnect.");
                 m_ws.Close(); // This will trigger Disconnect callback and ScheduleReconnect
             }
@@ -132,10 +136,11 @@ void SocketIOService::StartWatchdog() {
 void SocketIOService::HandlePacket(const std::string& packet) {
     if (packet.empty()) return;
 
+    LOG_DEBUG("SIO Pkt: %s", packet.c_str());
     char socketType = packet[0];
     if (socketType == '0') { // Connect success
         LOG_INFO("Socket.IO Connected");
-        SetStatus(ConnectionStatus::Connected);
+        SetStatus(ConnectionStatus::ConnectedLonely); // Default to lonely until update
         JoinRoom();
     } else if (socketType == '2') { // Event
         try {
@@ -145,11 +150,18 @@ void SocketIOService::HandlePacket(const std::string& packet) {
                 auto eventData = j[1];
                 
                 if (eventName == "clipboard_sync") {
+                    // If we receive a sync, we are definitely connected to someone
+                    SetStatus(ConnectionStatus::ConnectedSynced);
                     if (m_onClipboard) {
                         m_onClipboard(eventData.value("content", ""), eventData.value("encrypted", false));
                     }
                 } else if (eventName == "file_sync") {
+                    SetStatus(ConnectionStatus::ConnectedSynced);
                     if (m_onFile) m_onFile(eventData);
+                } else if (eventName == "room_stats") {
+                    int count = eventData.value("count", 1);
+                    if (count > 1) SetStatus(ConnectionStatus::ConnectedSynced);
+                    else SetStatus(ConnectionStatus::ConnectedLonely);
                 }
             }
         } catch (...) {

@@ -14,11 +14,14 @@ public:
     
     void ShowMessage(const std::wstring& title, const std::wstring& msg);
     void ShowContextMenu(HWND hWnd);
+    void UpdateIcon(HICON hNewIcon);
 
 private:
     TrayIcon() = default;
     NOTIFYICONDATAW m_nid;
     HMENU m_hMenu = NULL;
+    HICON m_hCurrentIcon = NULL;
+    HINSTANCE m_hInst = NULL;
 };
 
 }

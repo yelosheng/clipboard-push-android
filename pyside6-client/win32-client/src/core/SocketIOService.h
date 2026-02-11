@@ -9,7 +9,8 @@ namespace ClipboardPush {
 enum class ConnectionStatus {
     Disconnected,
     Connecting,
-    Connected,
+    ConnectedLonely,
+    ConnectedSynced,
     Retrying
 };
 

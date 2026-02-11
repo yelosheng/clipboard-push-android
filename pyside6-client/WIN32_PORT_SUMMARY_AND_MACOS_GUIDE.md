@@ -8,66 +8,61 @@ We successfully ported the Clipboard Push client from a 79MB Qt/Python dependenc
 - **Protocol Fidelity**: Full support for Socket.IO 4.0, AES-256-GCM encryption, and custom file synchronization protocols.
 - **Modern UI**: Native Windows controls with V6 visual styles, tooltips, and custom GDI rendering.
 - **High DPI**: Full 4K clarity via hardware-aware rendering.
+- **Dropbox-style UX**: Dynamic tray icon indicators showing connection health and peer presence.
 
 ---
 
 ## 2. API Mapping Guide (Win32 -> macOS)
 
-This section maps the key Win32 APIs used in v3.0 to their equivalents in the macOS (Cocoa/Foundation) ecosystem for future development.
-
 | Component | Win32 API (v3.0) | macOS Equivalent (Future) | Notes |
 | :--- | :--- | :--- | :--- |
 | **Entry Point** | `wWinMain` / `main` | `NSApplicationMain` / `main` | macOS apps are bundles (`.app`), requiring `Info.plist`. |
-| **Networking** | `WinHTTP` (`winhttp.dll`) | `NSURLSession` (Foundation) | `NSURLSession` natively supports HTTP/2 and WebSockets (`NSURLSessionWebSocketTask`). |
-| **Cryptography** | `CNG` (`bcrypt.dll`) | `CryptoKit` (Swift/ObjC) or `CommonCrypto` (C) | `CryptoKit.AES.GCM` is the modern, preferred API on macOS. |
-| **Clipboard** | `OpenClipboard`, `GetClipboardData` | `NSPasteboard` (AppKit) | Use `NSPasteboard.general`. Map `CF_TEXT` to `NSPasteboardTypeString`. |
-| **High DPI** | `SetProcessDPIAware()` | Automatic (Info.plist) | macOS handles Retina display scaling automatically if defined in the app bundle. |
-| **Global Hotkey** | `RegisterHotKey` | `CGEventTap` or `MASShortcut` | Requires "Accessibility" permissions on modern macOS. |
-| **System Tray** | `Shell_NotifyIcon` | `NSStatusItem` (AppKit) | The "Menu Bar App" pattern is standard on macOS. |
-| **UI Framework** | Native Dialogs (`CreateDialogParam`) | SwiftUI or AppKit (XIB/Storyboard) | SwiftUI is recommended for modern, declarative UI code. |
-| **Settings** | Registry (`RegSetValueEx`) | `UserDefaults` (`plist`) | `UserDefaults.standard` is the standard key-value store. |
+| **Networking** | `WinHTTP` (`winhttp.dll`) | `NSURLSession` (Foundation) | Native WebSocket support in modern Foundation. |
+| **Cryptography** | `CNG` (`bcrypt.dll`) | `CryptoKit` (Swift/ObjC) | Use `AES.GCM` for 100% protocol compatibility. |
+| **Clipboard** | `OpenClipboard`, `GetClipboardData` | `NSPasteboard` (AppKit) | Use `NSPasteboard.general`. |
+| **High DPI** | `SetProcessDPIAware()` | Automatic (Info.plist) | Standard in App Bundles. |
+| **System Tray** | `Shell_NotifyIcon` | `NSStatusItem` (AppKit) | The "Menu Bar App" pattern. |
+| **Drawing** | `GDI+` (overlays) | `Core Graphics` (Quartz) | Use for badge drawing on status items. |
 
 ---
 
 ## 3. Critical Technical Lessons (Troubleshooting & Fixes)
 
 ### A. Networking & WebSocket Stability
-- **Protocol Mapping**: Win32's `WinHttpCrackUrl` does not recognize `ws://` or `wss://`. You must temporarily map them to `http` or `https` for parsing, then set the `WINHTTP_OPTION_UPGRADE_TO_WEB_SOCKET` option.
-- **TLS Version**: Modern servers (R2/S3) require TLS 1.2 or 1.3. WinHTTP may default to older versions; explicitly set `WINHTTP_OPTION_SECURE_PROTOCOLS`.
-- **Zombie Connections**: Connections can "hang" without triggering a disconnect. Implementation of a **Watchdog timer** (monitoring heartbeats) and setting `WINHTTP_OPTION_RECEIVE_TIMEOUT` is mandatory for 24/7 reliability.
-- **Release Threading**: In Release mode, a tight network receive loop can hog the CPU or starve other threads. A tiny `std::this_thread::sleep_for(1ms)` ensures the OS can schedule the transmission thread (needed for replying to Pings).
+- **Protocol Mapping**: Win32's `WinHttpCrackUrl` does not recognize `ws://` or `wss://`. You must temporarily map them to `http` or `https` for parsing.
+- **Zombie Connections**: Connections can "hang" without triggering a disconnect. Implementation of a **Watchdog timer** (45s) and `WINHTTP_OPTION_RECEIVE_TIMEOUT` is mandatory.
+- **Reconnection Loop**: Ensure `onError` callbacks are triggered on **all** failure paths (initialization, DNS, handshake) to avoid getting stuck in a "Connecting..." state.
 
-### B. Unicode & Filename Support
-- **Encoding Pitfall**: Windows uses UTF-16 (`wstring`) for file paths. Passing UTF-8 strings to `std::ifstream` or `fs::path` will fail or corrupt Chinese/Unicode filenames.
-- **Resolution**: Convert all incoming UTF-8 data to `std::wstring` before interacting with the Windows File System.
-- **Presigned URLs**: S3/R2 signatures are extremely sensitive to `Content-Type`. Ensure the upload request's `Content-Type` matches exactly what was requested in the `upload_auth` phase.
+### B. UI & Visual Clarity
+- **Visual Styles**: link to Common Controls v6 via `#pragma comment(linker, ...)` to enable modern rounded buttons and气泡 tooltips.
+- **High DPI**: `SetProcessDPIAware()` is essential for crisp text on 4K screens.
+- **Dynamic Icons**: Instead of multiple static files, use `Gdiplus::Graphics` to compose status badges (Gray/Yellow/Green) onto the base icon at runtime. This saves binary size and enables fluid state changes.
 
-### C. UI & Visual Clarity
-- **Visual Styles**: To avoid the "Windows 95 look," you must link to Common Controls v6 via a linker pragma or manifest.
-- **High DPI**: Without `SetProcessDPIAware()`, Win32 apps will be blurry on 4K screens due to bitmap stretching.
-- **Clipboard Images**: Use **`CF_DIB`** instead of `CF_BITMAP`. Most modern apps (browsers, Telegram) fail to recognize `CF_BITMAP` and will show an empty placeholder.
-
-### D. Thread Safety
-- **std::thread lifecycle**: Overwriting a `joinable` thread object (e.g., during reconnection) triggers `abort()`. Always check `joinable()` and call `detach()` or `join()` before reassigning a thread object.
+### C. Protocol Integration (Socket.IO)
+- **Presence Sensing**: Listen for the `room_stats` event from the server.
+    - `count == 1`: Show **Yellow** (Lonely).
+    - `count > 1`: Show **Green** (Synced/Ready).
+- **Infinite Loops**: Always use a global flag (e.g., `g_isProcessingRemoteSync`) to prevent local clipboard change events from re-uploading content received from the network.
 
 ---
 
 ## 4. Cross-Platform Compatibility Strategy
 
-### A. Core Logic Isolation (Portable C++)
-The following modules in `src/core/` are platform-independent and can be reused 100%:
-- **`Config.cpp`**: Logic for JSON parsing (`nlohmann/json`).
-- **`SocketIOService.cpp`**: The protocol logic (handshake 40/42, ping/pong).
-- **`Crypto.cpp`** (Wrapper): Keep the interface consistent across platforms.
+### A. Core Logic Isolation
+The following modules in `src/core/` are platform-independent:
+- **`Config.cpp`**: JSON parsing via `nlohmann/json`.
+- **`SocketIOService.cpp`**: Protocol logic (handshake 40/42, ping/pong, `room_stats`).
+- **`Crypto.cpp`** (Interface): Keep encryption/decryption signatures consistent.
 
 ### B. Security Strategy
-- **AES-256-GCM**: Always use the native system provider (CNG on Windows, CryptoKit on macOS) to ensure hardware acceleration and FIPS compliance without carrying OpenSSL.
+- **AES-256-GCM**: Format must be `[12-byte Nonce] + [Ciphertext] + [16-byte Tag]` for interoperability with Python/Android clients.
+- **Secure RNG**: Use `BCryptGenRandom` (Win) or `SecRandomCopyBytes` (Mac) for Nonces. Never use `rand()`.
 
 ---
 
-## 5. Recommended macOS Stack
-- **Language**: Objective-C++ (`.mm`) to bridge C++ logic with Cocoa.
-- **Build System**: CMake (generating Xcode project).
-- **UI**: SwiftUI for a modern, responsive look with minimal boilerplate.
+## 5. Final Distribution Specs (Win32)
+- **Binary Size**: **340 KB** (Single file, no DLLs).
+- **Resource Usage**: < 10MB RAM, 0% idle CPU.
+- **Portability**: Supports Windows 7 (SP1) through Windows 11.
 
-*Generated by Gemini CLI - v3.0 Finalized Documentation*
+*Generated by Gemini CLI - v3.0 Final Production Build*

@@ -1,35 +1,32 @@
-# Findings & Tech Stack
+# Findings & Tech Stack - Systray Indicators
 
-## Technology Selection (Win32 "Ultra-Light" Edition)
+## Dynamic Icon Composition Strategy
 
-### 1. Networking: WinHTTP
-- **Why**: Built-in Windows API, supports HTTP/1.1 and WebSockets (Windows 8+).
-- **Advantage**: Zero external dependencies (unlike libcurl or QtNetwork).
-- **Note**: Need to handle the WebSocket handshake and framing manually or use WinHTTP WebSocket API.
+### 1. Drawing the "Badge" or "Light"
+- **Method**: Use `Gdiplus::Graphics` object to draw on a `Gdiplus::Bitmap`.
+- **Steps**:
+    1.  Load the base icon from resources into a `Gdiplus::Bitmap`.
+    2.  Get Graphics context from that bitmap.
+    3.  Set SmoothingMode to `SmoothingModeAntiAlias`.
+    4.  Draw a small circle in the bottom-right quadrant.
+    5.  Fill with state-specific color.
+    6.  Draw a 1px white or dark border around the circle for contrast.
+    7.  Convert `Gdiplus::Bitmap` back to `HICON` using `GetHICON()`.
 
-### 2. Cryptography: Windows CNG (Cryptography API: Next Generation)
-- **Why**: Built-in, FIPS compliant, hardware accelerated.
-- **Advantage**: Replaces OpenSSL (which is huge).
-- **Target**: `BCryptEncrypt`, `BCryptDecrypt` with `BCRYPT_AES_GCM_CHAIN_MODE`.
+### 2. State to Color Mapping
+- **Disconnected (Red/Gray)**: `Gdiplus::Color(128, 128, 128)` (Gray) or `Color(255, 0, 0)` (Red). *User requested Gray for Disconnected.*
+- **Lonely (Yellow)**: `Gdiplus::Color(255, 215, 0)` (Gold). *Connected but no peers.*
+- **Synced (Green)**: `Gdiplus::Color(50, 205, 50)` (LimeGreen). *Connected and ready.*
 
-### 3. JSON Parsing: nlohmann/json
-- **Why**: Industry standard, easy to use.
-- **Cost**: Header-only, might add compile time/binary size.
-- **Alternative**: If size is critical, write a tiny custom parser (only need minimal features). *Decision: Start with nlohmann, optimize later if needed.*
+### 3. Detecting "Room Peers"
+- **Problem**: Does the server provide room occupancy?
+- **Analysis**: If not, we can infer "Synced" if we receive a message from a `client_id` that is not our own.
+- **Alternative**: Check Socket.IO handshake response. Some servers send a `sid` and room info.
 
-### 4. UI Framework: Pure Win32 Dialogs
-- **Why**: Minimal overhead. Windows draws it.
-- **Method**: Use Resource Editor (or manual `.rc` file) to define `IDD_MAINWINDOW`, `IDD_SETTINGSWINDOW`.
-- **Image Handling**: **GDI+** (gdiplus.dll) for saving Clipboard DIB to PNG (required for syncing images to server). GDI+ is standard on XP+.
+### 4. GDI+ Memory Management
+- **Warning**: Every call to `GetHICON()` creates a new handle that **must** be destroyed with `DestroyIcon()`.
+- **Strategy**: The `TrayIcon` class should store the current `HICON` and destroy the previous one before applying a new one.
 
-### 5. Build System
-- **CMake**: Standard, integrates with VS.
-- **Flags**:
-    - `/O1` (Minimize Size)
-    - `/GS-` (Disable buffer security check - optional, for extreme size)
-    - Statically link CRT (`/MT`) to avoid VC Runtime dependency? -> Increases size but portable. *Decision: Use `/MD` (Dynamic) initially to keep exe small, rely on system installed runtimes, or `/MT` for "true" portability.*
-
-### 6. Project Structure
-- Single executable.
-- Static linking for `nlohmann` and `qr-code`.
-- Dynamic linking for System DLLs (`kernel32`, `user32`, `gdi32`, `winhttp`, `bcrypt`, `gdiplus`, `shell32`).
+### 5. High DPI Considerations
+- The base icon should be the largest available (e.g., 256x256) or we should detect the current system icon size using `GetSystemMetrics(SM_CXSMICON)`.
+- **Choice**: Composition should happen at standard small icon size (usually 16x16 or 32x32 depending on DPI) to keep it sharp.

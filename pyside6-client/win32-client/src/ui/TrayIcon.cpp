@@ -13,13 +13,15 @@ TrayIcon& TrayIcon::Instance() {
 }
 
 bool TrayIcon::Init(HWND hWnd, HINSTANCE hInst) {
+    m_hInst = hInst;
     ZeroMemory(&m_nid, sizeof(m_nid));
     m_nid.cbSize = sizeof(m_nid);
     m_nid.hWnd = hWnd;
     m_nid.uID = 1;
     m_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_INFO;
     m_nid.uCallbackMessage = WM_TRAYICON;
-    m_nid.hIcon = LoadIconW(hInst, MAKEINTRESOURCEW(IDI_APP_ICON));
+    m_hCurrentIcon = LoadIconW(hInst, MAKEINTRESOURCEW(IDI_APP_ICON));
+    m_nid.hIcon = m_hCurrentIcon;
     wcscpy_s(m_nid.szTip, L"Clipboard Push");
 
     m_hMenu = LoadMenuW(hInst, MAKEINTRESOURCEW(IDR_TRAY_MENU));
@@ -30,6 +32,20 @@ bool TrayIcon::Init(HWND hWnd, HINSTANCE hInst) {
 void TrayIcon::Remove() {
     Shell_NotifyIconW(NIM_DELETE, &m_nid);
     if (m_hMenu) DestroyMenu(m_hMenu);
+    if (m_hCurrentIcon) DestroyIcon(m_hCurrentIcon);
+}
+
+void TrayIcon::UpdateIcon(HICON hNewIcon) {
+    if (!hNewIcon) return;
+    
+    // Destroy previous icon ONLY if it was dynamically created (or if we want to replace the default)
+    // Actually, always destroy the previous handle we tracked to prevent leaks
+    if (m_hCurrentIcon) DestroyIcon(m_hCurrentIcon);
+    
+    m_hCurrentIcon = hNewIcon;
+    m_nid.hIcon = m_hCurrentIcon;
+    m_nid.uFlags = NIF_ICON;
+    Shell_NotifyIconW(NIM_MODIFY, &m_nid);
 }
 
 void TrayIcon::ShowMessage(const std::wstring& title, const std::wstring& msg) {

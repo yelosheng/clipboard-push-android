@@ -301,12 +301,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     // Single Instance Protection
     HANDLE hMutex = CreateMutexW(NULL, TRUE, L"Global\\ClipboardPushWin32_SingleInstance_Mutex");
     if (hMutex == NULL || GetLastError() == ERROR_ALREADY_EXISTS) {
-        // Find existing main window and bring it to front
-        HWND hExisting = FindWindowW(L"ClipboardPushMessageWindow", NULL);
-        if (hExisting) {
-            // Note: Our main UI window might be hidden, we can send a message to show it
-            // For now, we just prevent start. 
-        }
         if (hMutex) CloseHandle(hMutex);
         return 0;
     }
@@ -378,13 +372,37 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
         },
         [](ConnectionStatus status) {
             std::wstring statusStr;
+            COLORREF color = RGB(128, 128, 128); // Gray default
+            
             switch(status) {
-                case ConnectionStatus::Connected: statusStr = L"Connected"; break;
-                case ConnectionStatus::Disconnected: statusStr = L"Disconnected"; break;
-                case ConnectionStatus::Connecting: statusStr = L"Connecting..."; break;
-                case ConnectionStatus::Retrying: statusStr = L"Retrying in 5s..."; break;
+                case ConnectionStatus::ConnectedLonely: 
+                    statusStr = L"Connected (Lonely)"; 
+                    color = RGB(255, 215, 0); // Gold/Yellow
+                    break;
+                case ConnectionStatus::ConnectedSynced: 
+                    statusStr = L"Connected (Synced)"; 
+                    color = RGB(50, 205, 50); // LimeGreen
+                    break;
+                case ConnectionStatus::Disconnected: 
+                    statusStr = L"Disconnected"; 
+                    color = RGB(128, 128, 128); // Gray
+                    break;
+                case ConnectionStatus::Connecting: 
+                    statusStr = L"Connecting..."; 
+                    color = RGB(100, 100, 255); // Light Blue
+                    break;
+                case ConnectionStatus::Retrying: 
+                    statusStr = L"Retrying..."; 
+                    color = RGB(255, 69, 0); // OrangeRed
+                    break;
             }
             ClipboardPush::UI::MainWindow::Instance().SetStatus(statusStr);
+            
+            // Update Tray Icon with dynamic indicator
+            HICON hNew = ClipboardPush::Platform::CreateStatusIcon(GetModuleHandle(NULL), IDI_APP_ICON, color);
+            if (hNew) {
+                ClipboardPush::UI::TrayIcon::Instance().UpdateIcon(hNew);
+            }
         },
         [](int secondsLeft) {
             std::wstring statusStr = L"Retrying in " + std::to_wstring(secondsLeft) + L"s...";
