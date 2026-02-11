@@ -58,6 +58,7 @@ class ClipboardService : Service() {
     }
 
     private var currentPeerCount = 0
+    private var currentPeers: List<String> = emptyList()
     fun getPeerCount(): Int = currentPeerCount
 
     fun reconnect() {
@@ -176,7 +177,7 @@ class ClipboardService : Service() {
                     onPeerCountChanged?.invoke(count)
                     // Update notification to reflect peer count change (Yellow -> Green)
                     if (currentState == ConnectionState.CONNECTED) {
-                        NotificationHelper.updateServiceNotification(this@ClipboardService, currentState, serverAddress, count)
+                        NotificationHelper.updateServiceNotification(this@ClipboardService, currentState, serverAddress, count, currentPeers)
                     }
                 }
             } catch (e: Exception) {
@@ -187,7 +188,11 @@ class ClipboardService : Service() {
         serviceScope.launch {
             try {
                 relayRepository.peers.collect { peers ->
+                    currentPeers = peers
                     onPeersChanged?.invoke(peers)
+                    if (currentState == ConnectionState.CONNECTED) {
+                        NotificationHelper.updateServiceNotification(this@ClipboardService, currentState, serverAddress, currentPeerCount, peers)
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error observing peers", e)
@@ -282,7 +287,8 @@ class ClipboardService : Service() {
                 this@ClipboardService,
                 ConnectionState.CONNECTING,
                 serverAddress,
-                currentPeerCount
+                currentPeerCount,
+                currentPeers
             )
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -441,7 +447,7 @@ class ClipboardService : Service() {
         Log.d(TAG, "State: $state")
         DebugLogger.log(TAG, "State changed: $state")
         currentState = state
-        NotificationHelper.updateServiceNotification(this, state, serverAddress, currentPeerCount)
+        NotificationHelper.updateServiceNotification(this, state, serverAddress, currentPeerCount, currentPeers)
         onStateChanged?.invoke(state)
     }
 

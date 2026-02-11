@@ -65,7 +65,8 @@ fun HomeScreen(
     onMessageClick: (PushMessage) -> Unit,
     onDeleteMessages: (Set<String>) -> Unit = {},
     onPushClipboard: () -> Unit,
-    onReconnectClick: () -> Unit = {}
+    onReconnectClick: () -> Unit = {},
+    peers: List<String> = emptyList()
 ) {
     // 构建基础URL
     val baseUrl = remember(serverAddress, useHttps) {
@@ -160,7 +161,20 @@ fun HomeScreen(
             } else {
                 // 正常模式的 TopAppBar
                 TopAppBar(
-                    title = { }, // 不显示标题
+                    title = {
+                        if (connectionState == ConnectionState.CONNECTED) {
+                            // Filter logic: same as SettingsScreen
+                            val otherPeers = peers.filter { !it.startsWith("android_") }
+                            if (otherPeers.isNotEmpty()) {
+                                Text(
+                                    text = otherPeers.joinToString(", "),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    },
                     navigationIcon = {
                         // 显示连接状态图标
                         val (icon, tint, description) = when (connectionState) {

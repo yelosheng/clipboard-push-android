@@ -36,11 +36,17 @@ object NotificationHelper {
         context: Context,
         state: ConnectionState,
         serverAddress: String,
-        peerCount: Int = 0
+        peerCount: Int = 0,
+        peers: List<String> = emptyList()
     ): Notification {
         val contentText = when (state) {
             ConnectionState.CONNECTED -> {
-                if (peerCount > 1) "已连接 (可传输)" else "已连接 (无设备)"
+                val otherPeers = peers.filter { !it.startsWith("android_") }
+                if (otherPeers.isNotEmpty()) {
+                    "已连接: ${otherPeers.joinToString(", ")}"
+                } else {
+                    if (peerCount > 1) "已连接 (可传输)" else "已连接 (无设备)"
+                }
             }
             ConnectionState.CONNECTING -> "正在连接..."
             ConnectionState.DISCONNECTED -> "未连接"
@@ -144,9 +150,10 @@ object NotificationHelper {
         context: Context,
         state: ConnectionState,
         serverAddress: String,
-        peerCount: Int = 0
+        peerCount: Int = 0,
+        peers: List<String> = emptyList()
     ) {
-        val notification = buildServiceNotification(context, state, serverAddress, peerCount)
+        val notification = buildServiceNotification(context, state, serverAddress, peerCount, peers)
         val notificationManager = context.getSystemService(NotificationManager::class.java)
         notificationManager.notify(SERVICE_NOTIFICATION_ID, notification)
     }

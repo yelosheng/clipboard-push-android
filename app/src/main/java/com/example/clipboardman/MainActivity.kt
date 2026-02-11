@@ -465,7 +465,8 @@ fun MainNavigation(
                 onMessageClick = { message -> onMessageClick(message, serverAddress, useHttps) },
                 onDeleteMessages = { messageIds -> viewModel.deleteMessages(messageIds) },
                 onPushClipboard = onPushClipboard,
-                onReconnectClick = onStartService
+                onReconnectClick = onStartService,
+                peers = peers
             )
         }
 
