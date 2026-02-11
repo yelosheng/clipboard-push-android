@@ -297,8 +297,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     return 0;
 }
 
-int main() {
-    HINSTANCE hInstance = GetModuleHandle(NULL);
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
+    SetProcessDPIAware();
     ClipboardPush::Platform::Init();
     ClipboardPush::Config::Instance().Load();
     auto& data = ClipboardPush::Config::Instance().Data();
