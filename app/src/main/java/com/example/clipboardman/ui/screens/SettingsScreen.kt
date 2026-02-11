@@ -181,7 +181,7 @@ fun SettingsScreen(
                 Column {
                     RadioButtonOption(
                         text = "自动保存到本地",
-                        description = "下载文件并复制本地路径到剪贴板",
+                        description = "仅下载文件到本地，不修改剪贴板",
                         selected = fileHandleMode == SettingsRepository.FILE_MODE_SAVE_LOCAL || fileHandleMode == SettingsRepository.FILE_MODE_COPY_REFERENCE, // Fallback for legacy setting
                         onClick = { onFileHandleModeChange(SettingsRepository.FILE_MODE_SAVE_LOCAL) }
                     )

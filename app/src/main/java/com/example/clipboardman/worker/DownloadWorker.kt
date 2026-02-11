@@ -113,16 +113,25 @@ class DownloadWorker(
                 
                 val clipboardHelper = com.example.clipboardman.service.ClipboardHelper(applicationContext)
                 
+                // Construct absolute path for clipboard
+                val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                val appDir = File(downloadsDir, "ClipboardMan")
+                val savedFile = File(appDir, uniqueName)
+                val absolutePath = savedFile.absolutePath
+
                 when (fileHandleMode) {
                     SettingsRepository.FILE_MODE_SAVE_LOCAL -> {
-                        // Just save, copy file path to clipboard
-                        clipboardHelper.copyFilePath(savedUri.toString())
-                        Log.d(TAG, "Copied file path to clipboard")
+                        // Just save, DO NOT copy path to clipboard (User request)
+                        // clipboardHelper.copyFilePath(absolutePath)
+                        Log.d(TAG, "Saved to local, clipboard not modified")
                     }
                     SettingsRepository.FILE_MODE_COPY_REFERENCE -> {
-                        // Copy file URI reference
-                        clipboardHelper.copyImageUri(savedUri)
-                        Log.d(TAG, "Copied file URI to clipboard")
+                        // Copy file URI reference (Legacy/Fallback) - treats as Save Local now? 
+                        // Or we can keep it for legacy compatibility if user has old int value
+                        // For now, let's just log it or maybe copy path if really needed.
+                        // But since we removed the UI option, this case shouldn't be selected.
+                        // Let's assume effectively SAVE_LOCAL behavior to be safe.
+                         Log.d(TAG, "Legacy mode (Copy Reference): Saved to local, clipboard not modified")
                     }
                     SettingsRepository.FILE_MODE_SAVE_AND_COPY_IMAGE -> {
                         // If it's an image, copy the image to clipboard
@@ -133,11 +142,11 @@ class DownloadWorker(
                             } catch (e: Exception) {
                                 Log.e(TAG, "Failed to copy image to clipboard", e)
                                 // Fallback: copy path
-                                clipboardHelper.copyFilePath(savedUri.toString())
+                                clipboardHelper.copyFilePath(absolutePath)
                             }
                         } else {
-                            // For non-images, copy file URI
-                            clipboardHelper.copyImageUri(savedUri)
+                            // For non-images, copy file path
+                             clipboardHelper.copyFilePath(absolutePath)
                         }
                     }
                 }
