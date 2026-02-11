@@ -36,7 +36,7 @@ class SettingsRepository(private val context: Context) {
         // 默认值
         private const val DEFAULT_SERVER_ADDRESS = "kxkl.tk:5055"
         private const val DEFAULT_USE_HTTPS = false
-        private const val DEFAULT_FILE_HANDLE_MODE = FILE_MODE_COPY_REFERENCE
+        private const val DEFAULT_FILE_HANDLE_MODE = FILE_MODE_SAVE_LOCAL // Changed from COPY_REFERENCE
         private const val DEFAULT_AUTO_CONNECT = false
         private const val DEFAULT_MAX_HISTORY_COUNT = 100
     }
