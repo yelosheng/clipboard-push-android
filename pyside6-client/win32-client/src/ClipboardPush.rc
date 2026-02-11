@@ -44,14 +44,17 @@ BEGIN
     LTEXT           "Push Hotkey:", IDC_STATIC, 7, 40, 60, 8
     EDITTEXT        IDC_SETTINGS_HOTKEY, 7, 50, 100, 14, ES_AUTOHSCROLL
     
-    CONTROL         "Auto Copy Received Images", IDC_SETTINGS_IMAGES, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 7, 75, 120, 10
-    CONTROL         "Auto Copy Received Files", IDC_SETTINGS_FILES, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 7, 90, 120, 10
-    CONTROL         "Start on Boot", IDC_SETTINGS_STARTUP, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 7, 105, 120, 10
-    CONTROL         "Start Minimized to Tray", IDC_SETTINGS_MINIMIZED, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 7, 120, 120, 10
+    LTEXT           "Device ID:", IDC_STATIC, 7, 70, 60, 8
+    EDITTEXT        IDC_SETTINGS_DEVICEID, 7, 80, 100, 14, ES_AUTOHSCROLL
     
-    DEFPUSHBUTTON   "Save Settings", IDC_SETTINGS_SAVE, 7, 145, 80, 14
-    PUSHBUTTON      "Reconnect", IDC_SETTINGS_RECONNECT, 7, 164, 80, 14
-    PUSHBUTTON      "Reset Keys", IDC_SETTINGS_RESET, 7, 183, 80, 14
+    CONTROL         "Auto Copy Received Images", IDC_SETTINGS_IMAGES, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 7, 100, 120, 10
+    CONTROL         "Auto Copy Received Files", IDC_SETTINGS_FILES, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 7, 115, 120, 10
+    CONTROL         "Start on Boot", IDC_SETTINGS_STARTUP, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 7, 130, 120, 10
+    CONTROL         "Start Minimized to Tray", IDC_SETTINGS_MINIMIZED, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 7, 145, 120, 10
+    
+    DEFPUSHBUTTON   "Save Settings", IDC_SETTINGS_SAVE, 7, 165, 80, 14
+    PUSHBUTTON      "Reconnect", IDC_SETTINGS_RECONNECT, 7, 184, 80, 14
+    PUSHBUTTON      "Reset Keys", IDC_SETTINGS_RESET, 7, 203, 80, 14
     
     // QR Code Area (Custom draw)
     GROUPBOX        "Scan to Pair Mobile", IDC_STATIC, 160, 45, 153, 168
