@@ -132,6 +132,7 @@ class RelayRepository {
                             }
                         }
                         Log.d("Relay", "Clients: $clientList")
+                        DebugLogger.log("Relay", "Clients received: $clientList")
                         _peers.tryEmit(clientList)
                     }
                 } catch (e: Exception) {

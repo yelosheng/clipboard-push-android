@@ -105,9 +105,9 @@ fun SettingsScreen(
 
                             // Display Connected PC Name
                             if (connectionState == ConnectionState.CONNECTED) {
-                                val pcPeers = peers.filter { it.startsWith("pc_") }
-                                if (pcPeers.isNotEmpty()) {
-                                    val peerNames = pcPeers.joinToString(", ") { it }
+                                val otherPeers = peers.filter { !it.startsWith("android_") }
+                                if (otherPeers.isNotEmpty()) {
+                                    val peerNames = otherPeers.joinToString(", ") { it }
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
                                         text = "已连接 PC: $peerNames",
