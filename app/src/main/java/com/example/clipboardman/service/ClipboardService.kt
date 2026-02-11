@@ -122,6 +122,7 @@ class ClipboardService : Service() {
 
     var onStateChanged: ((ConnectionState) -> Unit)? = null
     var onPeerCountChanged: ((Int) -> Unit)? = null
+    var onPeersChanged: ((List<String>) -> Unit)? = null
     var onMessageReceived: ((PushMessage) -> Unit)? = null
 
     private val processedMessageIds = Collections.synchronizedSet(HashSet<String>())
@@ -180,6 +181,16 @@ class ClipboardService : Service() {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error observing peer count", e)
+            }
+        }
+
+        serviceScope.launch {
+            try {
+                relayRepository.peers.collect { peers ->
+                    onPeersChanged?.invoke(peers)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error observing peers", e)
             }
         }
 

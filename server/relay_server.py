@@ -88,10 +88,11 @@ def broadcast_room_stats(room):
     if not room: return
     
     # Count unique client_ids in this room
-    count = sum(1 for r in CLIENT_ROOMS.values() if r == room)
+    client_list = [cid for cid, r in CLIENT_ROOMS.items() if r == room]
+    count = len(client_list)
     
-    socketio.emit('room_stats', {'count': count, 'room': room}, room=room)
-    logger.info(f"Broadcast room_stats to {room}: {count} clients")
+    socketio.emit('room_stats', {'count': count, 'room': room, 'clients': client_list}, room=room)
+    logger.info(f"Broadcast room_stats to {room}: {count} clients ({client_list})")
 
 
 # --- Auth Logic ---

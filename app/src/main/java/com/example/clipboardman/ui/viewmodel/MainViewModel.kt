@@ -28,6 +28,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _peerCount = MutableStateFlow(0)
     val peerCount: StateFlow<Int> = _peerCount.asStateFlow()
 
+    private val _peers = MutableStateFlow<List<String>>(emptyList())
+    val peers: StateFlow<List<String>> = _peers.asStateFlow()
+
     // 消息列表
     private val _messages = MutableStateFlow<List<PushMessage>>(emptyList())
     val messages: StateFlow<List<PushMessage>> = _messages.asStateFlow()
@@ -82,6 +85,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updatePeerCount(count: Int) {
         _peerCount.value = count
+    }
+
+    fun updatePeers(peers: List<String>) {
+        _peers.value = peers
     }
 
     /**

@@ -32,6 +32,9 @@ class RelayRepository {
     private val _peerCount = MutableSharedFlow<Int>(replay = 1)
     val peerCount = _peerCount.asSharedFlow()
 
+    private val _peers = MutableSharedFlow<List<String>>(replay = 1)
+    val peers = _peers.asSharedFlow()
+
     fun connect(serverUrl: String, roomId: String, clientId: String) {
         disconnect() // Close existing
 
@@ -119,6 +122,17 @@ class RelayRepository {
                         val count = data.optInt("count", 0)
                         Log.d("Relay", "Received room_stats: $count")
                         _peerCount.tryEmit(count)
+                        
+                        // Parse clients list
+                        val clientsArray = data.optJSONArray("clients")
+                        val clientList = mutableListOf<String>()
+                        if (clientsArray != null) {
+                            for (i in 0 until clientsArray.length()) {
+                                clientList.add(clientsArray.getString(i))
+                            }
+                        }
+                        Log.d("Relay", "Clients: $clientList")
+                        _peers.tryEmit(clientList)
                     }
                 } catch (e: Exception) {
                     Log.e("Relay", "Error processing room_stats", e)

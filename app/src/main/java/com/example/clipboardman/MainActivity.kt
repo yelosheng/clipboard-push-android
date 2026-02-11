@@ -75,6 +75,11 @@ class MainActivity : ComponentActivity() {
             clipboardService?.onPeerCountChanged = { count ->
                 mainViewModel.updatePeerCount(count)
             }
+            
+            // 设置 Peers 回调
+            clipboardService?.onPeersChanged = { peers ->
+                mainViewModel.updatePeers(peers)
+            }
 
             // 同步当前状态
             val currentState = clipboardService?.getConnectionState() ?: ConnectionState.DISCONNECTED
@@ -428,6 +433,7 @@ fun MainNavigation(
     val fileHandleMode by viewModel.fileHandleMode.collectAsState()
     val autoConnect by viewModel.autoConnect.collectAsState()
     val maxHistoryCount by viewModel.maxHistoryCount.collectAsState()
+    val peers by viewModel.peers.collectAsState()
 
     // 自动连接 (仅当设置改变时触发，或者首次进入时)
     LaunchedEffect(autoConnect, serverAddress) {
@@ -471,6 +477,7 @@ fun MainNavigation(
                 autoConnect = autoConnect,
                 maxHistoryCount = maxHistoryCount,
                 connectionState = connectionState,
+                peers = peers,
                 onConnectClick = {
                     if (serverAddress.isNotBlank()) {
                         onStartService()
