@@ -51,33 +51,35 @@ class MainActivity : ComponentActivity() {
     private var isBound = false
 
     // ViewModel 引用，用于状态同步
-    private var mainViewModel: MainViewModel? = null
+    private lateinit var mainViewModel: MainViewModel
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             val binder = service as ClipboardService.LocalBinder
             clipboardService = binder.getService()
             isBound = true
+            com.example.clipboardman.util.DebugLogger.log("MainActivity", "onServiceConnected: Service bound, ViewModel ready=${::mainViewModel.isInitialized}")
+
 
             // 设置状态回调
             clipboardService?.onStateChanged = { state ->
-                mainViewModel?.updateConnectionState(state)
+                mainViewModel.updateConnectionState(state)
             }
 
             // 设置消息回调
             clipboardService?.onMessageReceived = { message ->
-                mainViewModel?.addMessage(message)
+                mainViewModel.addMessage(message)
             }
             
             // 设置 PeerCount 回调
             clipboardService?.onPeerCountChanged = { count ->
-                mainViewModel?.updatePeerCount(count)
+                mainViewModel.updatePeerCount(count)
             }
 
             // 同步当前状态
             val currentState = clipboardService?.getConnectionState() ?: ConnectionState.DISCONNECTED
-            mainViewModel?.updateConnectionState(currentState)
-            mainViewModel?.updatePeerCount(clipboardService?.getPeerCount() ?: 0)
+            mainViewModel.updateConnectionState(currentState)
+            mainViewModel.updatePeerCount(clipboardService?.getPeerCount() ?: 0)
             
             // 不再从 Service 内存同步消息历史
             // ViewModel 通过 messageRepository.messagesFlow.collect 持续观察，更可靠
@@ -160,6 +162,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Initialize ViewModel synchronously to ensure it's ready for Service callbacks
+        mainViewModel = androidx.lifecycle.ViewModelProvider(this)[MainViewModel::class.java]
+        com.example.clipboardman.util.DebugLogger.log("MainActivity", "ViewModel initialized synchronously in onCreate")
+        
         // 请求通知权限 (Android 13+)
         requestNotificationPermission()
 
@@ -169,15 +175,11 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    val viewModel: MainViewModel = viewModel()
-
-                    // 保存 ViewModel 引用
-                    LaunchedEffect(viewModel) {
-                        mainViewModel = viewModel
-                    }
-
+                    // Use the Activity-scoped ViewModel instance directly
+                    // No need to re-initialize or use LaunchedEffect
+                    
                     MainNavigation(
-                        viewModel = viewModel,
+                        viewModel = mainViewModel,
                         onStartService = { startClipboardService() },
                         onStopService = { stopClipboardService() },
                         onMessageClick = { message, serverAddr, useHttps -> handleMessageClick(message, serverAddr, useHttps) },
@@ -252,7 +254,7 @@ class MainActivity : ComponentActivity() {
             action = ClipboardService.ACTION_STOP
         }
         startService(intent)
-        mainViewModel?.updateConnectionState(ConnectionState.DISCONNECTED)
+        mainViewModel.updateConnectionState(ConnectionState.DISCONNECTED)
     }
 
     private fun handleMessageClick(message: PushMessage, serverAddress: String, useHttps: Boolean) {

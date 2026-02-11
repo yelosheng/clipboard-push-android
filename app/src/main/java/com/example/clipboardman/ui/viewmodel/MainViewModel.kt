@@ -8,6 +8,7 @@ import com.example.clipboardman.data.model.PushMessage
 import com.example.clipboardman.data.repository.MessageRepository
 import com.example.clipboardman.data.repository.SettingsRepository
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.retry
 import kotlinx.coroutines.launch
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -31,51 +32,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _messages = MutableStateFlow<List<PushMessage>>(emptyList())
     val messages: StateFlow<List<PushMessage>> = _messages.asStateFlow()
 
-    init {
-        com.example.clipboardman.util.DebugLogger.log("ViewModel", "INIT - ViewModel Created!")
-        
-        // Auto-Migration for legacy defaults
-        viewModelScope.launch {
-            try {
-                val currentAddress = settingsRepository.serverAddressFlow.first()
-                
-                // 如果是 "localhost" (模拟器/旧缓存) 或者空或者包含端口 5000 (旧默认)
-                if (currentAddress.contains("localhost") || currentAddress.contains("5000")) {
-                    com.example.clipboardman.util.DebugLogger.log("ViewModel", "Auto-Migrating config: $currentAddress -> kxkl.tk:5055")
-                    settingsRepository.saveServerAddress("kxkl.tk:5055")
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("MainViewModel", "Error in auto-migration", e)
-            }
-        }
-        // 启动时加载本地存储的消息
-        loadMessagesFromStorage()
-    }
+
 
     private fun loadMessagesFromStorage() {
         viewModelScope.launch {
-            try {
-                var firstEmission = true
-                // 持续观察 MessageRepository 的变化（包括 localPath 更新）
-                messageRepository.messagesFlow.collect { storedMessages ->
+            // 使用 retry 机制防止读取错误导致 Flow 终止
+            messageRepository.messagesFlow
+                .retry { e ->
+                    com.example.clipboardman.util.DebugLogger.log("MainViewModel", "CRITICAL: Error collecting messages, retrying... ${e.message}")
+                    kotlinx.coroutines.delay(1000) // 延迟1秒重试
+                    true // 始终重试
+                }
+                .collect { storedMessages ->
                     val maxCount = maxHistoryCount.value
-                    val result = storedMessages.take(maxCount)
                     
                     com.example.clipboardman.util.DebugLogger.log(
                         "ViewModel", 
-                        "Flow emit: stored=${storedMessages.size}, maxCount=$maxCount, result=${result.size}, first=$firstEmission"
+                        "Flow emit: received ${storedMessages.size} msgs, limit=$maxCount. First ID: ${storedMessages.firstOrNull()?.id}"
                     )
                     
-                    // 只有当结果非空，或者这不是第一次发射时才更新
-                    // 这避免了 DataStore 初始化时可能的空发射覆盖真实数据
-                    if (result.isNotEmpty() || !firstEmission) {
-                        _messages.value = result
-                    }
-                    firstEmission = false
+                    val result = storedMessages.take(maxCount)
+                    _messages.value = result
                 }
-            } catch (e: Exception) {
-                android.util.Log.e("MainViewModel", "Error loading messages from storage", e)
-            }
         }
     }
 
@@ -192,5 +170,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             settingsRepository.saveMaxHistoryCount(count)
         }
+    }
+
+    init {
+        com.example.clipboardman.util.DebugLogger.log("ViewModel", "INIT - ViewModel Created! (Moved to bottom)")
+        
+        // Auto-Migration for legacy defaults
+        viewModelScope.launch {
+            try {
+                val currentAddress = settingsRepository.serverAddressFlow.first()
+                if (currentAddress.contains("localhost") || currentAddress.contains("5000")) {
+                    com.example.clipboardman.util.DebugLogger.log("ViewModel", "Auto-Migrating config: $currentAddress -> kxkl.tk:5055")
+                    settingsRepository.saveServerAddress("kxkl.tk:5055")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MainViewModel", "Error in auto-migration", e)
+            }
+        }
+        // 启动时加载本地存储的消息
+        loadMessagesFromStorage()
     }
 }

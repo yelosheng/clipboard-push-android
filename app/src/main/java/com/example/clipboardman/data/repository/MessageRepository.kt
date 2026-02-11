@@ -11,6 +11,7 @@ import com.example.clipboardman.util.DebugLogger
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 
 private val Context.messageDataStore: DataStore<Preferences> by preferencesDataStore(name = "messages")
@@ -30,15 +31,27 @@ class MessageRepository(private val context: Context) {
     /**
      * 消息列表 Flow
      */
-    val messagesFlow: Flow<List<PushMessage>> = context.messageDataStore.data.map { preferences ->
+    val messagesFlow: Flow<List<PushMessage>> = context.messageDataStore.data
+        .catch { exception ->
+            DebugLogger.log("MsgRepo", "CRITICAL ERROR: DataStore read failed: ${exception::class.simpleName} - ${exception.message}")
+            if (exception is java.io.IOException) {
+                DebugLogger.log("MsgRepo", "Recovering from IOException by emitting empty preferences")
+                emit(androidx.datastore.preferences.core.emptyPreferences())
+            } else {
+                DebugLogger.log("MsgRepo", "Re-throwing non-IOException")
+                throw exception
+            }
+        }
+        .map { preferences ->
         val json = preferences[KEY_MESSAGES] ?: "[]"
+        DebugLogger.log("MsgRepo", "Raw JSON from DataStore: ${json.take(50)}...")
         try {
             val type = object : TypeToken<List<PushMessage>>() {}.type
             val messages: List<PushMessage> = gson.fromJson(json, type) ?: emptyList()
-            DebugLogger.log("MsgRepo", "Loaded ${messages.size} messages from storage")
+            DebugLogger.log("MsgRepo", "Structurally parsed ${messages.size} messages")
             messages
         } catch (e: Exception) {
-            DebugLogger.log("MsgRepo", "Error loading: ${e.message}")
+            DebugLogger.log("MsgRepo", "JSON Parse Error: ${e.message}")
             emptyList()
         }
     }

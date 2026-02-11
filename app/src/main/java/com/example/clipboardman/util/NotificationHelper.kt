@@ -15,6 +15,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
+import com.example.clipboardman.util.DebugLogger
 
 /**
  * 通知助手
@@ -89,7 +90,13 @@ object NotificationHelper {
         val remoteViews = android.widget.RemoteViews(context.packageName, R.layout.notification_service)
         remoteViews.setTextViewText(R.id.notification_title, "Clipboard Push")
         remoteViews.setTextViewText(R.id.notification_text, contentText)
-        remoteViews.setImageViewBitmap(R.id.notification_icon, largeIconBitmap)
+        if (largeIconBitmap != null) {
+            remoteViews.setImageViewBitmap(R.id.notification_icon, largeIconBitmap)
+        } else {
+            // Fallback to vector drawable resource if bitmap fails (though RemoteViews supports limited vector support depending on API)
+            // Or just leave it as is (defined in layout) or set to a safe png resource
+            remoteViews.setImageViewResource(R.id.notification_icon, R.drawable.ic_launcher_foreground) // Fallback
+        }
         remoteViews.setOnClickPendingIntent(R.id.btn_push, pushPendingIntent)
 
         return NotificationCompat.Builder(context, ClipboardManApp.NOTIFICATION_CHANNEL_ID)
@@ -106,21 +113,28 @@ object NotificationHelper {
     }
 
     private fun bitmapFromVector(context: Context, vectorResId: Int, color: Int): Bitmap? {
-        val drawable = ContextCompat.getDrawable(context, vectorResId) ?: return null
-        val wrappedDrawable = DrawableCompat.wrap(drawable).mutate()
-        
-        // Apply tint
-        DrawableCompat.setTint(wrappedDrawable, color)
-        
-        val bitmap = Bitmap.createBitmap(
-            drawable.intrinsicWidth,
-            drawable.intrinsicHeight,
-            Bitmap.Config.ARGB_8888
-        )
-        val canvas = Canvas(bitmap)
-        drawable.setBounds(0, 0, canvas.width, canvas.height)
-        drawable.draw(canvas)
-        return bitmap
+        return try {
+            val drawable = ContextCompat.getDrawable(context, vectorResId) ?: return null
+            val wrappedDrawable = DrawableCompat.wrap(drawable).mutate()
+            
+            // Apply tint
+            DrawableCompat.setTint(wrappedDrawable, color)
+            
+            val bitmap = Bitmap.createBitmap(
+                drawable.intrinsicWidth,
+                drawable.intrinsicHeight,
+                Bitmap.Config.ARGB_8888
+            )
+            val canvas = Canvas(bitmap)
+            drawable.setBounds(0, 0, canvas.width, canvas.height)
+            drawable.draw(canvas)
+            DebugLogger.log("NotificationHelper", "Bitmap generated successfully for $vectorResId")
+            bitmap
+        } catch (e: Exception) {
+            DebugLogger.log("NotificationHelper", "Bitmap generation failed: ${e.message}")
+            e.printStackTrace()
+            null
+        }
     }
 
     /**
