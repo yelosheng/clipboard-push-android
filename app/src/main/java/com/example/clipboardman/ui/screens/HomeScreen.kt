@@ -83,12 +83,16 @@ fun HomeScreen(
     val coroutineScope = rememberCoroutineScope()
 
     // 收到新消息时滚动到顶部
+    // Bug fix: only scroll if size INCREASED (new message), not decreased (deletion)
+    var previousMessageCount by remember { androidx.compose.runtime.mutableIntStateOf(messages.size) }
+
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
+        if (messages.size > previousMessageCount) {
             coroutineScope.launch {
                 listState.animateScrollToItem(0)
             }
         }
+        previousMessageCount = messages.size
     }
 
     // 退出选择模式时清空选择
