@@ -67,10 +67,12 @@ std::optional<std::vector<uint8_t>> Encrypt(const std::vector<uint8_t>& key, con
         return std::nullopt;
     }
 
-    // Generate Nonce
+    // Generate Nonce using cryptographically secure RNG
     std::vector<uint8_t> nonce(12);
-    // Simple random
-    for(auto& b : nonce) b = (uint8_t)(rand() % 256); // Better to use rand_s or CryptGenRandom, but std::random is ok
+    if (!NT_SUCCESS(BCryptGenRandom(NULL, nonce.data(), (ULONG)nonce.size(), BCRYPT_USE_SYSTEM_PREFERRED_RNG))) {
+        LOG_ERROR("Failed to generate random nonce");
+        return std::nullopt;
+    }
 
     // Import Key
     BCRYPT_KEY_HANDLE hKey = NULL;

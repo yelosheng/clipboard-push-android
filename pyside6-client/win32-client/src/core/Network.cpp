@@ -31,7 +31,7 @@ UrlComponents ParseUrl(const std::string& url) {
     bool isWss = (url.substr(0, 6) == "wss://");
     bool isWs = (url.substr(0, 5) == "ws://");
     
-    if (isWss) normalizedUrl.replace(0, 3, "http"); // wss:// -> https://
+    if (isWss) normalizedUrl.replace(0, 3, "https"); // wss:// -> https://
     else if (isWs) normalizedUrl.replace(0, 2, "http"); // ws:// -> http://
 
     std::wstring wurl = Utils::ToWide(normalizedUrl);

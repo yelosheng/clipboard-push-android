@@ -21,6 +21,7 @@
 #define IDC_MAIN_PUSH           1002
 #define IDC_MAIN_SETTINGS       1003
 #define IDC_MAIN_STATUS         1004
+#define IDC_MAIN_HINT           1005
 
 #define IDC_SETTINGS_PATH       2001
 #define IDC_SETTINGS_BROWSE     2002

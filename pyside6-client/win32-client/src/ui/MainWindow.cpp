@@ -54,11 +54,19 @@ void MainWindow::Show(bool show) {
 void MainWindow::SetStatus(const std::wstring& status) {
     std::wstring title = L"Clipboard Push v3.0 - " + status;
     SetWindowTextW(m_hWnd, title.c_str());
+    
+    // Also update hint text with current hotkey
+    auto& config = Config::Instance().Data();
+    std::wstring hint = L"Press " + Utils::ToWide(config.push_hotkey) + L" to push clipboard contents to your phone.";
+    SetDlgItemTextW(m_hWnd, IDC_MAIN_HINT, hint.c_str());
 }
 
 INT_PTR CALLBACK MainWindow::DialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
     case WM_INITDIALOG: {
+        // Initial hint update
+        MainWindow::Instance().SetStatus(L"Ready");
+
         // Add Tooltip for Push Button during initialization
         HWND hButton = GetDlgItem(hDlg, IDC_MAIN_PUSH);
         HWND hwndTip = CreateWindowExW(NULL, TOOLTIPS_CLASSW, NULL,

@@ -58,18 +58,18 @@ void OnRemoteFileReceived(const nlohmann::json& data) {
         }
 
         // Ensure download path exists
-        fs::path downloadDir(config.download_path);
+        fs::path downloadDir(Utils::ToWide(config.download_path));
         if (!fs::exists(downloadDir)) {
             fs::create_directories(downloadDir);
         }
 
         // Handle duplicate filenames
-        fs::path filePath = downloadDir / filename;
+        fs::path filePath = downloadDir / Utils::ToWide(filename);
         int count = 1;
-        std::string stem = filePath.stem().string();
-        std::string ext = filePath.extension().string();
+        std::wstring stem = filePath.stem().wstring();
+        std::wstring ext = filePath.extension().wstring();
         while (fs::exists(filePath)) {
-            filePath = downloadDir / (stem + "_" + std::to_string(count++) + ext);
+            filePath = downloadDir / (stem + L"_" + std::to_wstring(count++) + ext);
         }
 
         // Save file
@@ -207,6 +207,22 @@ void PushImage(const std::vector<uint8_t>& pngData) {
     PushFileData(pngData, filename, "image");
 }
 
+void PushPhysicalFile(const std::string& filePath) {
+    std::wstring wPath = Utils::ToWide(filePath);
+    std::ifstream file(wPath, std::ios::binary);
+    if (!file.is_open()) {
+        LOG_ERROR("Failed to open file for pushing: %s", filePath.c_str());
+        return;
+    }
+
+    std::vector<uint8_t> data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    file.close();
+
+    fs::path p(wPath);
+    std::string utf8Filename = Utils::ToUtf8(p.filename().wstring());
+    PushFileData(data, utf8Filename, "file");
+}
+
 } // namespace ClipboardPush
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -242,6 +258,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 } else if (cb.type == ClipboardPush::Platform::ClipboardType::Image) {
                     ClipboardPush::PushImage(cb.image_data);
                     ClipboardPush::UI::TrayIcon::Instance().ShowMessage(L"Clipboard Pushed", L"Image content sent successfully");
+                } else if (cb.type == ClipboardPush::Platform::ClipboardType::Files) {
+                    for (const auto& file : cb.files) {
+                        ClipboardPush::PushPhysicalFile(file);
+                    }
+                    ClipboardPush::UI::TrayIcon::Instance().ShowMessage(L"Clipboard Pushed", L"File(s) sent successfully");
                 }
             }
             break;
@@ -276,7 +297,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     return 0;
 }
 
-int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
+int main() {
+    HINSTANCE hInstance = GetModuleHandle(NULL);
     ClipboardPush::Platform::Init();
     ClipboardPush::Config::Instance().Load();
     auto& data = ClipboardPush::Config::Instance().Data();
@@ -375,6 +397,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
         } else if (cb.type == ClipboardPush::Platform::ClipboardType::Image) {
             ClipboardPush::PushImage(cb.image_data);
             ClipboardPush::UI::TrayIcon::Instance().ShowMessage(L"Clipboard Pushed", L"Image content sent via hotkey");
+        } else if (cb.type == ClipboardPush::Platform::ClipboardType::Files) {
+            for (const auto& file : cb.files) {
+                ClipboardPush::PushPhysicalFile(file);
+            }
+            ClipboardPush::UI::TrayIcon::Instance().ShowMessage(L"Clipboard Pushed", L"File(s) sent via hotkey");
         }
     });
     ClipboardPush::Platform::Hotkey::Instance().Register(hWnd, data.push_hotkey);
