@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.fillMaxHeight
 import com.example.clipboardman.data.repository.SettingsRepository
 import com.example.clipboardman.ui.theme.*
+import androidx.compose.ui.text.withStyle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,66 +74,10 @@ fun SettingsScreen(
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            // 服务器设置
-            SettingsSection(title = "服务器设置") {
+            // 连接与配对
+            SettingsSection(title = "连接与配对") {
                 Column {
-                    // 协议选择
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "协议",
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.width(60.dp)
-                        )
-                        Spacer(modifier = Modifier.width(16.dp))
-
-                        FilterChip(
-                            selected = !useHttps,
-                            onClick = { onUseHttpsChange(false) },
-                            label = { Text("HTTP") }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        FilterChip(
-                            selected = useHttps,
-                            onClick = { onUseHttpsChange(true) },
-                            label = { Text("HTTPS") }
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // 服务器地址
-                    OutlinedTextField(
-                        value = serverAddress,
-                        onValueChange = onServerAddressChange,
-                        label = { Text("服务器地址") },
-                        placeholder = { Text("例如: kxkl.tk:5055") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp)
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // 完整地址预览
-                    val fullAddress = if (serverAddress.matches(Regex("^https?://.*"))) {
-                        serverAddress
-                    } else {
-                        val protocol = if (useHttps) "https" else "http"
-                        "$protocol://$serverAddress"
-                    }
-                    Text(
-                        text = "完整地址: $fullAddress",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // 连接状态和按钮
+                    // 1. 连接状态和控制
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
@@ -172,18 +117,60 @@ fun SettingsScreen(
                             Text(if (connectionState == ConnectionState.CONNECTED || connectionState == ConnectionState.CONNECTING) "断开" else "连接")
                         }
                     }
-                }
-            }
 
-            Spacer(modifier = Modifier.height(24.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
-            // 配对设置
-            SettingsSection(title = "配对/连接") {
-                Button(
-                    onClick = onScanClick,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("扫描二维码配对 (Scan to Pair)")
+                    // 2. 配对按钮
+                    Button(
+                        onClick = onScanClick,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("扫描二维码配对 (Scan to Pair)")
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // 3. 首次使用指南
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = "👋 首次使用指南",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            
+                            val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+                            val annotatedString = androidx.compose.ui.text.buildAnnotatedString {
+                                append("1. 访问 ")
+                                pushStringAnnotation(tag = "URL", annotation = "https://www.clipboardpush.com/")
+                                withStyle(style = androidx.compose.ui.text.SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline)) {
+                                    append("https://www.clipboardpush.com/")
+                                }
+                                pop()
+                                append(" 下载桌面客户端 (Clipboard Push)\n")
+                                append("2. 打开客户端设置页面\n")
+                                append("3. 点击上方按钮扫描屏幕上的二维码")
+                            }
+
+                            androidx.compose.foundation.text.ClickableText(
+                                text = annotatedString,
+                                style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSecondaryContainer),
+                                onClick = { offset ->
+                                    annotatedString.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                                        .firstOrNull()?.let { annotation ->
+                                            uriHandler.openUri(annotation.item)
+                                        }
+                                }
+                            )
+                        }
+                    }
                 }
             }
 
