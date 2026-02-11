@@ -350,6 +350,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
                 case ConnectionStatus::Retrying: statusStr = L"Retrying in 5s..."; break;
             }
             ClipboardPush::UI::MainWindow::Instance().SetStatus(statusStr);
+        },
+        [](int secondsLeft) {
+            std::wstring statusStr = L"Retrying in " + std::to_wstring(secondsLeft) + L"s...";
+            ClipboardPush::UI::MainWindow::Instance().SetStatus(statusStr);
         }
     );
     sio.Connect(data.relay_server_url, data.room_id, data.device_id);

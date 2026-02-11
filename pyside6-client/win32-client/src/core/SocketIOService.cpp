@@ -35,8 +35,10 @@ void SocketIOService::Connect(const std::string& url, const std::string& roomId,
     m_roomId = roomId;
     m_clientId = clientId;
     m_manuallyStopped = false;
+    m_lastActivityTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     
     SetStatus(ConnectionStatus::Connecting);
+    StartWatchdog();
     
     // Convert http to ws, https to wss
     std::string wsUrl = url;
@@ -60,10 +62,11 @@ void SocketIOService::Disconnect() {
     SetStatus(ConnectionStatus::Disconnected);
 }
 
-void SocketIOService::SetCallbacks(ClipboardCallback onClipboard, FileCallback onFile, StatusCallback onStatus) {
+void SocketIOService::SetCallbacks(ClipboardCallback onClipboard, FileCallback onFile, StatusCallback onStatus, CountdownCallback onCountdown) {
     m_onClipboard = onClipboard;
     m_onFile = onFile;
     m_onStatus = onStatus;
+    m_onCountdown = onCountdown;
 }
 
 void SocketIOService::SetStatus(ConnectionStatus status) {
@@ -78,9 +81,15 @@ void SocketIOService::ScheduleReconnect() {
     
     // Create a background thread to wait and reconnect
     std::thread([this]() {
-        LOG_INFO("Reconnecting in 5 seconds...");
-        std::this_thread::sleep_for(std::chrono::seconds(5));
+        for (int i = 5; i > 0; --i) {
+            if (m_manuallyStopped || m_status == ConnectionStatus::Connected) return;
+            
+            if (m_onCountdown) m_onCountdown(i);
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+        
         if (!m_manuallyStopped && m_status != ConnectionStatus::Connected) {
+            LOG_INFO("Reconnection timer expired, trying to connect...");
             Connect(m_serverUrl, m_roomId, m_clientId);
         }
     }).detach();
@@ -89,12 +98,35 @@ void SocketIOService::ScheduleReconnect() {
 void SocketIOService::OnMessage(const std::string& message) {
     if (message.empty()) return;
 
+    m_lastActivityTime = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+
     char engineType = message[0];
     if (engineType == '2') { // Ping
         SendPacket("3"); // Pong
     } else if (engineType == '4') { // Message
         HandlePacket(message.substr(1));
     }
+}
+
+void SocketIOService::StartWatchdog() {
+    if (m_watchdogRunning) return;
+    m_watchdogRunning = true;
+
+    std::thread([this]() {
+        while (!m_manuallyStopped) {
+            std::this_thread::sleep_for(std::chrono::seconds(10));
+            if (m_manuallyStopped) break;
+
+            uint64_t now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+            
+            // If connected but no activity for 45 seconds, force reconnect
+            if (m_status == ConnectionStatus::Connected && (now - m_lastActivityTime > 45)) {
+                LOG_INFO("Watchdog: Connection is silent for too long. Forcing reconnect.");
+                m_ws.Close(); // This will trigger Disconnect callback and ScheduleReconnect
+            }
+        }
+        m_watchdogRunning = false;
+    }).detach();
 }
 
 void SocketIOService::HandlePacket(const std::string& packet) {

@@ -176,25 +176,50 @@ void WebSocketClient::Connect(const std::string& url) {
     m_impl->hSession = NULL;
 
     m_impl->hSession = WinHttpOpen(L"ClipboardPush/3.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-    if (!m_impl->hSession) return;
+    if (!m_impl->hSession) {
+        if (m_impl->onError) m_impl->onError("WinHttpOpen failed");
+        return;
+    }
+
+    // Set timeouts (30 seconds for receive)
+    DWORD timeout = 30000;
+    WinHttpSetOption(m_impl->hSession, WINHTTP_OPTION_RECEIVE_TIMEOUT, &timeout, sizeof(timeout));
 
     // Enable TLS 1.2+
     DWORD protocols = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2 | WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3;
     WinHttpSetOption(m_impl->hSession, WINHTTP_OPTION_SECURE_PROTOCOLS, &protocols, sizeof(protocols));
 
     m_impl->hConnect = WinHttpConnect(m_impl->hSession, comp.host.c_str(), comp.port, 0);
-    if (!m_impl->hConnect) return;
+    if (!m_impl->hConnect) {
+        if (m_impl->onError) m_impl->onError("WinHttpConnect failed");
+        return;
+    }
 
     m_impl->hRequest = WinHttpOpenRequest(m_impl->hConnect, L"GET", comp.path.c_str(), NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, comp.secure ? WINHTTP_FLAG_SECURE : 0);
-    if (!m_impl->hRequest) return;
+    if (!m_impl->hRequest) {
+        if (m_impl->onError) m_impl->onError("WinHttpOpenRequest failed");
+        return;
+    }
 
-    if (!WinHttpSetOption(m_impl->hRequest, WINHTTP_OPTION_UPGRADE_TO_WEB_SOCKET, NULL, 0)) return;
+    if (!WinHttpSetOption(m_impl->hRequest, WINHTTP_OPTION_UPGRADE_TO_WEB_SOCKET, NULL, 0)) {
+        if (m_impl->onError) m_impl->onError("WinHttpSetOption upgrade failed");
+        return;
+    }
 
-    if (!WinHttpSendRequest(m_impl->hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, NULL, 0, 0, 0)) return;
-    if (!WinHttpReceiveResponse(m_impl->hRequest, NULL)) return;
+    if (!WinHttpSendRequest(m_impl->hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, NULL, 0, 0, 0)) {
+        if (m_impl->onError) m_impl->onError("WinHttpSendRequest failed");
+        return;
+    }
+    if (!WinHttpReceiveResponse(m_impl->hRequest, NULL)) {
+        if (m_impl->onError) m_impl->onError("WinHttpReceiveResponse failed");
+        return;
+    }
 
     m_impl->hWebSocket = WinHttpWebSocketCompleteUpgrade(m_impl->hRequest, NULL);
-    if (!m_impl->hWebSocket) return;
+    if (!m_impl->hWebSocket) {
+        if (m_impl->onError) m_impl->onError("WinHttpWebSocketCompleteUpgrade failed");
+        return;
+    }
 
     m_impl->running = true;
     if (m_impl->onOpen) m_impl->onOpen();
