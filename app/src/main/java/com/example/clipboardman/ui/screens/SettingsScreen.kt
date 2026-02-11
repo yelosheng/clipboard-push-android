@@ -110,7 +110,7 @@ fun SettingsScreen(
                                     val peerNames = otherPeers.joinToString(", ") { it }
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = "已连接 PC: $peerNames",
+                                        text = "Remote client: $peerNames",
                                         style = MaterialTheme.typography.labelMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
