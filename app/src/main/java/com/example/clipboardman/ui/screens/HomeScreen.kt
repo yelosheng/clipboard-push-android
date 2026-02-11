@@ -270,20 +270,24 @@ fun HomeScreen(
                         .padding(24.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = if (connectionState == ConnectionState.CONNECTED) {
-                            "等待接收消息..."
-                        } else {
-                            "连接服务器后可接收消息"
-                        },
-                        color = TextSecondary,
-
-                        fontSize = 16.sp
-                    )
-                    
-                    if (connectionState == ConnectionState.DISCONNECTED || connectionState == ConnectionState.ERROR) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text("请前往设置页面进行配对", color = MaterialTheme.colorScheme.error)
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = if (connectionState == ConnectionState.CONNECTED) {
+                                "等待接收消息..."
+                            } else {
+                                "连接服务器后可接收消息"
+                            },
+                            color = TextSecondary,
+                            fontSize = 16.sp
+                        )
+                        
+                        if (connectionState == ConnectionState.DISCONNECTED || connectionState == ConnectionState.ERROR) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text("请前往设置页面进行配对", color = MaterialTheme.colorScheme.error)
+                        }
                     }
                 }
             } else {
