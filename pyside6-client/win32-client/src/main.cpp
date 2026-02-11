@@ -298,6 +298,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
+    // Single Instance Protection
+    HANDLE hMutex = CreateMutexW(NULL, TRUE, L"Global\\ClipboardPushWin32_SingleInstance_Mutex");
+    if (hMutex == NULL || GetLastError() == ERROR_ALREADY_EXISTS) {
+        // Find existing main window and bring it to front
+        HWND hExisting = FindWindowW(L"ClipboardPushMessageWindow", NULL);
+        if (hExisting) {
+            // Note: Our main UI window might be hidden, we can send a message to show it
+            // For now, we just prevent start. 
+        }
+        if (hMutex) CloseHandle(hMutex);
+        return 0;
+    }
+
     SetProcessDPIAware();
     ClipboardPush::Platform::Init();
     ClipboardPush::Config::Instance().Load();
