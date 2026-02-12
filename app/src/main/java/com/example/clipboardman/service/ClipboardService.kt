@@ -77,19 +77,19 @@ class ClipboardService : Service() {
                          val encryptedBytes = manager.encrypt(text.toByteArray(Charsets.UTF_8))
                          if (encryptedBytes != null) {
                              val encryptedBase64 = android.util.Base64.encodeToString(encryptedBytes, android.util.Base64.NO_WRAP)
-                             relayRepository.sendClipboardSync(id, encryptedBase64, true)
+                             relayRepository.sendClipboardSync(id, encryptedBase64, clientId, true)
                              Log.d(TAG, "Sent encrypted text")
                          } else {
                              Log.e(TAG, "Encryption failed, sending plain text")
-                             relayRepository.sendClipboardSync(id, text, false)
+                             relayRepository.sendClipboardSync(id, text, clientId, false)
                          }
                      } catch (e: Exception) {
                          Log.e(TAG, "Encryption error", e)
-                         relayRepository.sendClipboardSync(id, text, false)
+                         relayRepository.sendClipboardSync(id, text, clientId, false)
                      }
                  } else {
                      Log.w(TAG, "CryptoManager not ready, sending plain text")
-                     relayRepository.sendClipboardSync(id, text, false)
+                     relayRepository.sendClipboardSync(id, text, clientId, false)
                  }
              }
         }
@@ -320,15 +320,19 @@ class ClipboardService : Service() {
         roomId?.let { id ->
             val wsUrl = settingsRepository.getHttpBaseUrl(serverAddress, useHttps) // Socket.IO uses HTTP base
             
-            // Get Client ID (Device ID)
-            val deviceId = android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "android_unknown"
-            val clientId = "android_$deviceId"
+            // Get Client ID (Device ID) - make it a property so we can reuse
+            if (clientId.isEmpty()) {
+                val deviceId = android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "android_unknown"
+                clientId = "android_$deviceId"
+            }
             
             Log.d(TAG, "Connecting Relay: $wsUrl Room: $id Client: $clientId")
             DebugLogger.log(TAG, "Connecting to Relay: $wsUrl ($clientId)")
             relayRepository.connect(wsUrl, id, clientId)
         }
     }
+
+    private var clientId = ""
 
     private fun handleClipboardSync(data: JSONObject) {
         var content = data.optString("content")

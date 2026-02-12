@@ -71,6 +71,7 @@ class RelayRepository {
                     // Let's rely on the caller to pass it? 
                     // Let's modify connect to take clientId.
                     joinData.put("client_id", clientId) // We need to add clientId to connect() param first
+                    joinData.put("client_type", "android")
                     
                     socket?.emit("join", joinData)
                 } catch (e: Exception) {
@@ -158,18 +159,19 @@ class RelayRepository {
         _peerCount.tryEmit(0)
     }
 
-    fun sendClipboardSync(roomId: String, content: String, isEncrypted: Boolean = false) {
+    fun sendClipboardSync(roomId: String, content: String, clientId: String, isEncrypted: Boolean = false) {
         if (socket?.connected() == true) {
             val payload = JSONObject().apply {
                 put("room", roomId)
                 put("content", content)
+                put("client_id", clientId)
                 if (isEncrypted) {
                     put("encrypted", true)
                 }
             }
             // 注意：服务器端监听 clipboard_push，然后广播 clipboard_sync
             socket?.emit("clipboard_push", payload)
-            Log.d(TAG, "Sent clipboard_push to room: $roomId encrypted=$isEncrypted")
+            Log.d(TAG, "Sent clipboard_push to room: $roomId encrypted=$isEncrypted client=$clientId")
         } else {
             Log.w(TAG, "Cannot send: socket not connected")
         }

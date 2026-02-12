@@ -252,7 +252,7 @@ class ApiService(private val baseUrl: String) {
             )
             
             if (clientId != null) {
-                payload["client_id"] = clientId
+                payload["sender_id"] = clientId
             }
             
             val json = gson.toJson(payload)

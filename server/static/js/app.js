@@ -73,7 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (Array.isArray(c)) { sids = c; }
             else { sids = c.sids || []; r = c.room || 'Unknown'; }
-            const t = (c && c.type) ? c.type : 'Unknown';
+            const t = normalizeClientType(c);
 
             if (!rooms[r]) rooms[r] = [];
             rooms[r].push({ id: cid, sids, room: r, type: t });
@@ -162,6 +162,12 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         logEl.insertBefore(div, logEl.firstChild);
         if (logEl.children.length > 50) logEl.removeChild(logEl.lastChild);
+    }
+
+    function normalizeClientType(c) {
+        if (!c) return 'unknown';
+        const raw = c.type || c.client_type || c.clientType || 'unknown';
+        return String(raw).toLowerCase();
     }
 
     function renderClientType(type) {
