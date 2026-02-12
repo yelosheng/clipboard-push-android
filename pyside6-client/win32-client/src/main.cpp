@@ -300,8 +300,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
-    ClipboardPush::Logger::Init();
-    
     // Single Instance Protection
     HANDLE hMutex = CreateMutexW(NULL, TRUE, L"Global\\ClipboardPushWin32_SingleInstance_Mutex");
     if (hMutex == NULL || GetLastError() == ERROR_ALREADY_EXISTS) {
@@ -458,6 +456,5 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     ClipboardPush::Platform::ClipboardMonitor::Instance().Stop(hWnd);
     ClipboardPush::UI::TrayIcon::Instance().Remove();
     ClipboardPush::Platform::Shutdown();
-    ClipboardPush::Logger::Shutdown();
     return 0;
 }

@@ -27,7 +27,6 @@ set(SOURCES
     src/main.cpp
     src/core/Config.cpp
     src/core/Crypto.cpp
-    src/core/Logger.cpp
     src/core/Network.cpp
     src/core/SocketIOService.cpp
     src/platform/Platform.cpp
