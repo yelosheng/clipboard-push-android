@@ -32,7 +32,11 @@ data class PushMessage(
     val timestamp: String? = null,
 
     @SerializedName("server_time")
-    val serverTime: String? = null
+    val serverTime: String? = null,
+
+    // 本地文件路径（下载解密后）
+    @SerializedName("local_path")
+    val localPath: String? = null
 ) {
     companion object {
         const val TYPE_TEXT = "text"

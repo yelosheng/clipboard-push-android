@@ -5,6 +5,7 @@
     <!-- 网络权限 -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CAMERA" />
 
     <!-- 保持唤醒（后台保活） -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -22,7 +23,7 @@
 
     <application
         android:name=".ClipboardManApp"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -41,6 +42,21 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 强制覆盖 ZXing 扫描界面的方向 -->
+        <activity
+            android:name="com.journeyapps.barcodescanner.CaptureActivity"
+            android:screenOrientation="fullSensor"
+            tools:replace="screenOrientation" />
+
+        <!-- 快速推送 Activity (从通知栏启动，透明) -->
+        <activity
+            android:name=".QuickPushActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ClipboardMan.Transparent"
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
+            android:taskAffinity="" />
 
         <!-- 分享接收 Activity -->
         <activity
@@ -74,6 +90,12 @@
             android:name=".service.ClipboardService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- WorkManager 前台服务 (Android 14+ 需要声明 foregroundServiceType) -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
 
         <!-- FileProvider (用于文件分享) -->
         <provider

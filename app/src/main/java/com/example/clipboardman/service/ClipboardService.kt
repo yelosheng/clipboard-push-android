@@ -4,32 +4,34 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.net.wifi.WifiManager
 import android.net.Uri
+import android.net.wifi.WifiManager
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.workDataOf
 import com.example.clipboardman.data.model.ConnectionState
 import com.example.clipboardman.data.model.PushMessage
 import com.example.clipboardman.data.remote.ApiService
-import com.example.clipboardman.data.remote.WebSocketClient
 import com.example.clipboardman.data.repository.MessageRepository
+import com.example.clipboardman.data.repository.RelayEvent
+import com.example.clipboardman.data.repository.RelayRepository
 import com.example.clipboardman.data.repository.SettingsRepository
 import com.example.clipboardman.util.FileUtil
 import com.example.clipboardman.util.NotificationHelper
+import com.example.clipboardman.util.DebugLogger
+import com.example.clipboardman.worker.DownloadWorker
+import com.example.clipboardman.worker.UploadWorker
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
-import java.io.File
-import java.util.UUID
+import org.json.JSONObject
 import java.util.Collections
 import java.util.HashSet
 
-/**
- * 剪贴板前台服务
- * 保持 WebSocket 连接，接收推送消息并写入剪贴板
- */
 class ClipboardService : Service() {
 
     companion object {
@@ -38,115 +40,289 @@ class ClipboardService : Service() {
         const val ACTION_STOP = "com.example.clipboardman.action.STOP"
     }
 
-    // Binder 用于 Activity 绑定
     private val binder = LocalBinder()
 
     inner class LocalBinder : Binder() {
         fun getService(): ClipboardService = this@ClipboardService
     }
 
-    // 组件
+    // Public API for Clients
+    fun getMessageHistory(): List<PushMessage> {
+        return synchronized(messageHistory) {
+            ArrayList(messageHistory)
+        }
+    }
+
+    fun getConnectionState(): ConnectionState {
+        return currentState
+    }
+
+    private var currentPeerCount = 0
+    private var currentPeers: List<String> = emptyList()
+    fun getPeerCount(): Int = currentPeerCount
+    fun getPeers(): List<String> = currentPeers
+
+    fun reconnect() {
+        // Force reload config and reconnect
+        startService()
+    }
+
+    private var cryptoManager: com.example.clipboardman.util.CryptoManager? = null
+
+    fun sendClipboardText(text: String) {
+        serviceScope.launch {
+             DebugLogger.log(TAG, "Requesting send clipboard text: '${text.take(50)}...' len=${text.length}")
+             roomId?.let { id ->
+                 val manager = cryptoManager
+                 if (manager != null) {
+                     try {
+                         val encryptedBytes = manager.encrypt(text.toByteArray(Charsets.UTF_8))
+                         if (encryptedBytes != null) {
+                             val encryptedBase64 = android.util.Base64.encodeToString(encryptedBytes, android.util.Base64.NO_WRAP)
+                             relayRepository.sendClipboardSync(id, encryptedBase64, clientId, true)
+                             Log.d(TAG, "Sent encrypted text")
+                             DebugLogger.log(TAG, "Sent encrypted text to room $id")
+                         } else {
+                             Log.e(TAG, "Encryption failed, sending plain text")
+                             DebugLogger.log(TAG, "Encryption failed!")
+                             relayRepository.sendClipboardSync(id, text, clientId, false)
+                         }
+                     } catch (e: Exception) {
+                         Log.e(TAG, "Encryption error", e)
+                         DebugLogger.log(TAG, "Encryption error: ${e.message}")
+                         relayRepository.sendClipboardSync(id, text, clientId, false)
+                     }
+                 } else {
+                     Log.w(TAG, "CryptoManager not ready, sending plain text")
+                     DebugLogger.log(TAG, "CryptoManager null, sending plain text")
+                     relayRepository.sendClipboardSync(id, text, clientId, false)
+                 }
+             }
+        }
+    }
+
     private lateinit var settingsRepository: SettingsRepository
     private lateinit var messageRepository: MessageRepository
     private lateinit var clipboardHelper: ClipboardHelper
-    private var webSocketClient: WebSocketClient? = null
+    private lateinit var relayRepository: RelayRepository // Replaces WebSocketClient
     private var apiService: ApiService? = null
 
-    // WakeLock 保持后台运行
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
 
-    // 协程
-    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    // 异常处理器：捕获协程中的未处理异常，防止崩溃
+    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        Log.e(TAG, "Coroutine exception caught", throwable)
+        DebugLogger.log(TAG, "Coroutine exception: ${throwable.message}")
+        // 不崩溃，只记录日志
+    }
 
-    // 状态
+    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob() + exceptionHandler)
+
     private var currentState = ConnectionState.DISCONNECTED
     private var serverAddress = ""
     private var useHttps = false
+    private var roomId: String? = null
 
-    // 消息历史（保留最近100条）
     private val messageHistory = mutableListOf<PushMessage>()
     private val maxMessages = 100
 
-    // 状态回调
     var onStateChanged: ((ConnectionState) -> Unit)? = null
+    var onPeerCountChanged: ((Int) -> Unit)? = null
+    var onPeersChanged: ((List<String>) -> Unit)? = null
     var onMessageReceived: ((PushMessage) -> Unit)? = null
 
-    // 已处理的消息ID集合（防重）
     private val processedMessageIds = Collections.synchronizedSet(HashSet<String>())
 
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "Service created")
-
+        DebugLogger.log(TAG, "Service created")
+        
         settingsRepository = SettingsRepository(this)
         messageRepository = MessageRepository(this)
         clipboardHelper = ClipboardHelper(this)
+        relayRepository = RelayRepository() // Init Relay
 
-        // 加载历史消息
         loadMessageHistory()
+        observeRelayEvents()
     }
 
-    /**
-     * 从本地存储加载消息历史
-     */
     private fun loadMessageHistory() {
         serviceScope.launch {
-            messageRepository.messagesFlow.collect { messages ->
-                synchronized(messageHistory) {
-                    if (messageHistory.isEmpty() && messages.isNotEmpty()) {
-                        messageHistory.addAll(messages)
-                        Log.d(TAG, "Loaded ${messages.size} messages from storage")
+            try {
+                messageRepository.messagesFlow.collect { messages ->
+                    synchronized(messageHistory) {
+                        if (messageHistory.isEmpty() && messages.isNotEmpty()) {
+                            messageHistory.addAll(messages)
+                        }
                     }
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading message history", e)
             }
         }
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "onStartCommand: ${intent?.action}")
+    // Connect relay status to Service State
+    private fun observeRelayEvents() {
+        serviceScope.launch {
+            try {
+                relayRepository.connectionStatus.collect { isConnected ->
+                    updateState(if (isConnected) ConnectionState.CONNECTED else ConnectionState.DISCONNECTED)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error observing connection status", e)
+            }
+        }
 
+        serviceScope.launch {
+            try {
+                relayRepository.peerCount.collect { count ->
+                    currentPeerCount = count
+                    onPeerCountChanged?.invoke(count)
+                    // Update notification to reflect peer count change (Yellow -> Green)
+                    if (currentState == ConnectionState.CONNECTED) {
+                        NotificationHelper.updateServiceNotification(this@ClipboardService, currentState, serverAddress, count, currentPeers)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error observing peer count", e)
+            }
+        }
+
+        serviceScope.launch {
+            try {
+                relayRepository.peers.collect { peers ->
+                    currentPeers = peers
+                    onPeersChanged?.invoke(peers)
+                    if (currentState == ConnectionState.CONNECTED) {
+                        NotificationHelper.updateServiceNotification(this@ClipboardService, currentState, serverAddress, currentPeerCount, peers)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error observing peers", e)
+            }
+        }
+
+        serviceScope.launch {
+            try {
+                relayRepository.events.collect { event ->
+                    when (event) {
+                        is RelayEvent.ClipboardSync -> handleClipboardSync(event.data)
+                        is RelayEvent.FileSync -> handleFileSync(event.data)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error processing relay event", e)
+            }
+        }
+        
+        // Listen for clipboard changes to SEND (Upload)
+        try {
+            clipboardHelper.addPrimaryClipChangedListener(object : ClipboardHelper.OnPrimaryClipChangedListener {
+                override fun onPrimaryClipChanged() {
+                    // Determine if changed by us (ignore) or external
+                    // For MVP, just try to send whatever is new
+                    // TODO: Avoid loops
+                }
+            })
+        } catch (e: Exception) {
+            Log.e(TAG, "Error adding clipboard listener", e)
+        }
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        DebugLogger.log(TAG, "onStartCommand action=${intent?.action}")
         when (intent?.action) {
             ACTION_START -> startService()
             ACTION_STOP -> stopService()
+            // Push clipboard now handled by QuickPushActivity
         }
         return START_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
 
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        DebugLogger.log(TAG, "onTrimMemory level=$level")
+    }
+
     override fun onDestroy() {
         Log.d(TAG, "Service destroyed")
+        DebugLogger.log(TAG, "Service onDestroy")
         releaseWakeLocks()
         stopService()
         serviceScope.cancel()
         super.onDestroy()
     }
 
-    /**
-     * 启动服务
-     */
-    private fun startService() {
-        serviceScope.launch {
-            // 获取服务器地址和协议设置
-            serverAddress = settingsRepository.serverAddressFlow.first()
-            useHttps = settingsRepository.useHttpsFlow.first()
+    private var startJob: Job? = null
 
-            if (serverAddress.isBlank()) {
-                Log.e(TAG, "Server address is empty")
+    private fun startService() {
+        DebugLogger.log(TAG, "startService() called")
+        
+        // Cancel previous start attempt if running
+        startJob?.cancel()
+        
+        startJob = serviceScope.launch {
+            DebugLogger.log(TAG, "Reading settings...")
+            val newServerAddress = settingsRepository.serverAddressFlow.first()
+            val newUseHttps = settingsRepository.useHttpsFlow.first()
+            val newRoomId = settingsRepository.roomIdFlow.first()
+            val newRoomKey = settingsRepository.roomKeyFlow.first()
+            
+            // Check active state safely
+            if (isActive.not()) return@launch
+
+            // Debounce: If config is same and we are connected/connecting, do nothing
+            if (newServerAddress == serverAddress && 
+                newRoomId == roomId && 
+                newUseHttps == useHttps &&
+                (currentState == ConnectionState.CONNECTED || currentState == ConnectionState.CONNECTING)) {
+                DebugLogger.log(TAG, "Service already running with same config. Ignoring start request.")
+                return@launch
+            }
+            
+            // Assign new values
+            serverAddress = newServerAddress
+            useHttps = newUseHttps
+            roomId = newRoomId
+            
+            DebugLogger.log(TAG, "Config loaded: $serverAddress / $roomId")
+
+            if (serverAddress.isBlank() || roomId.isNullOrBlank()) {
+                Log.e(TAG, "Missing config")
+                DebugLogger.log(TAG, "Missing config - Addr: $serverAddress Room: $roomId")
                 updateState(ConnectionState.ERROR)
                 return@launch
             }
 
-            // 初始化 ApiService
+            // Initialize CryptoManager
+            if (!newRoomKey.isNullOrBlank()) {
+                try {
+                    cryptoManager = com.example.clipboardman.util.CryptoManager(newRoomKey)
+                    Log.d(TAG, "CryptoManager initialized")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to init CryptoManager", e)
+                }
+            } else {
+                Log.w(TAG, "Room Key missing, encryption disabled")
+                cryptoManager = null
+            }
+            
+            DebugLogger.log(TAG, "Starting service with Addr: $serverAddress")
+
             val baseUrl = settingsRepository.getHttpBaseUrl(serverAddress, useHttps)
             apiService = ApiService(baseUrl)
 
-            // 启动前台服务
             val notification = NotificationHelper.buildServiceNotification(
                 this@ClipboardService,
                 ConnectionState.CONNECTING,
-                serverAddress
+                serverAddress,
+                currentPeerCount,
+                currentPeers
             )
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -159,390 +335,212 @@ class ClipboardService : Service() {
                 startForeground(NotificationHelper.getServiceNotificationId(), notification)
             }
 
-            // 获取 WakeLock 保持后台运行
             acquireWakeLocks()
-
-            // 启动 WebSocket 连接
-            connectWebSocket()
+            connectRelay()
         }
     }
 
-    /**
-     * 停止服务
-     */
     private fun stopService() {
-        // 释放 WakeLock
         releaseWakeLocks()
-
-        webSocketClient?.disconnect()
-        webSocketClient = null
+        relayRepository.disconnect()
         apiService = null
         updateState(ConnectionState.DISCONNECTED)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
-    /**
-     * 连接 WebSocket
-     */
-    private fun connectWebSocket() {
-        val wsUrl = settingsRepository.getWebSocketUrl(serverAddress, useHttps)
-        Log.d(TAG, "Connecting to WebSocket: $wsUrl")
-
-        webSocketClient = WebSocketClient(
-            onMessage = { message -> handleMessage(message) },
-            onStateChange = { state -> updateState(state) }
-        )
-
-        webSocketClient?.connect(wsUrl)
-    }
-
-    /**
-     * 获取 WakeLock 保持后台运行
-     */
-    private fun acquireWakeLocks() {
-        // CPU WakeLock
-        if (wakeLock == null) {
-            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-            wakeLock = powerManager.newWakeLock(
-                PowerManager.PARTIAL_WAKE_LOCK,
-                "ClipboardMan::WebSocketWakeLock"
-            ).apply {
-                setReferenceCounted(false)
-                acquire()
+    private fun connectRelay() {
+        val wsUrl = settingsRepository.getHttpBaseUrl(serverAddress, useHttps) // Socket.IO uses HTTP base
+        roomId?.let { id ->
+            val wsUrl = settingsRepository.getHttpBaseUrl(serverAddress, useHttps) // Socket.IO uses HTTP base
+            
+            // Get Client ID (Device ID) - make it a property so we can reuse
+            if (clientId.isEmpty()) {
+                val deviceId = android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "android_unknown"
+                clientId = "android_$deviceId"
             }
-            Log.d(TAG, "WakeLock acquired")
-        }
-
-        // WiFi WakeLock
-        if (wifiLock == null) {
-            val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-            wifiLock = wifiManager.createWifiLock(
-                WifiManager.WIFI_MODE_FULL_HIGH_PERF,
-                "ClipboardMan::WifiLock"
-            ).apply {
-                setReferenceCounted(false)
-                acquire()
-            }
-            Log.d(TAG, "WifiLock acquired")
+            
+            Log.d(TAG, "Connecting Relay: $wsUrl Room: $id Client: $clientId")
+            DebugLogger.log(TAG, "Connecting to Relay: $wsUrl ($clientId)")
+            relayRepository.connect(wsUrl, id, clientId)
         }
     }
 
-    /**
-     * 释放 WakeLock
-     */
-    private fun releaseWakeLocks() {
-        wakeLock?.let {
-            if (it.isHeld) {
-                it.release()
-                Log.d(TAG, "WakeLock released")
-            }
-        }
-        wakeLock = null
+    private var clientId = ""
 
-        wifiLock?.let {
-            if (it.isHeld) {
-                it.release()
-                Log.d(TAG, "WifiLock released")
-            }
-        }
-        wifiLock = null
-    }
+    private fun handleClipboardSync(data: JSONObject) {
+        var content = data.optString("content")
+        val timestamp = data.optString("timestamp")
+        val source = data.optString("source")
+        val isEncrypted = data.optBoolean("encrypted", false)
 
-    /**
-     * 处理收到的消息
-     */
-    private fun handleMessage(message: PushMessage) {
-        try {
-            // 防重处理
-            if (message.id != null && processedMessageIds.contains(message.id)) {
-                Log.d(TAG, "Duplicate message ignored: ${message.id}")
+        DebugLogger.log(TAG, "Received Clipboard Sync len=${content.length} encrypted=$isEncrypted")
+
+        if (isEncrypted) {
+            val manager = cryptoManager
+            if (manager != null) {
+                try {
+                    val encryptedBytes = android.util.Base64.decode(content, android.util.Base64.DEFAULT)
+                    val decryptedBytes = manager.decrypt(encryptedBytes)
+                    if (decryptedBytes != null) {
+                        content = String(decryptedBytes, Charsets.UTF_8)
+                        Log.d(TAG, "Decrypted content successfully")
+                    } else {
+                        Log.e(TAG, "Decryption returned null")
+                        return // Decryption failed, ignore message
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Decryption error", e)
+                    return // Error, ignore
+                }
+            } else {
+                Log.w(TAG, "Received encrypted content but CryptoManager is null")
                 return
             }
-            if (message.id != null) {
-                processedMessageIds.add(message.id)
-                // 限制集合大小，防止内存泄漏（保留最近200条）
-                if (processedMessageIds.size > 200) {
-                    // 简单的清理策略：当超过200时，清空早期的一半，或者直接重新创建一个新的（为简单起见，这里清除旧的）
-                    // 由于Set不好按顺序删，这里做个简单保护即可，实际场景200条ID占用内存极小
-                    val iterator = processedMessageIds.iterator()
-                    var count = 0
-                    while (iterator.hasNext() && count < 50) {
-                        iterator.next()
-                        iterator.remove()
-                        count++
-                    }
-                }
-            }
-
-            Log.d(TAG, "Handling message: type=${message.type}, content=${message.content?.take(50)}")
-
-            // 保存到内存历史记录
-            synchronized(messageHistory) {
-                messageHistory.add(0, message)
-                if (messageHistory.size > maxMessages) {
-                    messageHistory.removeAt(messageHistory.size - 1)
-                }
-            }
-
-            // 持久化到本地存储
-            serviceScope.launch {
-                try {
-                    val currentMessages = getMessageHistory()
-                    messageRepository.saveMessages(currentMessages)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to save messages: ${e.message}", e)
-                }
-            }
-
-            // 通知 UI 更新消息列表
-            try {
-                onMessageReceived?.invoke(message)
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to notify UI: ${e.message}", e)
-            }
-
-            // 处理消息内容（剪贴板、文件下载等）
-            serviceScope.launch {
-                try {
-                    when {
-                        message.isTextType -> handleTextMessage(message)
-                        message.isFileType -> handleFileMessage(message)
-                    }
-                } catch (e: kotlinx.coroutines.CancellationException) {
-                    throw e // 协程取消必须重新抛出
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to handle message content: ${e.message}", e)
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error in handleMessage: ${e.message}", e)
         }
-    }
-
-    /**
-     * 获取消息历史（供 Activity 同步）
-     */
-    fun getMessageHistory(): List<PushMessage> {
-        synchronized(messageHistory) {
-            return messageHistory.toList()
-        }
-    }
-
-    /**
-     * 处理文本消息
-     */
-    private fun handleTextMessage(message: PushMessage) {
-        val content = message.content ?: return
-
-        try {
-            // 写入剪贴板
-            val success = clipboardHelper.copyText(content)
-
-            // 显示通知（无论剪贴板是否成功都显示）
+        
+        if (content.isNotEmpty()) {
+            // Save & Notify
+            val msg = PushMessage(
+                id = System.currentTimeMillis().toString(),
+                type = PushMessage.TYPE_TEXT,
+                content = content,
+                timestamp = timestamp
+            )
+            saveAndNotifyMessage(msg)
+            
+            // Write to Clipboard
+            clipboardHelper.copyText(content)
+            
+            // 发送系统通知
+            val previewText = if (content.length > 50) content.take(50) + "..." else content
             NotificationHelper.showPushNotification(
                 this,
-                if (success) "收到文本" else "收到文本（剪贴板写入受限）",
-                content.take(100)
+                "收到文本",
+                previewText,
+                System.currentTimeMillis().toInt()
             )
-        } catch (e: Exception) {
-            Log.e(TAG, "Error handling text message: ${e.message}", e)
-            // 尝试至少显示通知
-            try {
-                NotificationHelper.showPushNotification(this, "收到文本", content.take(100))
-            } catch (e2: Exception) {
-                Log.e(TAG, "Failed to show notification: ${e2.message}", e2)
-            }
         }
     }
 
-    /**
-     * 处理文件消息
-     */
-    private suspend fun handleFileMessage(message: PushMessage) {
-        val fileUrl = message.fileUrl ?: return
-        val fileName = message.fileName ?: "unknown_file"
-        val mimeType = message.mimeType ?: FileUtil.getMimeType(fileName)
-
-        // 获取文件处理模式
-        val fileMode = try {
-            settingsRepository.fileHandleModeFlow.first()
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to get file handle mode, using default: ${e.message}")
-            SettingsRepository.FILE_MODE_COPY_REFERENCE
-        }
-        val baseUrl = settingsRepository.getHttpBaseUrl(serverAddress, useHttps)
-        val fullUrl = "$baseUrl$fileUrl"
-
-        Log.d(TAG, "Processing file message: fileName=$fileName, mimeType=$mimeType, mode=$fileMode")
-
-        // downloadAndSaveFile 内部已有完整的错误处理，不需要外层再包 try-catch
-        when (fileMode) {
-            SettingsRepository.FILE_MODE_SAVE_LOCAL -> {
-                downloadAndSaveFile(fullUrl, fileName, mimeType, copyImageToClipboard = false)
-            }
-            SettingsRepository.FILE_MODE_COPY_REFERENCE -> {
-                clipboardHelper.copyFileReference(fullUrl, fileName)
-                NotificationHelper.showPushNotification(
-                    this,
-                    "收到文件",
-                    "$fileName\nURL已复制到剪贴板"
-                )
-            }
-            SettingsRepository.FILE_MODE_SAVE_AND_COPY_IMAGE -> {
-                downloadAndSaveFile(fullUrl, fileName, mimeType, copyImageToClipboard = true)
-            }
-        }
-    }
-
-    /**
-     * 下载文件并保存到本地
-     * 内部完整处理所有错误，不会抛出异常
-     */
-    private suspend fun downloadAndSaveFile(
-        fileUrl: String,
-        fileName: String,
-        mimeType: String,
-        copyImageToClipboard: Boolean = false
-    ) {
-        val api = apiService ?: return
-        val isImage = mimeType.startsWith("image/")
-        val downloadNotificationId = NotificationHelper.getServiceNotificationId() + 100
-
-        // 标记是否成功保存，用于决定是否报告错误
-        var isSaved = false
-
-        // 先下载到缓存目录，使用唯一文件名防止冲突
-        val cacheDir = FileUtil.getCacheDir(this)
-        val uniqueTempName = "${UUID.randomUUID()}_$fileName"
-        val tempFile = File(cacheDir, uniqueTempName)
-
-        try {
-
-            // 显示下载中通知
+    private fun handleFileSync(data: JSONObject) {
+        val downloadUrl = data.optString("download_url")
+        val fileName = data.optString("filename")
+        val mimeType = data.optString("type") // "image" or "file"
+        
+        DebugLogger.log(TAG, "Received File Sync: $fileName")
+        
+        if (downloadUrl.isNotEmpty()) {
+            val messageId = System.currentTimeMillis().toString()
+             val msg = PushMessage(
+                id = messageId,
+                type = if (mimeType == "image") PushMessage.TYPE_IMAGE else PushMessage.TYPE_FILE,
+                content = fileName,
+                timestamp = data.optString("timestamp"),
+                fileUrl = downloadUrl,
+                fileName = fileName
+            )
+            saveAndNotifyMessage(msg)
+            
+            // 发送系统通知
+            val typeLabel = if (mimeType == "image") "图片" else "文件"
             NotificationHelper.showPushNotification(
-                this, "正在下载", fileName, downloadNotificationId
+                this,
+                "收到$typeLabel",
+                "正在下载: $fileName",
+                messageId.hashCode()  // 使用 hashCode 而非 toInt()，避免溢出
             )
 
-            val result = api.downloadFile(fileUrl, tempFile) { progress ->
-                // Log.d(TAG, "Download progress: $progress%")
-            }
-
-            if (result.isFailure) {
-                val error = result.exceptionOrNull()
-                Log.e(TAG, "Download failed: ${error?.message}")
-                NotificationHelper.showPushNotification(
-                    this, "下载失败", "$fileName: ${error?.message}"
-                )
-                // 回退到复制 URL
-                clipboardHelper.copyFileReference(fileUrl, fileName)
-                return
-            }
-
-            val downloadedFile = result.getOrNull() ?: return
-
-            // 保存到公共目录
-            val savedUri = FileUtil.saveToPublicDownloads(
-                this, downloadedFile,
-                FileUtil.generateUniqueFileName(fileName), mimeType
+            // Start Download Worker with message ID
+            val workData = workDataOf(
+                DownloadWorker.KEY_FILE_URL to downloadUrl,
+                DownloadWorker.KEY_FILE_NAME to fileName,
+                DownloadWorker.KEY_MIME_TYPE to mimeType,
+                DownloadWorker.KEY_IS_ENCRYPTED to true,
+                DownloadWorker.KEY_MESSAGE_ID to messageId
             )
+            
+            val workRequest = OneTimeWorkRequestBuilder<DownloadWorker>()
+                .setInputData(workData)
+                .build()
+                
+            WorkManager.getInstance(applicationContext).enqueue(workRequest)
+        }
+    }
 
-            val finalUri: Uri?
-            val finalPath: String?
-
-            if (savedUri != null) {
-                finalUri = savedUri
-                finalPath = savedUri.toString()
-            } else {
-                // 保存到公共目录失败，使用私有目录
-                val privateDir = FileUtil.getDownloadDir(this)
-                val privateFile = File(privateDir, FileUtil.generateUniqueFileName(fileName))
-                downloadedFile.copyTo(privateFile, overwrite = true)
-                finalUri = clipboardHelper.getUriForFile(privateFile) ?: Uri.fromFile(privateFile)
-                finalPath = privateFile.absolutePath
-            }
-
-            // 文件已保存成功，后续剪贴板/通知操作失败只记日志
+    private fun saveAndNotifyMessage(message: PushMessage) {
+        // 使用原子操作保存，避免竞争条件
+        serviceScope.launch {
             try {
-                if (copyImageToClipboard && isImage && finalUri != null) {
-                    clipboardHelper.copyImageUri(finalUri, mimeType)
-                    NotificationHelper.showPushNotification(
-                        this, "图片已保存",
-                        "$fileName\n图片已复制到剪贴板，可直接粘贴"
-                    )
-                } else {
-                    if (finalPath != null) {
-                        clipboardHelper.copyFilePath(finalPath)
-                    }
-                    NotificationHelper.showPushNotification(
-                        this, "文件已保存",
-                        "$fileName\n路径已复制到剪贴板"
-                    )
-                }
+                messageRepository.addMessageAtomic(message)
             } catch (e: Exception) {
-                Log.e(TAG, "Post-save operation failed (file already saved): ${e.message}", e)
+                Log.e(TAG, "Error saving message", e)
+                DebugLogger.log(TAG, "Save error: ${e.message}")
             }
-
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            // 协程取消不应当作错误处理，直接重新抛出
-            throw e
-        } catch (e: Exception) {
-            Log.e(TAG, "Error in downloadAndSaveFile: ${e.message}", e)
-            NotificationHelper.showPushNotification(
-                this, "文件处理失败", "$fileName: ${e.message}"
-            )
-        } finally {
-            // 清理临时文件
-            try {
-                if (tempFile.exists()) tempFile.delete()
-            } catch (ignore: Exception) {}
         }
+        onMessageReceived?.invoke(message)
     }
 
-    /**
-     * 更新连接状态
-     */
     private fun updateState(state: ConnectionState) {
-        Log.d(TAG, "State changed: $currentState -> $state")
+        Log.d(TAG, "State: $state")
+        DebugLogger.log(TAG, "State changed: $state")
         currentState = state
-
-        // 更新通知
-        NotificationHelper.updateServiceNotification(this, state, serverAddress)
-
-        // 回调通知 Activity
+        NotificationHelper.updateServiceNotification(this, state, serverAddress, currentPeerCount, currentPeers)
         onStateChanged?.invoke(state)
     }
 
-    /**
-     * 获取当前连接状态
-     */
-    fun getConnectionState(): ConnectionState = currentState
-
-    /**
-     * 发送剪贴板文本到服务器
-     */
-    fun sendClipboardText(text: String) {
-        if (webSocketClient?.isConnected() == true) {
-            val message = PushMessage(
-                id = System.currentTimeMillis().toString(),
-                type = PushMessage.TYPE_TEXT,
-                content = text,
-                timestamp = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
-            )
-            val json = com.google.gson.Gson().toJson(message)
-            webSocketClient?.send(json)
-            Log.d(TAG, "Sent clipboard text: ${text.take(50)}")
-        } else {
-            Log.e(TAG, "Cannot send: WebSocket not connected")
-            // 可以选择在这里回调一个错误状态或者Toast，但Service中不方便弹Toast
+    // --- WakeLock Helpers ---
+    private fun acquireWakeLocks() {
+        try {
+            if (wakeLock == null) {
+                val pm = getSystemService(POWER_SERVICE) as PowerManager
+                wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "CB:WakeLock").apply { 
+                    setReferenceCounted(false)
+                    acquire() 
+                }
+                DebugLogger.log(TAG, "WakeLock acquired")
+            }
+            if (wifiLock == null) {
+                val wm = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
+                wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "CB:WiFiLock").apply { 
+                    setReferenceCounted(false)
+                    acquire() 
+                }
+                DebugLogger.log(TAG, "WiFiLock acquired")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error acquiring locks", e)
+            DebugLogger.log(TAG, "Error acquiring locks: ${e.message}")
         }
     }
 
-    /**
-     * 手动重连
-     */
-    fun reconnect() {
-        webSocketClient?.disconnect()
-        connectWebSocket()
+    private fun releaseWakeLocks() {
+        try {
+            if (wakeLock?.isHeld == true) {
+                wakeLock?.release()
+                DebugLogger.log(TAG, "WakeLock released")
+            }
+            wakeLock = null
+            
+            if (wifiLock?.isHeld == true) {
+                wifiLock?.release()
+                DebugLogger.log(TAG, "WiFiLock released")
+            }
+            wifiLock = null
+        } catch (e: Exception) {
+            Log.e(TAG, "Error releasing locks", e)
+        }
+    }
+
+    // --- Upload Trigger (Called by UI or Intent) ---
+    fun uploadFile(uri: Uri, mimeType: String) {
+        val workData = workDataOf(
+            UploadWorker.KEY_URI_STRING to uri.toString(),
+            UploadWorker.KEY_MIME_TYPE to mimeType
+        )
+        val workRequest = OneTimeWorkRequestBuilder<UploadWorker>()
+            .setInputData(workData)
+            .build()
+        WorkManager.getInstance(applicationContext).enqueue(workRequest)
     }
 }

@@ -15,9 +15,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.clipboardman.data.model.ConnectionState
+import com.example.clipboardman.util.DebugLogger
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.fillMaxHeight
 import com.example.clipboardman.data.repository.SettingsRepository
 import com.example.clipboardman.ui.theme.*
+import androidx.compose.ui.text.withStyle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,7 +46,9 @@ fun SettingsScreen(
     onFileHandleModeChange: (Int) -> Unit,
     onAutoConnectChange: (Boolean) -> Unit,
     onMaxHistoryCountChange: (Int) -> Unit,
-    onBackClick: () -> Unit
+    onScanClick: () -> Unit,
+    onBackClick: () -> Unit,
+    peers: List<String> = emptyList()
 ) {
     Scaffold(
         topBar = {
@@ -65,61 +77,10 @@ fun SettingsScreen(
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            // 服务器设置
-            SettingsSection(title = "服务器设置") {
+            // 连接与配对
+            SettingsSection(title = "连接与配对") {
                 Column {
-                    // 协议选择
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "协议",
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.width(60.dp)
-                        )
-                        Spacer(modifier = Modifier.width(16.dp))
-
-                        FilterChip(
-                            selected = !useHttps,
-                            onClick = { onUseHttpsChange(false) },
-                            label = { Text("HTTP") }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        FilterChip(
-                            selected = useHttps,
-                            onClick = { onUseHttpsChange(true) },
-                            label = { Text("HTTPS") }
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // 服务器地址
-                    OutlinedTextField(
-                        value = serverAddress,
-                        onValueChange = onServerAddressChange,
-                        label = { Text("服务器地址") },
-                        placeholder = { Text("例如: 192.168.1.100:9661") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp)
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // 完整地址预览
-                    val protocol = if (useHttps) "https" else "http"
-                    Text(
-                        text = "完整地址: $protocol://$serverAddress",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // 连接状态和按钮
+                    // 1. 连接状态和控制
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
@@ -143,6 +104,20 @@ fun SettingsScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = statusColor
                             )
+
+                            // Display Connected PC Name
+                            if (connectionState == ConnectionState.CONNECTED) {
+                                val otherPeers = peers.filter { !it.startsWith("android_") }
+                                if (otherPeers.isNotEmpty()) {
+                                    val peerNames = otherPeers.joinToString(", ") { it }
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Remote client: $peerNames",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
                         }
 
                         Button(
@@ -159,6 +134,60 @@ fun SettingsScreen(
                             Text(if (connectionState == ConnectionState.CONNECTED || connectionState == ConnectionState.CONNECTING) "断开" else "连接")
                         }
                     }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+                    // 2. 配对按钮
+                    Button(
+                        onClick = onScanClick,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("扫描二维码配对 (Scan to Pair)")
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // 3. 首次使用指南
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = "👋 首次使用指南",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            
+                            val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+                            val annotatedString = androidx.compose.ui.text.buildAnnotatedString {
+                                append("1. 访问 ")
+                                pushStringAnnotation(tag = "URL", annotation = "https://www.clipboardpush.com/")
+                                withStyle(style = androidx.compose.ui.text.SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline)) {
+                                    append("https://www.clipboardpush.com/")
+                                }
+                                pop()
+                                append(" 下载桌面客户端 (Clipboard Push)\n")
+                                append("2. 打开客户端设置页面\n")
+                                append("3. 点击上方按钮扫描屏幕上的二维码")
+                            }
+
+                            androidx.compose.foundation.text.ClickableText(
+                                text = annotatedString,
+                                style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSecondaryContainer),
+                                onClick = { offset ->
+                                    annotatedString.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                                        .firstOrNull()?.let { annotation ->
+                                            uriHandler.openUri(annotation.item)
+                                        }
+                                }
+                            )
+                        }
+                    }
                 }
             }
 
@@ -168,21 +197,14 @@ fun SettingsScreen(
             SettingsSection(title = "文件处理方式") {
                 Column {
                     RadioButtonOption(
-                        text = "保存到本地",
-                        description = "下载文件并复制本地路径到剪贴板",
-                        selected = fileHandleMode == SettingsRepository.FILE_MODE_SAVE_LOCAL,
+                        text = "自动保存到本地",
+                        description = "仅下载文件到本地，不修改剪贴板",
+                        selected = fileHandleMode == SettingsRepository.FILE_MODE_SAVE_LOCAL || fileHandleMode == SettingsRepository.FILE_MODE_COPY_REFERENCE, // Fallback for legacy setting
                         onClick = { onFileHandleModeChange(SettingsRepository.FILE_MODE_SAVE_LOCAL) }
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     RadioButtonOption(
-                        text = "仅复制引用",
-                        description = "复制文件 URL 到剪贴板，不下载文件",
-                        selected = fileHandleMode == SettingsRepository.FILE_MODE_COPY_REFERENCE,
-                        onClick = { onFileHandleModeChange(SettingsRepository.FILE_MODE_COPY_REFERENCE) }
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    RadioButtonOption(
-                        text = "保存并复制图片",
+                        text = "自动保存并复制到剪贴板",
                         description = "下载图片到本地，并复制图片到剪贴板可直接粘贴",
                         selected = fileHandleMode == SettingsRepository.FILE_MODE_SAVE_AND_COPY_IMAGE,
                         onClick = { onFileHandleModeChange(SettingsRepository.FILE_MODE_SAVE_AND_COPY_IMAGE) }
@@ -226,29 +248,223 @@ fun SettingsScreen(
 
             // 其他设置
             SettingsSection(title = "其他设置") {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onAutoConnectChange(!autoConnect) }
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "启动时自动连接",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Text(
-                            text = "App 启动后自动连接到服务器",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onAutoConnectChange(!autoConnect) }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "启动时自动连接",
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Text(
+                                text = "App 启动后自动连接到服务器",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = autoConnect,
+                            onCheckedChange = onAutoConnectChange
                         )
                     }
-                    Switch(
-                        checked = autoConnect,
-                        onCheckedChange = onAutoConnectChange
-                    )
+                    
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    
+                    // 电池优化白名单
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    val powerManager = context.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+                    val isIgnoringBattery = powerManager.isIgnoringBatteryOptimizations(context.packageName)
+                    
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                try {
+                                    val intent = android.content.Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                        data = android.net.Uri.parse("package:${context.packageName}")
+                                    }
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    // 某些手机可能不支持，尝试打开电池设置页面
+                                    try {
+                                        val intent = android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                        context.startActivity(intent)
+                                    } catch (e2: Exception) {
+                                        android.widget.Toast.makeText(context, "无法打开电池设置", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "忽略电池优化",
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Text(
+                                text = if (isIgnoringBattery) "✓ 已忽略（后台正常运行）" else "⚠ 未忽略（可能被系统杀死）",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isIgnoringBattery) Green500 else Orange500
+                            )
+                        }
+                        Text(
+                            text = "设置 →",
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    
+                    // 国产手机额外提示
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Orange500.copy(alpha = 0.1f)
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = "📱 国产手机用户注意",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = Orange500
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "小米/华为/OPPO/vivo 等手机可能还需要：\n" +
+                                    "• 在系统设置中搜索「自启动管理」，允许本 APP 自启动\n" +
+                                    "• 在「电池」设置中将 APP 设为「无限制」或允许后台运行",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
+            SettingsSection(title = "开发日志 (Development Logs)") {
+                val logs by DebugLogger.logs.collectAsState()
+                
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp)
+                        .background(Color.Black.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
+                        .padding(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Logs", style = MaterialTheme.typography.labelSmall)
+                        
+                        Row {
+                            val context = androidx.compose.ui.platform.LocalContext.current
+                            Button(
+                                onClick = {
+                                    val logText = logs.joinToString("\n")
+                                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    val clip = android.content.ClipData.newPlainText("Debug Logs", logText)
+                                    clipboard.setPrimaryClip(clip)
+                                    android.widget.Toast.makeText(context, "Logs Copied!", android.widget.Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.height(30.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                            ) {
+                                Text("Copy", style = MaterialTheme.typography.labelSmall)
+                            }
+                            
+                            Spacer(modifier = Modifier.width(8.dp))
+                            
+                            Button(
+                                onClick = { DebugLogger.clear() },
+                                modifier = Modifier.height(30.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                            ) {
+                                Text("Clear", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        items(logs) { log ->
+                            Text(
+                                text = log,
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                                modifier = Modifier.padding(vertical = 1.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            SettingsSection(title = "Developer") {
+                var showLogs by remember { mutableStateOf(false) }
+                
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showLogs = !showLogs }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Debug Logs",
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(
+                            imageVector = if (showLogs) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = if (showLogs) "Collapse" else "Expand"
+                        )
+                    }
+
+                    if (showLogs) {
+                        val logs by com.example.clipboardman.util.DebugLogger.logs.collectAsState()
+                        
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(300.dp)
+                                .padding(top = 8.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(8.dp),
+                                reverseLayout = true 
+                            ) {
+                                items(logs) { log ->
+                                    androidx.compose.foundation.text.selection.SelectionContainer {
+                                        Text(
+                                            text = log,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                            modifier = Modifier.padding(vertical = 2.dp)
+                                        )
+                                    }
+                                    Divider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
+                                }
+                            }
+                        }
+                        
+                        // Clear Button
+                         Button(
+                            onClick = { com.example.clipboardman.util.DebugLogger.clear() },
+                            modifier = Modifier.align(Alignment.End).padding(top = 8.dp)
+                        ) {
+                            Text("Clear Logs")
+                        }
+                    }
                 }
             }
 

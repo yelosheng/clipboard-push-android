@@ -16,6 +16,14 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.mutableFloatStateOf
@@ -49,13 +57,16 @@ import java.util.*
 @Composable
 fun HomeScreen(
     connectionState: ConnectionState,
+    peerCount: Int,
     serverAddress: String,
     useHttps: Boolean,
     messages: List<PushMessage>,
     onSettingsClick: () -> Unit,
     onMessageClick: (PushMessage) -> Unit,
     onDeleteMessages: (Set<String>) -> Unit = {},
-    onPushClipboard: () -> Unit
+    onPushClipboard: () -> Unit,
+    onReconnectClick: () -> Unit = {},
+    peers: List<String> = emptyList()
 ) {
     // 构建基础URL
     val baseUrl = remember(serverAddress, useHttps) {
@@ -73,12 +84,16 @@ fun HomeScreen(
     val coroutineScope = rememberCoroutineScope()
 
     // 收到新消息时滚动到顶部
+    // Bug fix: only scroll if size INCREASED (new message), not decreased (deletion)
+    var previousMessageCount by remember { androidx.compose.runtime.mutableIntStateOf(messages.size) }
+
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
+        if (messages.size > previousMessageCount) {
             coroutineScope.launch {
                 listState.animateScrollToItem(0)
             }
         }
+        previousMessageCount = messages.size
     }
 
     // 退出选择模式时清空选择
@@ -146,22 +161,59 @@ fun HomeScreen(
             } else {
                 // 正常模式的 TopAppBar
                 TopAppBar(
-                    title = { }, // 不显示标题
+                    title = {
+                        if (connectionState == ConnectionState.CONNECTED) {
+                            // Filter logic: same as SettingsScreen
+                            val otherPeers = peers.filter { !it.startsWith("android_") }
+                            if (otherPeers.isNotEmpty()) {
+                                Text(
+                                    text = otherPeers.joinToString(", "),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    },
                     navigationIcon = {
                         // 显示连接状态图标
-                        val statusColor = when (connectionState) {
-                            ConnectionState.CONNECTED -> Green500
-                            ConnectionState.CONNECTING -> Orange500
-                            ConnectionState.ERROR -> Red500
-                            ConnectionState.DISCONNECTED -> Grey500
+                        val (icon, tint, description) = when (connectionState) {
+                            ConnectionState.CONNECTED -> {
+                                if (peerCount > 1) {
+                                    Triple(Icons.Default.Cloud, Green500, "已连接 (可传输)")
+                                } else {
+                                    Triple(Icons.Default.Cloud, androidx.compose.ui.graphics.Color(0xFFFFC107), "已连接 (无设备)") // Yellow for Alone
+                                }
+                            }
+                            ConnectionState.CONNECTING -> Triple(Icons.Default.Sync, Orange500, "连接中")
+                            ConnectionState.ERROR -> Triple(Icons.Default.Warning, Red500, "连接错误")
+                            ConnectionState.DISCONNECTED -> Triple(Icons.Default.CloudOff, Grey500, "未连接")
                         }
-                        Box(
-                            modifier = Modifier
-                                .padding(start = 16.dp, end = 8.dp)
-                                .size(12.dp)
-                                .clip(CircleShape)
-                                .background(statusColor)
-                        )
+
+                        IconButton(
+                            onClick = {
+                                if (connectionState != ConnectionState.CONNECTED) {
+                                    onReconnectClick()
+                                } else {
+                                    // Connected toast or info?
+                                }
+                            }
+                        ) {
+                            if (connectionState == ConnectionState.CONNECTING) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    color = tint,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = description,
+                                    tint = tint,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                        }
                     },
                     actions = {
                         // 推送剪贴板按钮
@@ -195,7 +247,37 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // 移除了 ConnectionStatusBar
+            // 状态横幅
+            AnimatedVisibility(
+                visible = connectionState == ConnectionState.ERROR || (connectionState == ConnectionState.DISCONNECTED && serverAddress.isNotBlank()),
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(if(connectionState == ConnectionState.ERROR) Red500 else Orange500)
+                        .clickable { onReconnectClick() }
+                        .padding(vertical = 8.dp, horizontal = 16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if(connectionState == ConnectionState.ERROR) Icons.Default.Warning else Icons.Default.CloudOff,
+                            contentDescription = null,
+                            tint = androidx.compose.ui.graphics.Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if(connectionState == ConnectionState.ERROR) "连接错误 - 点击重试" else "未连接 - 点击重连",
+                            color = androidx.compose.ui.graphics.Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
             
             // 消息列表
             if (messages.isEmpty()) {
@@ -206,15 +288,25 @@ fun HomeScreen(
                         .padding(24.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = if (connectionState == ConnectionState.CONNECTED) {
-                            "等待接收消息..."
-                        } else {
-                            "连接服务器后可接收消息"
-                        },
-                        color = TextSecondary,
-                        fontSize = 16.sp
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = if (connectionState == ConnectionState.CONNECTED) {
+                                "等待接收消息..."
+                            } else {
+                                "连接服务器后可接收消息"
+                            },
+                            color = TextSecondary,
+                            fontSize = 16.sp
+                        )
+                        
+                        if (connectionState == ConnectionState.DISCONNECTED || connectionState == ConnectionState.ERROR) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text("请前往设置页面进行配对", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
                 }
             } else {
                 LazyColumn(
@@ -511,20 +603,40 @@ fun MessageItem(
             Spacer(modifier = Modifier.height(8.dp))
 
             // 图片缩略图
-            if (isImage && message.fileUrl != null && baseUrl.isNotBlank()) {
-                val imageUrl = "$baseUrl${message.fileUrl}"
-
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(imageUrl)
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = message.fileName,
-                    modifier = Modifier
-                        .heightIn(max = 120.dp)
-                        .clip(RoundedCornerShape(8.dp)),
-                    contentScale = ContentScale.Fit
-                )
+            if (isImage) {
+                // 优先使用本地路径
+                val imageSource = message.localPath
+                
+                if (imageSource != null) {
+                    // 已下载，使用本地文件
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(android.net.Uri.parse(imageSource))
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = message.fileName,
+                        modifier = Modifier
+                            .heightIn(max = 120.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    // 尚未下载，显示占位符
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(80.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "图片下载中...",
+                            color = TextSecondary,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(8.dp))
 

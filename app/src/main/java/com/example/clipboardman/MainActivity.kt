@@ -18,6 +18,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -50,31 +51,44 @@ class MainActivity : ComponentActivity() {
     private var isBound = false
 
     // ViewModel 引用，用于状态同步
-    private var mainViewModel: MainViewModel? = null
+    private lateinit var mainViewModel: MainViewModel
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             val binder = service as ClipboardService.LocalBinder
             clipboardService = binder.getService()
             isBound = true
+            com.example.clipboardman.util.DebugLogger.log("MainActivity", "onServiceConnected: Service bound, ViewModel ready=${::mainViewModel.isInitialized}")
+
 
             // 设置状态回调
             clipboardService?.onStateChanged = { state ->
-                mainViewModel?.updateConnectionState(state)
+                mainViewModel.updateConnectionState(state)
             }
 
             // 设置消息回调
             clipboardService?.onMessageReceived = { message ->
-                mainViewModel?.addMessage(message)
+                mainViewModel.addMessage(message)
+            }
+            
+            // 设置 PeerCount 回调
+            clipboardService?.onPeerCountChanged = { count ->
+                mainViewModel.updatePeerCount(count)
+            }
+            
+            // 设置 Peers 回调
+            clipboardService?.onPeersChanged = { peers ->
+                mainViewModel.updatePeers(peers)
             }
 
             // 同步当前状态
             val currentState = clipboardService?.getConnectionState() ?: ConnectionState.DISCONNECTED
-            mainViewModel?.updateConnectionState(currentState)
-
-            // 从 Service 内存直接同步消息历史（最可靠，不依赖 DataStore 异步读取）
-            val serviceMessages = clipboardService?.getMessageHistory() ?: emptyList()
-            mainViewModel?.syncMessages(serviceMessages)
+            mainViewModel.updateConnectionState(currentState)
+            mainViewModel.updatePeerCount(clipboardService?.getPeerCount() ?: 0)
+            mainViewModel.updatePeers(clipboardService?.getPeers() ?: emptyList())
+            
+            // 不再从 Service 内存同步消息历史
+            // ViewModel 通过 messageRepository.messagesFlow.collect 持续观察，更可靠
 
             // 自动重连：如果启用了自动连接且当前是断开状态，则重新连接
             if (currentState == ConnectionState.DISCONNECTED) {
@@ -85,6 +99,7 @@ class MainActivity : ComponentActivity() {
         override fun onServiceDisconnected(name: ComponentName?) {
             clipboardService?.onStateChanged = null
             clipboardService?.onMessageReceived = null
+            clipboardService?.onPeerCountChanged = null
             clipboardService = null
             isBound = false
         }
@@ -96,9 +111,67 @@ class MainActivity : ComponentActivity() {
         // 权限请求结果处理
     }
 
+    private val scanLauncher = registerForActivityResult(com.journeyapps.barcodescanner.ScanContract()) { result ->
+        if (result.contents == null) {
+            Toast.makeText(this, "Cancelled", Toast.LENGTH_SHORT).show()
+        } else {
+            handleScanResult(result.contents)
+        }
+    }
+
+    private fun launchQRScanner() {
+        val options = com.journeyapps.barcodescanner.ScanOptions()
+        options.setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE)
+        options.setPrompt("Scan Pairing Code from PC")
+        options.setCameraId(0)
+        options.setBeepEnabled(false)
+        options.setBarcodeImageEnabled(false)
+        options.setOrientationLocked(false)
+        options.setCaptureActivity(com.journeyapps.barcodescanner.CaptureActivity::class.java)
+        scanLauncher.launch(options)
+    }
+
+    private fun handleScanResult(json: String) {
+        try {
+            val obj = org.json.JSONObject(json)
+            val server = obj.getString("server")
+            val room = obj.getString("room")
+            val key = obj.getString("key")
+            
+            lifecycleScope.launch {
+                com.example.clipboardman.util.DebugLogger.log("QR_SCAN", "Saving pairing info...")
+                val settingsRepo = com.example.clipboardman.data.repository.SettingsRepository(applicationContext)
+                settingsRepo.savePairingInfo(server, room, key)
+                
+                com.example.clipboardman.util.DebugLogger.log("QR_SCAN", "Restarting Service...")
+                
+                // Restart Service with ACTION_START
+                val intent = Intent(this@MainActivity, ClipboardService::class.java).apply {
+                    action = ClipboardService.ACTION_START
+                }
+                stopService(intent)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    startForegroundService(intent)
+                } else {
+                    startService(intent)
+                }
+                
+                Toast.makeText(this@MainActivity, "Settings Saved. Connecting...", Toast.LENGTH_LONG).show()
+                // Update Log UI
+                com.example.clipboardman.util.DebugLogger.log("MainActivity", "Service restart requested")
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Invalid Code: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Initialize ViewModel synchronously to ensure it's ready for Service callbacks
+        mainViewModel = androidx.lifecycle.ViewModelProvider(this)[MainViewModel::class.java]
+        com.example.clipboardman.util.DebugLogger.log("MainActivity", "ViewModel initialized synchronously in onCreate")
+        
         // 请求通知权限 (Android 13+)
         requestNotificationPermission()
 
@@ -108,19 +181,16 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    val viewModel: MainViewModel = viewModel()
-
-                    // 保存 ViewModel 引用
-                    LaunchedEffect(viewModel) {
-                        mainViewModel = viewModel
-                    }
-
+                    // Use the Activity-scoped ViewModel instance directly
+                    // No need to re-initialize or use LaunchedEffect
+                    
                     MainNavigation(
-                        viewModel = viewModel,
+                        viewModel = mainViewModel,
                         onStartService = { startClipboardService() },
                         onStopService = { stopClipboardService() },
                         onMessageClick = { message, serverAddr, useHttps -> handleMessageClick(message, serverAddr, useHttps) },
-                        onPushClipboard = { handlePushClipboard() }
+                        onPushClipboard = { handlePushClipboard() },
+                        onScanClick = { launchQRScanner() }
                     )
                 }
             }
@@ -159,13 +229,17 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkAndAutoReconnect() {
-        CoroutineScope(Dispatchers.Main).launch {
-            val settingsRepository = com.example.clipboardman.data.repository.SettingsRepository(this@MainActivity)
-            val autoConnect = settingsRepository.autoConnectFlow.first()
-            val serverAddress = settingsRepository.serverAddressFlow.first()
+        lifecycleScope.launch {
+            try {
+                val settingsRepository = com.example.clipboardman.data.repository.SettingsRepository(this@MainActivity)
+                val autoConnect = settingsRepository.autoConnectFlow.first()
+                val serverAddress = settingsRepository.serverAddressFlow.first()
 
-            if (autoConnect && serverAddress.isNotBlank()) {
-                startClipboardService()
+                if (autoConnect && serverAddress.isNotBlank()) {
+                    startClipboardService()
+                }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Error in checkAndAutoReconnect", e)
             }
         }
     }
@@ -186,7 +260,7 @@ class MainActivity : ComponentActivity() {
             action = ClipboardService.ACTION_STOP
         }
         startService(intent)
-        mainViewModel?.updateConnectionState(ConnectionState.DISCONNECTED)
+        mainViewModel.updateConnectionState(ConnectionState.DISCONNECTED)
     }
 
     private fun handleMessageClick(message: PushMessage, serverAddress: String, useHttps: Boolean) {
@@ -199,10 +273,46 @@ class MainActivity : ComponentActivity() {
                 clipboardManager.setPrimaryClip(clip)
                 Toast.makeText(this, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
             }
-            // 图片/文件 - 用系统应用打开
+            // 图片/文件 - 优先使用本地路径
+            message.isFileType && message.localPath != null -> {
+                // 已有本地文件，直接打开
+                openLocalUri(message.localPath!!, message.mimeType ?: "*/*", message.type ?: PushMessage.TYPE_FILE)
+            }
+            // 图片/文件 - 无本地路径，从网上下载
             message.isFileType && message.fileUrl != null -> {
                 openFileWithSystem(message, serverAddress, useHttps)
             }
+        }
+    }
+
+    private fun openLocalUri(uriString: String, mimeType: String, messageType: String) {
+        try {
+            val uri = android.net.Uri.parse(uriString)
+            
+            // 根据消息类型推断正确的 MIME 类型
+            val actualMimeType = when {
+                mimeType != "*/*" && mimeType.isNotBlank() -> mimeType
+                messageType == PushMessage.TYPE_IMAGE -> "image/*"
+                messageType == PushMessage.TYPE_VIDEO -> "video/*"
+                messageType == PushMessage.TYPE_AUDIO -> "audio/*"
+                else -> "*/*"
+            }
+            
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, actualMimeType)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+
+            // 直接启动，不使用 chooser
+            if (intent.resolveActivity(packageManager) != null) {
+                startActivity(intent)
+            } else {
+                // 没有找到可以处理的应用，显示 chooser
+                startActivity(Intent.createChooser(intent, "选择应用打开"))
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "打开失败: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -300,7 +410,7 @@ class MainActivity : ComponentActivity() {
         }
 
         clipboardService?.sendClipboardText(text)
-        Toast.makeText(this, "已推送至服务器", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "推送成功", Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -310,17 +420,21 @@ fun MainNavigation(
     onStartService: () -> Unit,
     onStopService: () -> Unit,
     onMessageClick: (PushMessage, String, Boolean) -> Unit,
-    onPushClipboard: () -> Unit
+
+    onPushClipboard: () -> Unit,
+    onScanClick: () -> Unit
 ) {
     val navController = rememberNavController()
 
     val connectionState by viewModel.connectionState.collectAsState()
+    val peerCount by viewModel.peerCount.collectAsState()
     val serverAddress by viewModel.serverAddress.collectAsState()
     val useHttps by viewModel.useHttps.collectAsState()
     val messages by viewModel.messages.collectAsState()
     val fileHandleMode by viewModel.fileHandleMode.collectAsState()
     val autoConnect by viewModel.autoConnect.collectAsState()
     val maxHistoryCount by viewModel.maxHistoryCount.collectAsState()
+    val peers by viewModel.peers.collectAsState()
 
     // 自动连接 (仅当设置改变时触发，或者首次进入时)
     LaunchedEffect(autoConnect, serverAddress) {
@@ -342,6 +456,7 @@ fun MainNavigation(
         composable("home") {
             HomeScreen(
                 connectionState = connectionState,
+                peerCount = peerCount,
                 serverAddress = serverAddress,
                 useHttps = useHttps,
                 messages = messages,
@@ -350,7 +465,9 @@ fun MainNavigation(
                 },
                 onMessageClick = { message -> onMessageClick(message, serverAddress, useHttps) },
                 onDeleteMessages = { messageIds -> viewModel.deleteMessages(messageIds) },
-                onPushClipboard = onPushClipboard
+                onPushClipboard = onPushClipboard,
+                onReconnectClick = onStartService,
+                peers = peers
             )
         }
 
@@ -362,6 +479,7 @@ fun MainNavigation(
                 autoConnect = autoConnect,
                 maxHistoryCount = maxHistoryCount,
                 connectionState = connectionState,
+                peers = peers,
                 onConnectClick = {
                     if (serverAddress.isNotBlank()) {
                         onStartService()
@@ -375,6 +493,7 @@ fun MainNavigation(
                 onFileHandleModeChange = { viewModel.saveFileHandleMode(it) },
                 onAutoConnectChange = { viewModel.saveAutoConnect(it) },
                 onMaxHistoryCountChange = { viewModel.saveMaxHistoryCount(it) },
+                onScanClick = onScanClick,
                 onBackClick = { navController.popBackStack() }
             )
         }

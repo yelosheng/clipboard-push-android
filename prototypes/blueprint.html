@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CLIPBOARD PROTOCOL // V2.0</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Rajdhani:wght@500;600;700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #050505;
+            --panel-bg: rgba(20, 20, 25, 0.7);
+            --accent-primary: #00ff9d;
+            /* Cyber Green */
+            --accent-secondary: #00bcd4;
+            /* Cyber Blue */
+            --danger: #ff2a6d;
+            --text-main: #e0e0e0;
+            --text-dim: #6b7280;
+            --border: 1px solid rgba(255, 255, 255, 0.1);
+            --glow: 0 0 10px rgba(0, 255, 157, 0.2);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 2rem;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Rajdhani', sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            background-image:
+                radial-gradient(circle at 10% 20%, rgba(0, 255, 157, 0.05) 0%, transparent 20%),
+                radial-gradient(circle at 90% 80%, rgba(0, 188, 212, 0.05) 0%, transparent 20%);
+        }
+
+        /* Scanline Effect */
+        body::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 999;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            grid-template-rows: auto 1fr;
+            gap: 1.5rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            height: 100%;
+        }
+
+        /* Header */
+        header {
+            grid-column: 1 / -1;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .brand {
+            font-size: 2rem;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .brand::before {
+            content: "";
+            display: block;
+            width: 12px;
+            height: 12px;
+            background: var(--accent-primary);
+            box-shadow: 0 0 15px var(--accent-primary);
+        }
+
+        .status-bar {
+            display: flex;
+            gap: 2rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-dim);
+        }
+
+        .status-indicator.active {
+            background: var(--accent-primary);
+            box-shadow: 0 0 8px var(--accent-primary);
+        }
+
+        .status-indicator.error {
+            background: var(--danger);
+            box-shadow: 0 0 8px var(--danger);
+        }
+
+        /* Panels */
+        .panel {
+            background: var(--panel-bg);
+            border: var(--border);
+            padding: 1.5rem;
+            backdrop-filter: blur(10px);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .panel::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--accent-primary), transparent);
+            opacity: 0.5;
+        }
+
+        .panel-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--accent-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* Controls Panel (Left) */
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .input-group {
+            position: relative;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            margin-bottom: 0.5rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        input {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 0.8rem;
+            color: var(--accent-primary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            transition: all 0.3s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: inset 0 0 10px rgba(0, 255, 157, 0.1);
+        }
+
+        .btn {
+            background: rgba(0, 255, 157, 0.1);
+            border: 1px solid var(--accent-primary);
+            color: var(--accent-primary);
+            padding: 0.8rem;
+            cursor: pointer;
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .btn:hover {
+            background: var(--accent-primary);
+            color: #000;
+            box-shadow: 0 0 20px rgba(0, 255, 157, 0.4);
+        }
+
+        .qr-placeholder {
+            aspect-ratio: 1;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px dashed rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Simulated QR Code */
+        .qr-grid {
+            display: grid;
+            grid-template-columns: repeat(21, 1fr);
+            width: 80%;
+            height: 80%;
+            gap: 1px;
+        }
+
+        .qr-cell {
+            background: var(--text-main);
+        }
+
+        .qr-cell.off {
+            background: transparent;
+        }
+
+        /* Terminal/Logs (Right) */
+        .terminal {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        /* Scrollbar */
+        .terminal::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .terminal::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .terminal::-webkit-scrollbar-thumb {
+            background: var(--text-dim);
+        }
+
+        .log-entry {
+            display: flex;
+            gap: 1rem;
+            padding: 0.25rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .log-time {
+            color: var(--text-dim);
+        }
+
+        .log-type {
+            color: var(--accent-secondary);
+            font-weight: bold;
+            width: 60px;
+        }
+
+        .log-content {
+            color: var(--text-main);
+            word-break: break-all;
+        }
+
+        .log-entry.error .log-type {
+            color: var(--danger);
+        }
+
+        .log-entry.sys .log-type {
+            color: #f0f;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateX(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        /* Decor */
+        .corner {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            border: 2px solid var(--accent-primary);
+            opacity: 0.5;
+        }
+
+        .tl {
+            top: -2px;
+            left: -2px;
+            border-right: 0;
+            border-bottom: 0;
+        }
+
+        .br {
+            bottom: -2px;
+            right: -2px;
+            border-left: 0;
+            border-top: 0;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <div class="brand">CLIPBOARD MAN <span style="font-size:0.5em; opacity:0.5; margin-top:5px">v2.0</span>
+            </div>
+            <div class="status-bar">
+                <div class="status-item">
+                    <div class="status-indicator active"></div>
+                    NET_LINK: ESTABLISHED
+                </div>
+                <div class="status-item">
+                    <div class="status-indicator active"></div>
+                    ENCRYPTION: AES-256
+                </div>
+                <div class="status-item">
+                    ROOM: <span style="color:var(--accent-secondary)">#8A2F</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Sidebar / Settings -->
+        <aside class="panel controls">
+            <div class="corner tl"></div>
+            <div class="corner br"></div>
+
+            <div class="panel-title">System Config</div>
+
+            <div class="input-group">
+                <label>SERVER UPLINK</label>
+                <input type="text" value="https://sync.clipman.io:9661">
+            </div>
+
+            <div class="input-group">
+                <label>ENCRYPTION KEY</label>
+                <input type="password" value="••••••••••••••••">
+            </div>
+
+            <button class="btn">INITIALIZE CONNECTION</button>
+
+            <div class="panel-title" style="margin-top:2rem">DEVICE PAIRING</div>
+            <div class="qr-placeholder">
+                <div class="qr-grid" id="qr-grid">
+                    <!-- JS will populate -->
+                </div>
+            </div>
+            <div style="text-align:center; font-size:0.8rem; color:var(--text-dim)">SCAN SEQUENCE INITIATED</div>
+        </aside>
+
+        <!-- Main Terminal -->
+        <main class="panel terminal" id="log-container">
+            <div class="corner tl"></div>
+            <div class="panel-title">
+                <span>EVENT STREAM</span>
+                <span id="log-status" style="animation: blink 1s infinite">● LIVE</span>
+            </div>
+
+            <!-- Logs populated by JS -->
+        </main>
+    </div>
+
+    <script>
+        // Simulate Logs
+        const logs = [
+            { type: 'SYS', msg: 'System initialized. PID: 2104' },
+            { type: 'NET', msg: 'Handshake successful with 192.168.1.4' },
+            { type: 'CRYPTO', msg: 'Keys exchanged. Secure tunnel active.' },
+            { type: 'CLIP', msg: 'Received text: "https://github.com/vcpkg/vcpkg"' },
+            { type: 'CLIP', msg: 'Copied to system buffer.' },
+            { type: 'NET', msg: 'Keepalive packet sent.' },
+        ];
+
+        const container = document.getElementById('log-container');
+
+        function addLog(type, msg) {
+            const div = document.createElement('div');
+            div.className = `log-entry ${type === 'ERR' ? 'error' : ''} ${type === 'SYS' ? 'sys' : ''}`;
+            const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            div.innerHTML = `
+                <span class="log-time">[${time}]</span>
+                <span class="log-type">${type}</span>
+                <span class="log-content">${msg}</span>
+            `;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // Init Logs
+        logs.forEach(l => addLog(l.type, l.msg));
+
+        // Simulate incoming traffic
+        setInterval(() => {
+            const simLogs = [
+                { type: 'CLIP', msg: 'Incoming Image: capture_2024.png (2.4MB)' },
+                { type: 'SYS', msg: 'Memory check: OK' },
+                { type: 'NET', msg: 'Heartbeat ACK' }
+            ];
+            const randomLog = simLogs[Math.floor(Math.random() * simLogs.length)];
+            addLog(randomLog.type, randomLog.msg);
+        }, 3000);
+
+        // Simulate QR Code
+        const qrGrid = document.getElementById('qr-grid');
+        for (let i = 0; i < 21 * 21; i++) {
+            const cell = document.createElement('div');
+            cell.className = Math.random() > 0.5 ? 'qr-cell' : 'qr-cell off';
+            qrGrid.appendChild(cell);
+        }
+
+    </script>
+</body>
+
+</html>

@@ -8,6 +8,7 @@ import com.example.clipboardman.data.model.PushMessage
 import com.example.clipboardman.data.repository.MessageRepository
 import com.example.clipboardman.data.repository.SettingsRepository
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.retry
 import kotlinx.coroutines.launch
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -18,28 +19,44 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // 连接状态
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
+    
+    // Peer Count (0 = Alone, >0 = Paired)
+    // Note: RelayRepository reports TOTAL clients. So 1 means just us (Alone). >1 means others are there.
+    // Wait, let's verify server logic.
+    // Server: `count = sum(1 for r in CLIENT_ROOMS.values() if r == room)`
+    // If I am in the room, I am counted. So count=1 means alone.
+    private val _peerCount = MutableStateFlow(0)
+    val peerCount: StateFlow<Int> = _peerCount.asStateFlow()
+
+    private val _peers = MutableStateFlow<List<String>>(emptyList())
+    val peers: StateFlow<List<String>> = _peers.asStateFlow()
 
     // 消息列表
     private val _messages = MutableStateFlow<List<PushMessage>>(emptyList())
     val messages: StateFlow<List<PushMessage>> = _messages.asStateFlow()
 
-    init {
-        // 启动时加载本地存储的消息
-        loadMessagesFromStorage()
-    }
+
 
     private fun loadMessagesFromStorage() {
         viewModelScope.launch {
-            messageRepository.messagesFlow.first().let { storedMessages ->
-                if (storedMessages.isNotEmpty()) {
-                    val maxCount = maxHistoryCount.value
-                    val existingIds = _messages.value.map { it.safeId }.toSet()
-                    val newMessages = storedMessages.filter { it.safeId !in existingIds }
-                    _messages.value = (_messages.value + newMessages)
-                        .distinctBy { it.safeId }
-                        .take(maxCount)
+            // 使用 retry 机制防止读取错误导致 Flow 终止
+            messageRepository.messagesFlow
+                .retry { e ->
+                    com.example.clipboardman.util.DebugLogger.log("MainViewModel", "CRITICAL: Error collecting messages, retrying... ${e.message}")
+                    kotlinx.coroutines.delay(1000) // 延迟1秒重试
+                    true // 始终重试
                 }
-            }
+                .collect { storedMessages ->
+                    val maxCount = maxHistoryCount.value
+                    
+                    com.example.clipboardman.util.DebugLogger.log(
+                        "ViewModel", 
+                        "Flow emit: received ${storedMessages.size} msgs, limit=$maxCount. First ID: ${storedMessages.firstOrNull()?.id}"
+                    )
+                    
+                    val result = storedMessages.take(maxCount)
+                    _messages.value = result
+                }
         }
     }
 
@@ -64,6 +81,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun updateConnectionState(state: ConnectionState) {
         _connectionState.value = state
+    }
+
+    fun updatePeerCount(count: Int) {
+        _peerCount.value = count
+    }
+
+    fun updatePeers(peers: List<String>) {
+        _peers.value = peers
     }
 
     /**
@@ -152,5 +177,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             settingsRepository.saveMaxHistoryCount(count)
         }
+    }
+
+    init {
+        com.example.clipboardman.util.DebugLogger.log("ViewModel", "INIT - ViewModel Created! (Moved to bottom)")
+        
+        // Auto-Migration for legacy defaults
+        viewModelScope.launch {
+            try {
+                val currentAddress = settingsRepository.serverAddressFlow.first()
+                if (currentAddress.contains("localhost") || currentAddress.contains("5000")) {
+                    com.example.clipboardman.util.DebugLogger.log("ViewModel", "Auto-Migrating config: $currentAddress -> kxkl.tk:5055")
+                    settingsRepository.saveServerAddress("kxkl.tk:5055")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MainViewModel", "Error in auto-migration", e)
+            }
+        }
+        // 启动时加载本地存储的消息
+        loadMessagesFromStorage()
     }
 }

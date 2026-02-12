@@ -22,8 +22,6 @@ import com.example.clipboardman.data.repository.SettingsRepository
 import com.example.clipboardman.ui.theme.ClipboardManTheme
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
-import java.io.File
-import java.io.FileOutputStream
 
 /**
  * 分享接收 Activity
@@ -98,26 +96,57 @@ class ShareReceiverActivity : ComponentActivity() {
     }
 
     /**
-     * 处理文本分享
+     * 处理文本分享 - 使用 Relay API
      */
     private suspend fun handleTextShare(intent: Intent) {
-        val text = intent.getStringExtra(Intent.EXTRA_TEXT)
+        var text = intent.getStringExtra(Intent.EXTRA_TEXT)
         if (text.isNullOrBlank()) {
             showError("分享内容为空")
             return
         }
 
-        contentDescription.value = text.take(50) + if (text.length > 50) "..." else ""
-        uploadState.value = UploadState.Uploading("正在上传文本...")
+        // 移除浏览器附加的 URL (如果用户只想要选中的文本)
+        // 简单逻辑：如果文本包含 http 链接且不仅仅是链接，则尝试去除链接
+        // 很多浏览器分享格式为: "选中文字 https://url..."
+        if (text.contains("http")) {
+            // 简单的正则去除 URL
+            text = text.replace(Regex("\\s*https?://\\S+"), "").trim()
+        }
+        
+        // 移除可能的首尾双引号 (某些浏览器分享会带)
+        text = text.trim().removeSurrounding("\"")
 
-        val result = apiService?.pushText(text)
+        contentDescription.value = text.take(50) + if (text.length > 50) "..." else ""
+        uploadState.value = UploadState.Uploading("正在发送文本...")
+
+        // 获取 roomId
+        val roomId = settingsRepository.roomIdFlow.first()
+        if (roomId.isNullOrBlank()) {
+            showError("未配置房间ID，请先在APP中连接服务器")
+            return
+        }
+        
+        // 获取 Client ID 防止回音
+        val deviceId = android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "android_unknown"
+        val clientId = "android_$deviceId"
+
+        // 使用 Relay API 发送
+        val data = mapOf(
+            "room" to roomId,
+            "content" to text,
+            "type" to "text",
+            "timestamp" to System.currentTimeMillis()
+        )
+        
+        // 传递 clientId
+        val result = apiService?.relayEvent(roomId, "clipboard_sync", data, clientId)
         result?.onSuccess {
             uploadState.value = UploadState.Success
-            Toast.makeText(this, "上传成功", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "推送成功", Toast.LENGTH_SHORT).show()
             delay(500)
             finish()
         }?.onFailure { error ->
-            showError("上传失败: ${error.message}")
+            showError("推送失败")
         }
     }
 
@@ -125,7 +154,7 @@ class ShareReceiverActivity : ComponentActivity() {
      * 处理文件/图片分享
      */
     /**
-     * 处理文件/图片分享（支持单选和多选）
+     * 处理文件/图片分享（支持单选和多选）- 使用 WorkManager 后台上传
      */
     private suspend fun handleContentShare(intent: Intent, isMultiple: Boolean) {
         val uris = ArrayList<Uri>()
@@ -153,65 +182,48 @@ class ShareReceiverActivity : ComponentActivity() {
             return
         }
 
+        // 检查配置
+        val roomId = settingsRepository.roomIdFlow.first()
+        val roomKey = settingsRepository.roomKeyFlow.first()
+        if (roomId.isNullOrBlank() || roomKey.isNullOrBlank()) {
+            showError("未配置房间，请先在APP中扫码配对")
+            return
+        }
+
         val total = uris.size
-        var successCount = 0
-        var failCount = 0
-
-        // 显示初始状态
-        contentDescription.value = if (total == 1) "准备上传..." else "准备上传 $total 个文件..."
-
-        for ((index, uri) in uris.withIndex()) {
-            val fileName = getFileName(uri) ?: "shared_file_${System.currentTimeMillis()}"
-            
-            // 更新当前状态
-            val progressStr = if (total > 1) "(${index + 1}/$total) " else ""
-            uploadState.value = UploadState.Uploading("${progressStr}正在上传:\n$fileName")
-            if (total == 1) {
-                contentDescription.value = fileName
-            }
-
-            // 复制到临时文件
-            val tempFile = copyUriToTempFile(uri, fileName)
-            if (tempFile == null) {
-                Log.e(TAG, "Failed to copy file: $fileName")
-                failCount++
-                continue
-            }
-
-            try {
-                // 尝试获取具体 MIME 类型
-                val specificMimeType = contentResolver.getType(uri) ?: intent.type ?: "*/*"
-                
-                val result = apiService?.pushFile(tempFile, specificMimeType)
-                if (result != null && result.isSuccess) {
-                    successCount++
-                } else {
-                    failCount++
-                    Log.e(TAG, "Failed to upload $fileName: ${result?.exceptionOrNull()?.message}")
-                }
-            } catch (e: Exception) {
-                failCount++
-                Log.e(TAG, "Exception uploading $fileName: ${e.message}")
-            } finally {
-                // 清理临时文件
-                tempFile.delete()
-            }
-        }
-
-        // 最终结果处理
-        if (failCount == 0) {
-            uploadState.value = UploadState.Success
-            Toast.makeText(this, "全部上传成功", Toast.LENGTH_SHORT).show()
-            delay(500)
-            finish()
+        contentDescription.value = if (total == 1) {
+            getFileName(uris[0]) ?: "准备上传..."
         } else {
-            if (successCount > 0) {
-                Toast.makeText(this, "完成: $successCount 成功, $failCount 失败", Toast.LENGTH_LONG).show()
-                finish() // 部分成功也关闭
-            } else {
-                showError("所有文件上传失败")
-            }
+            "上传 $total 个文件..."
         }
+        uploadState.value = UploadState.Uploading("正在加入上传队列...")
+
+        // 使用 WorkManager 后台上传
+        var queuedCount = 0
+        for (uri in uris) {
+            val mimeType = contentResolver.getType(uri) ?: intent.type ?: "application/octet-stream"
+            
+            val workRequest = androidx.work.OneTimeWorkRequestBuilder<com.example.clipboardman.worker.UploadWorker>()
+                .setInputData(
+                    androidx.work.workDataOf(
+                        com.example.clipboardman.worker.UploadWorker.KEY_URI_STRING to uri.toString(),
+                        com.example.clipboardman.worker.UploadWorker.KEY_MIME_TYPE to mimeType
+                    )
+                )
+                .setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                .build()
+            
+            androidx.work.WorkManager.getInstance(this).enqueue(workRequest)
+            queuedCount++
+            Log.d(TAG, "Queued upload: $uri")
+        }
+
+        // 显示成功并立即关闭
+        uploadState.value = UploadState.Success
+        val msg = if (queuedCount == 1) "已加入上传队列" else "$queuedCount 个文件已加入上传队列"
+        Toast.makeText(this, "$msg\n详情请查看通知栏", Toast.LENGTH_SHORT).show()
+        delay(800)
+        finish()
     }
 
     /**
@@ -228,26 +240,6 @@ class ShareReceiverActivity : ComponentActivity() {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get file name: ${e.message}")
             null
-        }
-    }
-
-    /**
-     * 复制 Uri 内容到临时文件
-     */
-    private suspend fun copyUriToTempFile(uri: Uri, fileName: String): File? {
-        return withContext(Dispatchers.IO) {
-            try {
-                val tempFile = File(cacheDir, fileName)
-                contentResolver.openInputStream(uri)?.use { input ->
-                    FileOutputStream(tempFile).use { output ->
-                        input.copyTo(output)
-                    }
-                }
-                tempFile
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to copy uri to temp file: ${e.message}")
-                null
-            }
         }
     }
 

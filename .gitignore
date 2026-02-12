@@ -51,6 +51,7 @@ Thumbs.db
 # Claude
 .claude/
 
+<<<<<<< HEAD
 # Compiled Binaries & Build Artifacts
 *.exe
 *.dll
@@ -62,3 +63,24 @@ Thumbs.db
 pyside6-client/cpp-client/dist/
 pyside6-client/cpp-client/build/
 pyside6-client/cpp-client/x64/
+=======
+# C++ / Client
+cpp_client/build/
+cpp_client/build_win32/
+cpp_client/vcpkg_installed/
+*.exe
+*.dll
+*.lib
+*.pdb
+*.ilk
+*.obj
+*.sln
+*.vcxproj
+*.vcxproj.user
+CMakeUserPresets.json
+compile_commands.json
+cpp_client/logs/
+lib/catch
+lib/rapidjson
+lib/websocketpp
+>>>>>>> feature/productization-mvp
