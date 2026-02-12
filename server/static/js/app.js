@@ -73,9 +73,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (Array.isArray(c)) { sids = c; }
             else { sids = c.sids || []; r = c.room || 'Unknown'; }
+            const t = (c && c.type) ? c.type : 'Unknown';
 
             if (!rooms[r]) rooms[r] = [];
-            rooms[r].push({ id: cid, sids, room: r });
+            rooms[r].push({ id: cid, sids, room: r, type: t });
 
             totalC++;
             totalS += sids.length;
@@ -123,7 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (list.length === 0) {
-            clientListEl.innerHTML = '<tr><td colspan="4" style="color: #999; padding: 24px 0;">No active clients in this view.</td></tr>';
+            clientListEl.innerHTML = '<tr><td colspan="5" style="color: #999; padding: 24px 0;">No active clients in this view.</td></tr>';
             return;
         }
 
@@ -131,6 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td style="font-weight: 700;">${c.id}</td>
+                <td>${renderClientType(c.type)}</td>
                 <td>${c.room}</td>
                 <td>${c.sids.length}</td>
                 <td><span style="color: #34c759; font-weight: 700;">Active</span></td>
@@ -160,6 +162,31 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         logEl.insertBefore(div, logEl.firstChild);
         if (logEl.children.length > 50) logEl.removeChild(logEl.lastChild);
+    }
+
+    function renderClientType(type) {
+        const t = (type || 'unknown').toLowerCase();
+        const label = t.toUpperCase();
+        const icon = typeIconChar(t);
+        return `
+            <span class="type-chip type-${t}">
+                <span class="type-icon" aria-hidden="true">${icon}</span>
+                <span class="type-label">${label}</span>
+            </span>
+        `;
+    }
+
+    function typeIconChar(t) {
+        switch (t) {
+            case 'windows': return 'W';
+            case 'macos': return 'M';
+            case 'linux': return 'L';
+            case 'android': return 'A';
+            case 'ios': return 'I';
+            case 'web': return 'B';
+            case 'cli': return '>';
+            default: return '?';
+        }
     }
 
     function stringToColor(str) {

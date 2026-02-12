@@ -126,9 +126,10 @@ void PushText(const std::string& text) {
         nlohmann::json j;
         j["room"] = config.room_id;
         j["event"] = "clipboard_sync";
-        j["client_id"] = config.device_id;
+        j["sender_id"] = config.device_id;
         
         nlohmann::json data;
+        data["room"] = config.room_id;
         data["content"] = b64;
         data["encrypted"] = true;
         data["timestamp"] = GetCurrentTimestamp();
@@ -186,9 +187,10 @@ void PushFileData(const std::vector<uint8_t>& data, const std::string& filename,
         nlohmann::json relayPayload;
         relayPayload["room"] = config.room_id;
         relayPayload["event"] = "file_sync";
-        relayPayload["client_id"] = config.device_id;
+        relayPayload["sender_id"] = config.device_id;
         
         nlohmann::json d;
+        d["room"] = config.room_id;
         d["download_url"] = downloadUrl;
         d["filename"] = filename;
         d["type"] = fileType;

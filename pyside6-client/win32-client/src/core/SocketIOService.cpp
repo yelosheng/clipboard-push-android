@@ -173,14 +173,13 @@ void SocketIOService::HandlePacket(const std::string& packet) {
 void SocketIOService::JoinRoom() {
     if (m_roomId.empty()) return;
     
-    nlohmann::json j = nlohmann::json::array();
-    j.push_back("join");
     nlohmann::json data;
     data["room"] = m_roomId;
     data["client_id"] = m_clientId;
-    j.push_back(data);
+    data["client_type"] = "windows";
     
-    SendPacket("42" + j.dump());
+    // 42 is Message type (4) + Event type (2)
+    SendPacket("42" + nlohmann::json({"join", data}).dump());
     LOG_INFO("Joined room: %s", m_roomId.c_str());
 }
 

@@ -65,14 +65,17 @@ except Exception as e:
 CLIENT_SESSIONS = {}
 # Structure: { 'client_id_1': 'room_name', ... }
 CLIENT_ROOMS = {}
+# Structure: { 'client_id_1': 'client_type', ... }
+CLIENT_TYPES = {}
 
 def get_serialized_sessions():
-    """Convert sets to lists for JSON serialization and include room info"""
+    """Convert sets to lists for JSON serialization and include room/type info"""
     data = {}
     for client_id, sids in CLIENT_SESSIONS.items():
         data[client_id] = {
             'sids': list(sids),
-            'room': CLIENT_ROOMS.get(client_id, 'Unknown')
+            'room': CLIENT_ROOMS.get(client_id, 'Unknown'),
+            'type': CLIENT_TYPES.get(client_id, 'Unknown')
         }
     return data
 
@@ -225,6 +228,8 @@ def on_disconnect():
                     del CLIENT_ROOMS[client_id]
                     # Broadcast updated stats (after removal)
                     broadcast_room_stats(room)
+                if client_id in CLIENT_TYPES:
+                    del CLIENT_TYPES[client_id]
             
             logger.info(f"Removed SID {request.sid} from client {client_id}")
             # Notify dashboard
@@ -237,6 +242,7 @@ def on_disconnect():
 def on_join(data):
     room = data.get('room')
     client_id = data.get('client_id')
+    client_type = data.get('client_type')
     
     if room:
         join_room(room)
@@ -250,6 +256,10 @@ def on_join(data):
             emit('client_list_update', serialized_sessions, room=request.sid)
         
     if client_id:
+        if not client_type:
+            logger.warning(f"Client {request.sid} missing client_type for client_id {client_id}")
+            emit('error', {'msg': 'client_type is required when providing client_id'})
+            return
         if client_id not in CLIENT_SESSIONS:
             CLIENT_SESSIONS[client_id] = set()
         CLIENT_SESSIONS[client_id].add(request.sid)
@@ -260,6 +270,7 @@ def on_join(data):
             logger.info(f"Updated room for {client_id}: {room}")
         else:
             logger.warning(f"Client {client_id} joined without room info in payload")
+        CLIENT_TYPES[client_id] = client_type
             
         logger.info(f"Registered client_id {client_id} with sid {request.sid}. Current Rooms: {CLIENT_ROOMS}")
         # Broadcast updated client list to dashboard
