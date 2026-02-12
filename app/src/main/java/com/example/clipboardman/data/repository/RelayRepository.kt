@@ -40,6 +40,7 @@ class RelayRepository {
 
         try {
             val opts = IO.Options()
+            opts.forceNew = true // Ensure new connection instance to avoid listener accumulation
             opts.transports = arrayOf("websocket") // Force WebSocket (User confirmed stable)
             opts.reconnection = true
             opts.reconnectionAttempts = Int.MAX_VALUE // 无限重试
