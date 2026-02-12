@@ -50,3 +50,15 @@ Thumbs.db
 
 # Claude
 .claude/
+
+# Compiled Binaries & Build Artifacts
+*.exe
+*.dll
+*.pdb
+*.obj
+*.o
+*.lib
+*.exp
+pyside6-client/cpp-client/dist/
+pyside6-client/cpp-client/build/
+pyside6-client/cpp-client/x64/
