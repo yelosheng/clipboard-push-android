@@ -40,12 +40,13 @@ class RelayRepository {
 
         try {
             val opts = IO.Options()
+            opts.transports = arrayOf("websocket") // Force WebSocket to avoid polling issues in background
             opts.reconnection = true
             opts.reconnectionAttempts = Int.MAX_VALUE // 无限重试
             opts.reconnectionDelay = 1000
             opts.reconnectionDelayMax = 5000
-            opts.timeout = 20000
-            // opts.forceNew = true // Uncomment if needed
+            opts.timeout = 10000 // Reduce timeout to fail fast
+            opts.upgrade = false // Disable upgrade since we force websocket
             
             Log.d("RelayRepository", "Socket Connecting: $serverUrl")
             DebugLogger.log("RelayRepository", "Socket Connecting to: $serverUrl")
