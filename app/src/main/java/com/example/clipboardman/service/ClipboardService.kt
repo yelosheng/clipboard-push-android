@@ -71,6 +71,7 @@ class ClipboardService : Service() {
 
     fun sendClipboardText(text: String) {
         serviceScope.launch {
+             DebugLogger.log(TAG, "Requesting send clipboard text: '${text.take(50)}...' len=${text.length}")
              roomId?.let { id ->
                  val manager = cryptoManager
                  if (manager != null) {
@@ -80,16 +81,20 @@ class ClipboardService : Service() {
                              val encryptedBase64 = android.util.Base64.encodeToString(encryptedBytes, android.util.Base64.NO_WRAP)
                              relayRepository.sendClipboardSync(id, encryptedBase64, clientId, true)
                              Log.d(TAG, "Sent encrypted text")
+                             DebugLogger.log(TAG, "Sent encrypted text to room $id")
                          } else {
                              Log.e(TAG, "Encryption failed, sending plain text")
+                             DebugLogger.log(TAG, "Encryption failed!")
                              relayRepository.sendClipboardSync(id, text, clientId, false)
                          }
                      } catch (e: Exception) {
                          Log.e(TAG, "Encryption error", e)
+                         DebugLogger.log(TAG, "Encryption error: ${e.message}")
                          relayRepository.sendClipboardSync(id, text, clientId, false)
                      }
                  } else {
                      Log.w(TAG, "CryptoManager not ready, sending plain text")
+                     DebugLogger.log(TAG, "CryptoManager null, sending plain text")
                      relayRepository.sendClipboardSync(id, text, clientId, false)
                  }
              }
@@ -112,7 +117,7 @@ class ClipboardService : Service() {
         // 不崩溃，只记录日志
     }
 
-    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob() + exceptionHandler)
+    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob() + exceptionHandler)
 
     private var currentState = ConnectionState.DISCONNECTED
     private var serverAddress = ""
@@ -239,6 +244,11 @@ class ClipboardService : Service() {
 
     override fun onBind(intent: Intent?): IBinder = binder
 
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        DebugLogger.log(TAG, "onTrimMemory level=$level")
+    }
+
     override fun onDestroy() {
         Log.d(TAG, "Service destroyed")
         DebugLogger.log(TAG, "Service onDestroy")
@@ -248,14 +258,37 @@ class ClipboardService : Service() {
         super.onDestroy()
     }
 
+    private var startJob: Job? = null
+
     private fun startService() {
         DebugLogger.log(TAG, "startService() called")
-        serviceScope.launch {
+        
+        // Cancel previous start attempt if running
+        startJob?.cancel()
+        
+        startJob = serviceScope.launch {
             DebugLogger.log(TAG, "Reading settings...")
-            serverAddress = settingsRepository.serverAddressFlow.first()
-            useHttps = settingsRepository.useHttpsFlow.first()
-            roomId = settingsRepository.roomIdFlow.first()
-            val roomKey = settingsRepository.roomKeyFlow.first()
+            val newServerAddress = settingsRepository.serverAddressFlow.first()
+            val newUseHttps = settingsRepository.useHttpsFlow.first()
+            val newRoomId = settingsRepository.roomIdFlow.first()
+            val newRoomKey = settingsRepository.roomKeyFlow.first()
+            
+            // Check active state safely
+            if (isActive.not()) return@launch
+
+            // Debounce: If config is same and we are connected/connecting, do nothing
+            if (newServerAddress == serverAddress && 
+                newRoomId == roomId && 
+                newUseHttps == useHttps &&
+                (currentState == ConnectionState.CONNECTED || currentState == ConnectionState.CONNECTING)) {
+                DebugLogger.log(TAG, "Service already running with same config. Ignoring start request.")
+                return@launch
+            }
+            
+            // Assign new values
+            serverAddress = newServerAddress
+            useHttps = newUseHttps
+            roomId = newRoomId
             
             DebugLogger.log(TAG, "Config loaded: $serverAddress / $roomId")
 
@@ -267,9 +300,9 @@ class ClipboardService : Service() {
             }
 
             // Initialize CryptoManager
-            if (!roomKey.isNullOrBlank()) {
+            if (!newRoomKey.isNullOrBlank()) {
                 try {
-                    cryptoManager = com.example.clipboardman.util.CryptoManager(roomKey)
+                    cryptoManager = com.example.clipboardman.util.CryptoManager(newRoomKey)
                     Log.d(TAG, "CryptoManager initialized")
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to init CryptoManager", e)
@@ -458,19 +491,45 @@ class ClipboardService : Service() {
 
     // --- WakeLock Helpers ---
     private fun acquireWakeLocks() {
-        if (wakeLock == null) {
-            val pm = getSystemService(POWER_SERVICE) as PowerManager
-            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "CB:WakeLock").apply { acquire() }
-        }
-        if (wifiLock == null) {
-            val wm = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
-            wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "CB:WiFiLock").apply { acquire() }
+        try {
+            if (wakeLock == null) {
+                val pm = getSystemService(POWER_SERVICE) as PowerManager
+                wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "CB:WakeLock").apply { 
+                    setReferenceCounted(false)
+                    acquire() 
+                }
+                DebugLogger.log(TAG, "WakeLock acquired")
+            }
+            if (wifiLock == null) {
+                val wm = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
+                wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "CB:WiFiLock").apply { 
+                    setReferenceCounted(false)
+                    acquire() 
+                }
+                DebugLogger.log(TAG, "WiFiLock acquired")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error acquiring locks", e)
+            DebugLogger.log(TAG, "Error acquiring locks: ${e.message}")
         }
     }
 
     private fun releaseWakeLocks() {
-        wakeLock?.release(); wakeLock = null
-        wifiLock?.release(); wifiLock = null
+        try {
+            if (wakeLock?.isHeld == true) {
+                wakeLock?.release()
+                DebugLogger.log(TAG, "WakeLock released")
+            }
+            wakeLock = null
+            
+            if (wifiLock?.isHeld == true) {
+                wifiLock?.release()
+                DebugLogger.log(TAG, "WiFiLock released")
+            }
+            wifiLock = null
+        } catch (e: Exception) {
+            Log.e(TAG, "Error releasing locks", e)
+        }
     }
 
     // --- Upload Trigger (Called by UI or Intent) ---

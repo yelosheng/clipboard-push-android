@@ -20,6 +20,8 @@ import com.example.clipboardman.data.model.ConnectionState
 import com.example.clipboardman.util.DebugLogger
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -398,6 +400,69 @@ fun SettingsScreen(
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
                                 modifier = Modifier.padding(vertical = 1.dp)
                             )
+                        }
+                    }
+                }
+            }
+
+            SettingsSection(title = "Developer") {
+                var showLogs by remember { mutableStateOf(false) }
+                
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showLogs = !showLogs }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Debug Logs",
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(
+                            imageVector = if (showLogs) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = if (showLogs) "Collapse" else "Expand"
+                        )
+                    }
+
+                    if (showLogs) {
+                        val logs by com.example.clipboardman.util.DebugLogger.logs.collectAsState()
+                        
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(300.dp)
+                                .padding(top = 8.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(8.dp),
+                                reverseLayout = true 
+                            ) {
+                                items(logs) { log ->
+                                    androidx.compose.foundation.text.selection.SelectionContainer {
+                                        Text(
+                                            text = log,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                            modifier = Modifier.padding(vertical = 2.dp)
+                                        )
+                                    }
+                                    Divider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
+                                }
+                            }
+                        }
+                        
+                        // Clear Button
+                         Button(
+                            onClick = { com.example.clipboardman.util.DebugLogger.clear() },
+                            modifier = Modifier.align(Alignment.End).padding(top = 8.dp)
+                        ) {
+                            Text("Clear Logs")
                         }
                     }
                 }

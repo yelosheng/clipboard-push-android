@@ -40,13 +40,12 @@ class RelayRepository {
 
         try {
             val opts = IO.Options()
-            opts.transports = arrayOf("websocket") // Force WebSocket to avoid polling issues in background
+            opts.transports = arrayOf("websocket") // Force WebSocket (User confirmed stable)
             opts.reconnection = true
             opts.reconnectionAttempts = Int.MAX_VALUE // 无限重试
             opts.reconnectionDelay = 1000
             opts.reconnectionDelayMax = 5000
             opts.timeout = 10000 // Reduce timeout to fail fast
-            opts.upgrade = false // Disable upgrade since we force websocket
             
             Log.d("RelayRepository", "Socket Connecting: $serverUrl")
             DebugLogger.log("RelayRepository", "Socket Connecting to: $serverUrl")
@@ -55,38 +54,36 @@ class RelayRepository {
             
             socket?.on(Socket.EVENT_CONNECT) {
                 Log.d("RelayRepository", "Connected to Relay")
-                DebugLogger.log("RelayRepository", "Socket Connected")
+                DebugLogger.log("RelayRepository", "Socket Connected (Ref: ${socket?.id()})")
                 _connectionStatus.tryEmit(true)
                 // Join Room
                 try {
                     val joinData = JSONObject()
                     joinData.put("room", roomId)
-                    
-                    // Add client_id if available (Pass it via connect or get globally? For now hardcode logic here or change connect signature)
-                    // Changing signature might break other calls. Let's retrieve it from a helper or just leave it for now?
-                    // Better to fix it properly. But RelayRepository doesn't have Context to get ANDROID_ID easily without dependency injection.
-                    // For now, let's leave IO socket join as is since IO socket broadcasts naturally exclude self.
-                    // The focus was cleaning up HTTP echo.
-                    
-                    // Actually, if we want the server to track this socket as "android_xxx", we MUST send it.
-                    // Let's rely on the caller to pass it? 
-                    // Let's modify connect to take clientId.
                     joinData.put("client_id", clientId) // We need to add clientId to connect() param first
                     joinData.put("client_type", "android")
                     
                     socket?.emit("join", joinData)
+                    DebugLogger.log("RelayRepository", "Emitted join room: $roomId")
                 } catch (e: Exception) {
                     Log.e("RelayRepository", "Failed to join room", e)
+                    DebugLogger.log("RelayRepository", "Failed to join room: ${e.message}")
                 }
-            }?.on(Socket.EVENT_DISCONNECT) {
-                Log.d("RelayRepository", "Disconnected from Relay")
-                DebugLogger.log("RelayRepository", "Socket Disconnected")
+            }?.on(Socket.EVENT_DISCONNECT) { args ->
+                val reason = if (args.isNotEmpty()) args[0].toString() else "Unknown"
+                Log.d("RelayRepository", "Disconnected from Relay: $reason")
+                DebugLogger.log("RelayRepository", "Socket Disconnected: $reason")
                 _connectionStatus.tryEmit(false)
             }?.on(Socket.EVENT_CONNECT_ERROR) { args ->
                 val error = if (args.isNotEmpty()) args[0].toString() else "Unknown"
                 Log.e("RelayRepository", "Connection Error: $error")
                 DebugLogger.log("RelayRepository", "Socket Error: $error")
                 _connectionStatus.tryEmit(false)
+            }?.on("reconnect_attempt") { args ->
+                 val attempt = if (args.isNotEmpty()) args[0].toString() else "?"
+                 DebugLogger.log("RelayRepository", "Reconnecting... (Attempt $attempt)")
+            }?.on("reconnect") {
+                 DebugLogger.log("RelayRepository", "Reconnected!")
             }
             
             socket?.on("clipboard_sync") { args ->
