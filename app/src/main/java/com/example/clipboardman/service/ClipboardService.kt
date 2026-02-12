@@ -60,6 +60,7 @@ class ClipboardService : Service() {
     private var currentPeerCount = 0
     private var currentPeers: List<String> = emptyList()
     fun getPeerCount(): Int = currentPeerCount
+    fun getPeers(): List<String> = currentPeers
 
     fun reconnect() {
         // Force reload config and reconnect

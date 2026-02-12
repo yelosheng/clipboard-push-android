@@ -152,16 +152,23 @@ document.addEventListener('DOMContentLoaded', () => {
         const div = document.createElement('div');
         div.className = 'log-item';
 
+        const senderType = getSenderType(sender);
+        const senderIcon = typeIconEmoji(senderType);
         const senderColor = stringToColor(sender);
 
         div.innerHTML = `
             <span class="log-time">${new Date().toLocaleTimeString('en-GB')}</span>
             <span class="log-tag">[${type}]</span>
-            <span style="color: ${senderColor}; font-weight: 700; margin-right: 8px;">[${sender}]</span>
+            <span style="color: ${senderColor}; font-weight: 700; margin-right: 8px;">[${senderIcon} ${sender}]</span>
             <span class="log-content">${content}</span>
         `;
         logEl.insertBefore(div, logEl.firstChild);
         if (logEl.children.length > 50) logEl.removeChild(logEl.lastChild);
+    }
+
+    function getSenderType(sender) {
+        if (!sender || !currentClients[sender]) return 'unknown';
+        return normalizeClientType(currentClients[sender]);
     }
 
     function normalizeClientType(c) {
@@ -173,7 +180,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderClientType(type) {
         const t = (type || 'unknown').toLowerCase();
         const label = t.toUpperCase();
-        const icon = typeIconChar(t);
+        const icon = typeIconEmoji(t);
         return `
             <span class="type-chip type-${t}">
                 <span class="type-icon" aria-hidden="true">${icon}</span>
@@ -182,16 +189,16 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
     }
 
-    function typeIconChar(t) {
+    function typeIconEmoji(t) {
         switch (t) {
-            case 'windows': return 'W';
-            case 'macos': return 'M';
-            case 'linux': return 'L';
-            case 'android': return 'A';
-            case 'ios': return 'I';
-            case 'web': return 'B';
-            case 'cli': return '>';
-            default: return '?';
+            case 'windows': return '🪟';
+            case 'macos': return '🍎';
+            case 'linux': return '🐧';
+            case 'android': return '🤖';
+            case 'ios': return '📱';
+            case 'web': return '🌐';
+            case 'cli': return '⌨️';
+            default: return '❓';
         }
     }
 
