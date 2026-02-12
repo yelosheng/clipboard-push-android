@@ -85,6 +85,7 @@ class MainActivity : ComponentActivity() {
             val currentState = clipboardService?.getConnectionState() ?: ConnectionState.DISCONNECTED
             mainViewModel.updateConnectionState(currentState)
             mainViewModel.updatePeerCount(clipboardService?.getPeerCount() ?: 0)
+            mainViewModel.updatePeers(clipboardService?.getPeers() ?: emptyList())
             
             // 不再从 Service 内存同步消息历史
             // ViewModel 通过 messageRepository.messagesFlow.collect 持续观察，更可靠
