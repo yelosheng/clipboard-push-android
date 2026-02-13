@@ -109,6 +109,7 @@ void SettingsWindow::LoadSettings() {
     CheckDlgButton(m_hWnd, IDC_SETTINGS_FILES, data.auto_copy_file ? BST_CHECKED : BST_UNCHECKED);
     CheckDlgButton(m_hWnd, IDC_SETTINGS_STARTUP, data.auto_start ? BST_CHECKED : BST_UNCHECKED);
     CheckDlgButton(m_hWnd, IDC_SETTINGS_MINIMIZED, data.start_minimized ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(m_hWnd, IDC_SETTINGS_NOTIFICATIONS, data.show_notifications ? BST_CHECKED : BST_UNCHECKED);
 
     // Update QR - using the requested JSON format
     nlohmann::json j;
@@ -135,6 +136,7 @@ void SettingsWindow::SaveSettings() {
     data.auto_copy_file = (IsDlgButtonChecked(m_hWnd, IDC_SETTINGS_FILES) == BST_CHECKED);
     data.auto_start = (IsDlgButtonChecked(m_hWnd, IDC_SETTINGS_STARTUP) == BST_CHECKED);
     data.start_minimized = (IsDlgButtonChecked(m_hWnd, IDC_SETTINGS_MINIMIZED) == BST_CHECKED);
+    data.show_notifications = (IsDlgButtonChecked(m_hWnd, IDC_SETTINGS_NOTIFICATIONS) == BST_CHECKED);
     
     Config::Instance().Save();
     LOG_INFO("Settings saved");

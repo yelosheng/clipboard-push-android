@@ -1,6 +1,6 @@
-# Progress Log - Systray Status Indicators
+# Progress Log - Telegram Notifications
 
 ## Session Start: 2026-02-10
-- **Objective**: Implement Dropbox-style status indicators on the system tray icon.
+- **Objective**: Replace standard system balloons with custom Telegram-style bubbles.
 - **Status**: Planning complete. Starting Phase 1.
-- **Action**: Researching GDI+ icon composition and memory safety.
+- **Action**: Defining `NotificationWindow` class structure.

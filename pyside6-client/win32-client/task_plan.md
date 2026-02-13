@@ -1,24 +1,25 @@
-# Task Plan: Clipboard Push v3.1 (Systray Status Icons)
+# Task Plan: Clipboard Push v3.2 (Telegram-style Notifications)
 
-**Goal**: Implement a dynamic system tray icon that indicates connection status using color-coded "indicator lights" overlaid on the original app icon.
+**Goal**: Implement a custom, high-quality popup notification window that mimics the "Telegram" aesthetic (rounded corners, smooth animation, modern typography).
 
-## Phase 1: Foundation for Dynamic Icons
-- [ ] **GDI+ Helper**: Create or update Platform logic to support loading resources and drawing overlays.
-- [ ] **Icon Compositor**: Implement a function to take a base icon, a status color, and return a new `HICON`.
+## Phase 1: Custom Notification Window Class
+- [ ] **NotificationWindow Class**: Define a new UI component for the popup.
+- [ ] **Window Styling**: Implement a borderless, layered window (`WS_EX_LAYERED`) for transparency and shadows.
+- [ ] **GDI+ Rendering**: Create a modern "bubble" look with rounded corners and a slight drop shadow.
 
-## Phase 2: State Management Expansion
-- [ ] **Refine ConnectionStatus**: Ensure we have enough states (Disconnected, Connecting, ConnectedLonely, ConnectedSynced).
-- [ ] **Socket.IO Integration**: Update `SocketIOService` to handle potential "room peer" information if available, or simulate it.
+## Phase 2: Animation & Layout
+- [ ] **Animation Logic**: Implement a "slide up" entry and a "fade out" exit.
+- [ ] **Dynamic Sizing**: Adjust bubble size based on the length of the received text.
+- [ ] **Placement Logic**: Automatically position the bubble in the bottom-right corner, respecting the taskbar height.
 
-## Phase 3: Tray Icon Integration
-- [ ] **Update TrayIcon Class**: Add a method to change the icon dynamically.
-- [ ] **Lifecycle Management**: Ensure dynamically created icons are properly destroyed to prevent GDI leaks.
+## Phase 3: Integration
+- [ ] **Main Integration**: Replace or augment `TrayIcon::ShowMessage` with the new `NotificationWindow`.
+- [ ] **Thread Safety**: Ensure notifications can be triggered from network threads.
 
-## Phase 4: UI & Logic Wiring
-- [ ] **Connect Signals**: Link `SocketIOService` status changes to `TrayIcon` updates in `main.cpp`.
-- [ ] **Visual Polish**: Adjust indicator position, size, and border for optimal visibility on different DPIs.
+## Phase 4: Polish & Refinement
+- [ ] **Multi-notification handling**: Support stacking multiple notifications if messages arrive quickly.
+- [ ] **Visual Tweaks**: Refine colors (dark/light theme support) and fonts.
 
-## Phase 5: Testing & Release
-- [ ] **Functional Test**: Verify icons change correctly during connect/disconnect/reconnect.
-- [ ] **Resource Test**: Verify no memory leaks after multiple status changes.
-- [ ] **Final Build**: Perform Release build and update `dist-v3-win32`.
+## Phase 5: Build & Release
+- [ ] **Final Rebuild**: Ensure size remains optimized.
+- [ ] **Release Update**: Update `dist-v3-win32`.

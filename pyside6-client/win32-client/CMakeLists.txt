@@ -36,6 +36,7 @@ set(SOURCES
     src/ui/TrayIcon.cpp
     src/ui/MainWindow.cpp
     src/ui/SettingsWindow.cpp
+    src/ui/NotificationWindow.cpp
 )
 
 # Resources

@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clipboard Push - Sync Your World</title>
+    <meta name="description"
+        content="Secure, real-time clipboard synchronization. End-to-end encrypted. Windows, macOS, Android, iOS.">
+
+    <!-- Google Fonts: Inter (Modern Sans) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Tailwind Config -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Inter"', 'sans-serif'],
+                    },
+                    colors: {
+                        // Light Mode Palette
+                        bg: '#ffffff',       // White
+                        surface: '#f8fafc',  // Slate 50
+                        primary: {
+                            DEFAULT: '#4f46e5', // Indigo 600
+                            hover: '#4338ca',   // Indigo 700
+                            light: '#e0e7ff',   // Indigo 100
+                        },
+                        text: {
+                            main: '#0f172a',    // Slate 900
+                            muted: '#64748b',   // Slate 500
+                        },
+                        border: '#e2e8f0',   // Slate 200
+                        accent: '#0ea5e9',   // Sky 500
+                    },
+                    boxShadow: {
+                        'soft': '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)',
+                        'glow': '0 0 20px rgba(79, 70, 229, 0.15)',
+                        'card': '0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.02)',
+                    },
+                    animation: {
+                        'float': 'float 6s ease-in-out infinite',
+                        'blob': 'blob 7s infinite',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-20px)' },
+                        },
+                        blob: {
+                            '0%': { transform: 'translate(0px, 0px) scale(1)' },
+                            '33%': { transform: 'translate(30px, -50px) scale(1.1)' },
+                            '66%': { transform: 'translate(-20px, 20px) scale(0.9)' },
+                            '100%': { transform: 'translate(0px, 0px) scale(1)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .glass {
+                @apply bg-white/70 backdrop-blur-lg border border-white/50 shadow-soft;
+            }
+            .glass-card {
+                @apply bg-white border border-border rounded-2xl shadow-sm hover:shadow-card transition-all duration-300;
+            }
+            .btn-primary {
+                @apply bg-primary hover:bg-primary-hover text-white font-semibold py-3 px-6 rounded-xl transition-all shadow-lg shadow-primary/20 hover:shadow-primary/40;
+            }
+            .btn-secondary {
+                @apply bg-white hover:bg-slate-50 text-text-main border border-border font-medium py-3 px-6 rounded-xl transition-all hover:border-slate-300;
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-surface text-text-main antialiased selection:bg-primary/20 selection:text-primary overflow-x-hidden">
+
+    <!-- Background Shapes -->
+    <div class="fixed inset-0 z-0 pointer-events-none overflow-hidden">
+        <div
+            class="absolute top-0 left-1/4 w-96 h-96 bg-primary/10 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob">
+        </div>
+        <div
+            class="absolute top-0 right-1/4 w-96 h-96 bg-accent/10 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-2000">
+        </div>
+        <div
+            class="absolute -bottom-32 left-1/3 w-96 h-96 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-4000">
+        </div>
+    </div>
+
+    <!-- Navbar -->
+    <nav
+        class="fixed w-full z-50 top-0 transition-all duration-300 bg-white/80 backdrop-blur-md border-b border-border">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-20">
+                <!-- Logo -->
+                <div class="flex items-center gap-3 cursor-pointer">
+                    <div
+                        class="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg shadow-primary/20 text-white">
+                        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                    </div>
+                    <span class="font-bold text-xl tracking-tight text-text-main">
+                        Clipboard<span class="text-primary">Push</span>
+                    </span>
+                </div>
+
+                <!-- Desktop Menu -->
+                <div class="hidden md:flex items-center space-x-8 text-sm font-medium text-text-muted">
+                    <a href="#features" class="hover:text-primary transition-colors">Features</a>
+                    <a href="#how-it-works" class="hover:text-primary transition-colors">How it works</a>
+                    <a href="#faq" class="hover:text-primary transition-colors">FAQ</a>
+                </div>
+
+                <!-- CTA -->
+                <div class="hidden md:block">
+                    <a href="#download" class="btn-primary py-2 px-5 text-sm">
+                        Get Started
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="relative pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative pointer-events-none">
+
+            <!-- Badge -->
+            <div
+                class="inline-flex items-center gap-2 bg-white border border-border rounded-full px-4 py-1.5 mb-8 shadow-sm pointer-events-auto hover:border-primary/30 transition-colors">
+                <span class="relative flex h-2 w-2">
+                    <span
+                        class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                </span>
+                <span class="text-text-muted text-sm font-medium">v2.1 is now available</span>
+            </div>
+
+            <!-- Headline -->
+            <h1
+                class="text-5xl md:text-7xl lg:text-8xl font-extrabold tracking-tight mb-8 text-text-main leading-tight">
+                Sync Your World <br>
+                <span class="text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent">
+                    Instantly & Securely
+                </span>
+            </h1>
+
+            <p class="mt-6 max-w-2xl mx-auto text-xl text-text-muted leading-relaxed font-normal">
+                Seamlessly copy on your <strong class="text-text-main">Mac/PC</strong> and paste on your <strong
+                    class="text-text-main">iPhone/Android</strong>.
+                End-to-end encrypted. No cloud limits.
+            </p>
+
+            <!-- Buttons -->
+            <div class="mt-10 flex flex-col sm:flex-row justify-center gap-4 pointer-events-auto">
+                <a href="#download" class="btn-primary flex items-center justify-center gap-2 group">
+                    <svg class="w-5 h-5 group-hover:-translate-y-0.5 transition-transform" fill="none"
+                        viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Download App
+                </a>
+                <a href="#features" class="btn-secondary">
+                    View Features
+                </a>
+            </div>
+
+            <!-- Floating Visual (V1 Style) -->
+            <div class="mt-20 relative max-w-5xl mx-auto pointer-events-auto">
+                <div class="relative bg-white rounded-2xl shadow-2xl border border-border p-2 animate-float">
+                    <div
+                        class="bg-slate-50 rounded-xl overflow-hidden aspect-[16/9] flex items-center justify-center relative">
+                        <!-- Pseudo Interface -->
+                        <div
+                            class="absolute inset-0 bg-grid-slate-100 [mask-image:linear-gradient(0deg,#fff,rgba(255,255,255,0.6))]">
+                        </div>
+
+                        <!-- Cards connected -->
+                        <div class="flex items-center gap-8 z-10">
+                            <!-- Laptop Card -->
+                            <div
+                                class="bg-white p-6 rounded-2xl shadow-card border border-border w-64 transform -rotate-3 transition-transform hover:rotate-0 duration-500">
+                                <div class="flex items-center gap-3 mb-4">
+                                    <div
+                                        class="w-8 h-8 rounded bg-blue-100 text-blue-600 flex items-center justify-center">
+                                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                        </svg></div>
+                                    <div class="text-sm font-bold text-slate-800">MacBook Pro</div>
+                                </div>
+                                <div class="space-y-2">
+                                    <div class="h-2 w-3/4 bg-slate-100 rounded"></div>
+                                    <div class="h-2 w-1/2 bg-slate-100 rounded"></div>
+                                    <div
+                                        class="p-3 bg-blue-50 rounded-lg border border-blue-100 flex items-center gap-3 mt-4">
+                                        <div
+                                            class="w-8 h-8 bg-white rounded flex items-center justify-center shadow-sm text-xs font-bold text-blue-500">
+                                            IMG</div>
+                                        <span class="text-xs text-blue-700 font-medium">Design_V2.png</span>
+                                    </div>
+                                    <div class="text-xs text-text-muted text-right pt-2">Sent via encrypted tunnel</div>
+                                </div>
+                            </div>
+
+                            <!-- Arrow -->
+                            <div class="text-primary/50 animate-pulse">
+                                <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                                </svg>
+                            </div>
+
+                            <!-- Phone Card -->
+                            <div
+                                class="bg-white p-6 rounded-3xl shadow-card border border-border w-48 transform translate-y-4 rotate-3 transition-transform hover:rotate-0 duration-500">
+                                <div class="flex items-center gap-3 mb-4">
+                                    <div
+                                        class="w-8 h-8 rounded bg-green-100 text-green-600 flex items-center justify-center">
+                                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                        </svg></div>
+                                    <div class="text-sm font-bold text-slate-800">Pixel 8</div>
+                                </div>
+                                <div class="space-y-2">
+                                    <div class="p-3 bg-white border border-green-200 rounded-xl shadow-sm text-center">
+                                        <div class="text-xs text-green-600 font-bold mb-1">Received!</div>
+                                        <div class="w-full aspect-video bg-slate-100 rounded-lg mb-1"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- Bento Grid Features (V1 Layout) -->
+    <section id="features" class="py-24 bg-white relative z-10 border-t border-border">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-16">
+                <h2 class="text-4xl font-bold mb-4 text-text-main">Everything you need</h2>
+                <p class="text-text-muted text-lg">Designed for speed, privacy, and utility. No fluff.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+
+                <!-- Feature 1: Large -->
+                <div class="md:col-span-2 glass-card p-8 group overflow-hidden relative">
+                    <div
+                        class="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:bg-primary/10 transition-all">
+                    </div>
+                    <div class="relative z-10">
+                        <div
+                            class="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center mb-6 text-primary">
+                            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            </svg>
+                        </div>
+                        <h3 class="text-2xl font-bold mb-3 text-text-main">End-to-End Encryption</h3>
+                        <p class="text-text-muted text-lg leading-relaxed">Your data is encrypted with AES-256-GCM
+                            before it ever leaves your device. Even the relay server cannot see what you are copying.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Feature 2: Tall -->
+                <div class="md:row-span-2 glass-card p-8 group overflow-hidden relative">
+                    <div class="absolute bottom-0 inset-x-0 h-1/3 bg-gradient-to-t from-accent/5 to-transparent"></div>
+                    <div class="relative z-10 flex flex-col h-full">
+                        <div
+                            class="w-12 h-12 bg-accent/10 rounded-xl flex items-center justify-center mb-6 text-accent">
+                            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                        </div>
+                        <h3 class="text-2xl font-bold mb-3 text-text-main">Media Support</h3>
+                        <p class="text-text-muted mb-6 leading-relaxed">Images, Screenshots, Files. Push anything with a
+                            keystroke.</p>
+
+                        <div class="mt-auto space-y-3">
+                            <div
+                                class="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100 shadow-sm">
+                                <div
+                                    class="w-10 h-10 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">
+                                    JPG</div>
+                                <div class="text-sm font-medium text-text-main">Screenshot.jpg</div>
+                            </div>
+                            <div
+                                class="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100 shadow-sm">
+                                <div
+                                    class="w-10 h-10 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center text-xs font-bold">
+                                    MOV</div>
+                                <div class="text-sm font-medium text-text-main">Demo.mov</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Feature 3 -->
+                <div class="glass-card p-8">
+                    <div class="w-12 h-12 bg-pink-100 rounded-xl flex items-center justify-center mb-6 text-pink-500">
+                        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                    </div>
+                    <h3 class="text-2xl font-bold mb-3 text-text-main">Instant Sync</h3>
+                    <p class="text-text-muted leading-relaxed">Socket-based real-time connection. Latency &lt; 100ms.
+                    </p>
+                </div>
+
+                <!-- Feature 4 -->
+                <div class="glass-card p-8">
+                    <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mb-6 text-green-500">
+                        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                        </svg>
+                    </div>
+                    <h3 class="text-2xl font-bold mb-3 text-text-main">Self-Hostable</h3>
+                    <p class="text-text-muted leading-relaxed">Don't trust us? Run your own relay with Docker.</p>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Download Section -->
+    <section id="download" class="py-24 relative overflow-hidden bg-slate-50 border-t border-border">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
+            <h2 class="text-3xl md:text-5xl font-bold mb-8 text-text-main">Ready to start?</h2>
+
+            <div class="bg-white rounded-3xl p-8 md:p-12 shadow-xl border border-slate-200">
+                <div
+                    class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
+
+                    <!-- Windows -->
+                    <div class="flex flex-col items-center p-4">
+                        <div
+                            class="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mb-6 text-blue-600">
+                            <svg class="w-8 h-8" viewBox="0 0 24 24" fill="currentColor">
+                                <path
+                                    d="M0 3.449L9.75 2.1v9.451H0v-8.1zm10.949-1.551L24 0v11.023h-13.051V1.898zm-10.949 9.975H9.75v8.1L0 20.551v-8.678zm10.949 0H24v9.649l-13.051-1.898v-7.751z" />
+                            </svg>
+                        </div>
+                        <h3 class="text-lg font-bold mb-2">Windows</h3>
+                        <p class="text-text-muted text-xs mb-6">v2.1.0 • 64-bit</p>
+                        <a href="#"
+                            class="w-full py-2 bg-text-main text-white font-bold rounded-lg hover:bg-slate-700 transition-colors shadow-lg shadow-slate-200 text-sm">
+                            Download
+                        </a>
+                    </div>
+
+                    <!-- macOS -->
+                    <div class="flex flex-col items-center p-4">
+                        <div
+                            class="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mb-6 text-slate-600">
+                            <svg class="w-8 h-8" viewBox="0 0 24 24" fill="currentColor">
+                                <path
+                                    d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.21-1.96 1.07-3.11-1.05.05-2.31.74-3.03 1.58-.67.78-1.25 2.02-1.07 3.12 1.17.09 2.33-.73 3.03-1.59" />
+                            </svg>
+                        </div>
+                        <h3 class="text-lg font-bold mb-2">macOS</h3>
+                        <p class="text-text-muted text-xs mb-6">Universal • v1.4.0</p>
+                        <a href="#"
+                            class="w-full py-2 bg-text-main text-white font-bold rounded-lg hover:bg-slate-700 transition-colors shadow-lg shadow-slate-200 text-sm">
+                            Download .dmg
+                        </a>
+                    </div>
+
+                    <!-- Android -->
+                    <div class="flex flex-col items-center p-4">
+                        <div
+                            class="w-16 h-16 bg-green-50 rounded-2xl flex items-center justify-center mb-6 text-green-600">
+                            <svg class="w-8 h-8" viewBox="0 0 24 24" fill="currentColor">
+                                <path
+                                    d="M17.523 5.337l-1.61 3.22a9.968 9.968 0 00-7.818 0l-1.609-3.22a.916.916 0 00-1.222-.405c-.522.257-.73.89-.472 1.412l1.328 2.656c-2.31 1.282-3.877 3.655-4.103 6.366h16.03c-.226-2.71-1.794-5.084-4.103-6.366l1.328-2.656a.918.918 0 00-.472-1.412.915.915 0 00-1.222.405zM7.222 13.91a1.222 1.222 0 110-2.444 1.222 1.222 0 010 2.444zm9.556 0a1.222 1.222 0 110-2.444 1.222 1.222 0 010 2.444z" />
+                            </svg>
+                        </div>
+                        <h3 class="text-lg font-bold mb-2">Android</h3>
+                        <p class="text-text-muted text-xs mb-6">Play Store • APK</p>
+                        <a href="#"
+                            class="w-full py-2 bg-text-main text-white font-bold rounded-lg hover:bg-slate-700 transition-colors shadow-lg shadow-slate-200 text-sm">
+                            Download
+                        </a>
+                    </div>
+
+                    <!-- iOS -->
+                    <div class="flex flex-col items-center p-4">
+                        <div
+                            class="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center mb-6 text-slate-800">
+                            <svg class="w-8 h-8" viewBox="0 0 24 24" fill="currentColor">
+                                <path
+                                    d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.21-1.96 1.07-3.11-1.05.05-2.31.74-3.03 1.58-.67.78-1.25 2.02-1.07 3.12 1.17.09 2.33-.73 3.03-1.59" />
+                            </svg>
+                        </div>
+                        <h3 class="text-lg font-bold mb-2">iOS</h3>
+                        <p class="text-text-muted text-xs mb-6">TestFlight Beta</p>
+                        <a href="#"
+                            class="w-full py-2 bg-transparent border border-slate-200 text-text-main font-bold rounded-lg hover:bg-slate-50 transition-colors text-sm">
+                            Join Beta
+                        </a>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-border pt-16 pb-8">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
+                <div class="col-span-1 md:col-span-2">
+                    <span class="font-bold text-2xl text-text-main mb-4 block">Clipboard<span
+                            class="text-primary">Push</span></span>
+                    <p class="text-text-muted max-w-sm">
+                        Clipboard synchronization tool built for privacy and speed. <br>
+                        Open source and self-hostable.
+                    </p>
+                </div>
+                <div>
+                    <h4 class="text-text-main font-bold mb-4">Resources</h4>
+                    <ul class="space-y-2 text-text-muted text-sm">
+                        <li><a href="#" class="hover:text-primary transition-colors">Documentation</a></li>
+                        <li><a href="#" class="hover:text-primary transition-colors">Setup Guide</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="text-text-main font-bold mb-4">Legal</h4>
+                    <ul class="space-y-2 text-text-muted text-sm">
+                        <li><a href="#" class="hover:text-primary transition-colors">Privacy Policy</a></li>
+                        <li><a href="#" class="hover:text-primary transition-colors">Terms of Service</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="border-t border-border pt-8 flex justify-between items-center text-slate-500 text-sm">
+                <span>&copy; 2024 Clipboard Push Project.</span>
+            </div>
+        </div>
+    </footer>
+
+</body>
+
+</html>

@@ -15,6 +15,7 @@ struct ConfigData {
     bool auto_copy_file = true;
     bool auto_start = false;
     bool start_minimized = false;
+    bool show_notifications = true;
 };
 
 class Config {

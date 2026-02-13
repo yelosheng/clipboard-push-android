@@ -91,6 +91,7 @@ bool Config::Load() {
         m_data.auto_copy_file = j.value("auto_copy_file", m_data.auto_copy_file);
         m_data.auto_start = j.value("auto_start", m_data.auto_start);
         m_data.start_minimized = j.value("start_minimized", m_data.start_minimized);
+        m_data.show_notifications = j.value("show_notifications", true);
         
         // Generate credentials if missing
         if (m_data.room_id.empty() || m_data.room_key.empty()) {
@@ -123,6 +124,7 @@ bool Config::Save() {
     j["auto_copy_file"] = m_data.auto_copy_file;
     j["auto_start"] = m_data.auto_start;
     j["start_minimized"] = m_data.start_minimized;
+    j["show_notifications"] = m_data.show_notifications;
     
     std::ofstream file(path);
     if (file.is_open()) {

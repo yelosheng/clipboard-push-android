@@ -11,6 +11,7 @@
 #include "ui/TrayIcon.h"
 #include "ui/MainWindow.h"
 #include "ui/SettingsWindow.h"
+#include "ui/NotificationWindow.h"
 #include "ui/Resource.h"
 
 #include "core/Crypto.h"
@@ -31,8 +32,11 @@ namespace fs = std::filesystem;
 // Global state for sync logic
 static bool g_isProcessingRemoteSync = false;
 
+namespace ClipboardPush {
+
 // Forward declarations
 void PushText(const std::string& text);
+void ShowNotification(const std::wstring& title, const std::wstring& message, UI::NotificationStyle style = UI::NotificationStyle::Inbound);
 
 void OnRemoteFileReceived(const nlohmann::json& data) {
     try {
@@ -78,7 +82,7 @@ void OnRemoteFileReceived(const nlohmann::json& data) {
         outfile.close();
 
         LOG_INFO("File saved to %s", filePath.string().c_str());
-        UI::TrayIcon::Instance().ShowMessage(L"File Received", Utils::ToWide(filename));
+        ShowNotification(L"File Received", Utils::ToWide(filename));
 
         // Auto copy to clipboard
         g_isProcessingRemoteSync = true;
@@ -99,8 +103,6 @@ void OnRemoteFileReceived(const nlohmann::json& data) {
     }
 }
 
-namespace ClipboardPush {
-
 std::string GetCurrentTimestamp() {
     auto now = std::chrono::system_clock::now();
     auto in_time_t = std::chrono::system_clock::to_time_t(now);
@@ -112,15 +114,15 @@ std::string GetCurrentTimestamp() {
 }
 
 void PushText(const std::string& text) {
-    auto& config = ClipboardPush::Config::Instance().Data();
+    auto& config = Config::Instance().Data();
     if (config.room_key.empty()) return;
 
-    auto key = ClipboardPush::Crypto::DecodeKey(config.room_key);
+    auto key = Crypto::DecodeKey(config.room_key);
     std::vector<uint8_t> plain(text.begin(), text.end());
-    auto enc = ClipboardPush::Crypto::Encrypt(key, plain);
+    auto enc = Crypto::Encrypt(key, plain);
     
     if (enc) {
-        std::string b64 = ClipboardPush::Crypto::ToBase64(*enc);
+        std::string b64 = Crypto::ToBase64(*enc);
         std::string url = config.relay_server_url + "/api/relay";
         
         nlohmann::json j;
@@ -137,7 +139,7 @@ void PushText(const std::string& text) {
         
         j["data"] = data;
 
-        auto res = ClipboardPush::Network::HttpClient::Post(url, j.dump());
+        auto res = Network::HttpClient::Post(url, j.dump());
         if (res.status == 200) {
             LOG_INFO("Push success");
         } else {
@@ -147,11 +149,11 @@ void PushText(const std::string& text) {
 }
 
 void PushFileData(const std::vector<uint8_t>& data, const std::string& filename, const std::string& fileType) {
-    auto& config = ClipboardPush::Config::Instance().Data();
+    auto& config = Config::Instance().Data();
     if (config.room_key.empty()) return;
 
-    auto key = ClipboardPush::Crypto::DecodeKey(config.room_key);
-    auto enc = ClipboardPush::Crypto::Encrypt(key, data);
+    auto key = Crypto::DecodeKey(config.room_key);
+    auto enc = Crypto::Encrypt(key, data);
     if (!enc) return;
 
     // 1. Request upload auth
@@ -161,7 +163,7 @@ void PushFileData(const std::vector<uint8_t>& data, const std::string& filename,
     authPayload["size"] = enc->size();
     authPayload["content_type"] = "application/octet-stream";
     
-    auto authRes = ClipboardPush::Network::HttpClient::Post(authUrl, authPayload.dump());
+    auto authRes = Network::HttpClient::Post(authUrl, authPayload.dump());
     if (authRes.status != 200) {
         LOG_ERROR("Upload auth failed: %d", authRes.status);
         return;
@@ -176,7 +178,7 @@ void PushFileData(const std::vector<uint8_t>& data, const std::string& filename,
 
         // 2. Upload file
         LOG_INFO("Uploading file...");
-        auto putRes = ClipboardPush::Network::HttpClient::Put(uploadUrl, *enc);
+        auto putRes = Network::HttpClient::Put(uploadUrl, *enc);
         if (putRes.status != 200) {
             LOG_ERROR("File upload failed: %d", putRes.status);
             return;
@@ -197,7 +199,7 @@ void PushFileData(const std::vector<uint8_t>& data, const std::string& filename,
         d["timestamp"] = GetCurrentTimestamp();
         relayPayload["data"] = d;
 
-        ClipboardPush::Network::HttpClient::Post(relayUrl, relayPayload.dump());
+        Network::HttpClient::Post(relayUrl, relayPayload.dump());
         LOG_INFO("File sync pushed successfully");
     } catch (...) {
         LOG_ERROR("Failed to process upload response");
@@ -225,6 +227,19 @@ void PushPhysicalFile(const std::string& filePath) {
     PushFileData(data, utf8Filename, "file");
 }
 
+// Global Message Window handle
+HWND g_hMsgWnd = NULL;
+
+void ShowNotification(const std::wstring& title, const std::wstring& message, UI::NotificationStyle style) {
+    auto& config = Config::Instance().Data();
+    if (!config.show_notifications) return;
+
+    auto* data = new UI::NotificationData{ title, message, style };
+    if (!PostMessageW(g_hMsgWnd, WM_SHOW_NOTIFICATION, 0, reinterpret_cast<LPARAM>(data))) {
+        delete data;
+    }
+}
+
 } // namespace ClipboardPush
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -232,6 +247,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     ClipboardPush::Platform::ClipboardMonitor::Instance().HandleMessage(message, wParam, lParam);
 
     switch (message) {
+    case WM_SHOW_NOTIFICATION:
+        ClipboardPush::UI::NotificationWindow::HandleMessage(lParam);
+        break;
     case WM_TRAYICON:
         if (LOWORD(lParam) == WM_RBUTTONUP) {
             ClipboardPush::UI::TrayIcon::Instance().ShowContextMenu(hWnd);
@@ -325,6 +343,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
     HWND hWnd = CreateWindowExW(0, CLASS_NAME, L"Clipboard Push v3.0", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, hInstance, NULL);
     if (!hWnd) return 0;
+    g_hMsgWnd = hWnd;
+
+    // Register UI classes
+    ClipboardPush::UI::NotificationWindow::RegisterClass(hInstance);
 
     // Init UI
     ClipboardPush::UI::MainWindow::Instance().Create(hInstance);
@@ -356,9 +378,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
             ClipboardPush::Platform::Clipboard::SetText(finalText);
             
-            std::wstring wMsg = L"Synced: " + ClipboardPush::Utils::ToWide(finalText.substr(0, 30));
+            std::wstring wMsg = ClipboardPush::Utils::ToWide(finalText.substr(0, 30));
             if (finalText.length() > 30) wMsg += L"...";
-            ClipboardPush::UI::TrayIcon::Instance().ShowMessage(L"Clipboard Received", wMsg);
+            ClipboardPush::ShowNotification(L"Clipboard Received", wMsg);
             
             // Brief delay to ensure WM_CLIPBOARDUPDATE is ignored
             std::thread([]() {
@@ -426,15 +448,15 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
         auto cb = ClipboardPush::Platform::Clipboard::Get();
         if (cb.type == ClipboardPush::Platform::ClipboardType::Text && !cb.text.empty()) {
             ClipboardPush::PushText(cb.text);
-            ClipboardPush::UI::TrayIcon::Instance().ShowMessage(L"Clipboard Pushed", L"Text content sent via hotkey");
+            ClipboardPush::ShowNotification(L"Clipboard Pushed", L"Text content sent", ClipboardPush::UI::NotificationStyle::Outbound);
         } else if (cb.type == ClipboardPush::Platform::ClipboardType::Image) {
             ClipboardPush::PushImage(cb.image_data);
-            ClipboardPush::UI::TrayIcon::Instance().ShowMessage(L"Clipboard Pushed", L"Image content sent via hotkey");
+            ClipboardPush::ShowNotification(L"Clipboard Pushed", L"Image content sent", ClipboardPush::UI::NotificationStyle::Outbound);
         } else if (cb.type == ClipboardPush::Platform::ClipboardType::Files) {
             for (const auto& file : cb.files) {
                 ClipboardPush::PushPhysicalFile(file);
             }
-            ClipboardPush::UI::TrayIcon::Instance().ShowMessage(L"Clipboard Pushed", L"File(s) sent via hotkey");
+            ClipboardPush::ShowNotification(L"Clipboard Pushed", L"File(s) sent", ClipboardPush::UI::NotificationStyle::Outbound);
         }
     });
     ClipboardPush::Platform::Hotkey::Instance().Register(hWnd, data.push_hotkey);
@@ -443,7 +465,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     if (!data.start_minimized) {
         ClipboardPush::UI::MainWindow::Instance().Show();
     } else {
-        ClipboardPush::UI::TrayIcon::Instance().ShowMessage(L"Clipboard Push v3.0", L"I am now running ultra-light in your system tray!");
+        ClipboardPush::ShowNotification(L"Clipboard Push v3.0", L"Running ultra-light in system tray!");
     }
 
     // Message Loop

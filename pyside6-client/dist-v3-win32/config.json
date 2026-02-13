@@ -8,5 +8,6 @@
     "relay_server_url": "https://kxkl.tk:12505/",
     "room_id": "room_1770720628",
     "room_key": "69GeubMeYWfZkRlRmLjkMehbnvWOTAedXszU3wxrHCo=",
+    "show_notifications": true,
     "start_minimized": true
 }

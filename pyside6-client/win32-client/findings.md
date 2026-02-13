@@ -1,32 +1,28 @@
-# Findings & Tech Stack - Systray Indicators
+# Findings & Tech Stack - Custom Notifications
 
-## Dynamic Icon Composition Strategy
+## Telegram-style UI Implementation in pure Win32
 
-### 1. Drawing the "Badge" or "Light"
-- **Method**: Use `Gdiplus::Graphics` object to draw on a `Gdiplus::Bitmap`.
-- **Steps**:
-    1.  Load the base icon from resources into a `Gdiplus::Bitmap`.
-    2.  Get Graphics context from that bitmap.
-    3.  Set SmoothingMode to `SmoothingModeAntiAlias`.
-    4.  Draw a small circle in the bottom-right quadrant.
-    5.  Fill with state-specific color.
-    6.  Draw a 1px white or dark border around the circle for contrast.
-    7.  Convert `Gdiplus::Bitmap` back to `HICON` using `GetHICON()`.
+### 1. Window Architecture
+- **Window Type**: `WS_POPUP` with `WS_EX_LAYERED` and `WS_EX_TOPMOST`.
+- **Transparency**: Use `UpdateLayeredWindow` for per-pixel alpha transparency (crucial for smooth rounded corners and shadows).
+- **Class**: A dedicated `NotificationWindow` class that manages its own message loop or uses the main one.
 
-### 2. State to Color Mapping
-- **Disconnected (Red/Gray)**: `Gdiplus::Color(128, 128, 128)` (Gray) or `Color(255, 0, 0)` (Red). *User requested Gray for Disconnected.*
-- **Lonely (Yellow)**: `Gdiplus::Color(255, 215, 0)` (Gold). *Connected but no peers.*
-- **Synced (Green)**: `Gdiplus::Color(50, 205, 50)` (LimeGreen). *Connected and ready.*
+### 2. Rendering (GDI+)
+- **Background**: Rounded rectangle with a subtle gradient or solid "Telegram Blue" / "Dark Gray".
+- **Shadow**: A feathered alpha-channel shadow around the bubble.
+- **Icon**: Small app icon or "sync" icon inside the bubble.
+- **Text**: `Gdiplus::Font` using "Segoe UI" or "Inter" if available.
 
-### 3. Detecting "Room Peers"
-- **Problem**: Does the server provide room occupancy?
-- **Analysis**: If not, we can infer "Synced" if we receive a message from a `client_id` that is not our own.
-- **Alternative**: Check Socket.IO handshake response. Some servers send a `sid` and room info.
+### 3. Animation
+- **Timers**: Use `SetTimer` for the animation ticks (60fps target).
+- **Logic**: 
+    - Entry: Alpha 0 -> 255 and Y-offset slide.
+    - Stay: Static for 3-5 seconds.
+    - Exit: Alpha 255 -> 0.
 
-### 4. GDI+ Memory Management
-- **Warning**: Every call to `GetHICON()` creates a new handle that **must** be destroyed with `DestroyIcon()`.
-- **Strategy**: The `TrayIcon` class should store the current `HICON` and destroy the previous one before applying a new one.
+### 4. DPI Awareness
+- The window must use `GetDpiForWindow` to scale sizes, paddings, and font sizes correctly on 4K screens.
 
-### 5. High DPI Considerations
-- The base icon should be the largest available (e.g., 256x256) or we should detect the current system icon size using `GetSystemMetrics(SM_CXSMICON)`.
-- **Choice**: Composition should happen at standard small icon size (usually 16x16 or 32x32 depending on DPI) to keep it sharp.
+### 5. Interaction
+- Clicking the notification should focus the main window or clear the notification immediately.
+- Hovering over it should pause the "fade out" timer.
