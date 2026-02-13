@@ -127,6 +127,10 @@ void LocalServer::Run() {
         res.set_content("pong", "text/plain");
     });
 
+    svr.Get("/probe", [](const httplib::Request&, httplib::Response& res) {
+        res.set_content("ok", "text/plain");
+    });
+
     if (!svr.listen("0.0.0.0", m_port)) {
         LOG_ERROR("Local Server failed to start on port %d", m_port);
         m_running = false;

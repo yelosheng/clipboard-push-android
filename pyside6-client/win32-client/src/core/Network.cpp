@@ -276,10 +276,14 @@ void WebSocketClient::Close() {
 }
 
 std::optional<std::vector<uint8_t>> HttpClient::Get(const std::string& url) {
+    return GetWithHeaders(url, {});
+}
+
+std::optional<std::vector<uint8_t>> HttpClient::GetWithHeaders(const std::string& url, const std::map<std::string, std::string>& headers) {
     auto comp = ParseUrl(url);
     if (comp.host.empty()) return std::nullopt;
 
-    WinHttpHandle hSession = WinHttpOpen(L"ClipboardPush/3.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    WinHttpHandle hSession = WinHttpOpen(L"ClipboardPush/4.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!hSession.isValid()) return std::nullopt;
 
     // Enable TLS 1.2+
@@ -292,6 +296,12 @@ std::optional<std::vector<uint8_t>> HttpClient::Get(const std::string& url) {
     DWORD flags = comp.secure ? WINHTTP_FLAG_SECURE : 0;
     WinHttpHandle hRequest = WinHttpOpenRequest(hConnect, L"GET", comp.path.c_str(), NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
     if (!hRequest.isValid()) return std::nullopt;
+
+    // Add Custom Headers
+    for (auto const& [key, val] : headers) {
+        std::wstring header = Utils::ToWide(key + ": " + val);
+        WinHttpAddRequestHeaders(hRequest, header.c_str(), (ULONG)-1L, WINHTTP_ADDREQ_FLAG_ADD);
+    }
 
     if (!WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0)) {
         return std::nullopt;

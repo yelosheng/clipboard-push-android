@@ -37,6 +37,7 @@ class DownloadWorker(
         const val KEY_IS_ENCRYPTED = "key_is_encrypted"
         const val KEY_MESSAGE_ID = "key_message_id"
         const val KEY_IS_ANNOUNCE = "key_is_announce"
+        const val KEY_TRANSFER_ID = "key_transfer_id"
         
         private const val TAG = "DownloadWorker"
     }
@@ -51,8 +52,9 @@ class DownloadWorker(
         val mimeType = inputData.getString(KEY_MIME_TYPE) ?: "application/octet-stream"
         val messageId = inputData.getString(KEY_MESSAGE_ID)
         val isAnnounce = inputData.getBoolean(KEY_IS_ANNOUNCE, false)
+        val transferId = inputData.getString(KEY_TRANSFER_ID)
         
-        DebugLogger.log("DL", "Start: $fileName msgId=$messageId announce=$isAnnounce")
+        DebugLogger.log("DL", "Start: $fileName msgId=$messageId announce=$isAnnounce transferId=$transferId")
         
         // --- ANNOUNCE MODE (v2) ---
         if (isAnnounce) {
@@ -70,7 +72,7 @@ class DownloadWorker(
                 
                 if (tempLocal.length() > 0) {
                      DebugLogger.log("DL", "v2 Local Success")
-                     processDownloadedFile(tempLocal, fileName, mimeType, messageId)
+                     processDownloadedFile(tempLocal, fileName, mimeType, messageId, transferId)
                 } else {
                      tempLocal.delete()
                      DebugLogger.log("DL", "v2 Local Empty")
@@ -161,7 +163,7 @@ class DownloadWorker(
                  return Result.failure()
             }
             
-            processDownloadedFile(sourceFile, fileName, mimeType, messageId)
+            processDownloadedFile(sourceFile, fileName, mimeType, messageId, transferId)
 
         } catch (e: Exception) {
             DebugLogger.log("DL", "ERROR: ${e.message}")
@@ -175,7 +177,7 @@ class DownloadWorker(
         }
     }
 
-    private suspend fun processDownloadedFile(sourceFile: File, fileName: String, mimeType: String, messageId: String?): Result {
+    private suspend fun processDownloadedFile(sourceFile: File, fileName: String, mimeType: String, messageId: String?, transferId: String?): Result {
             Log.d(TAG, "Saving to public directory...")
             val uniqueName = FileUtil.generateUniqueFileName(fileName)
             val savedUri = FileUtil.saveToPublicDownloads(
@@ -250,7 +252,12 @@ class DownloadWorker(
                     "Saved to Downloads: $uniqueName"
                 )
                 DebugLogger.log("DL", "✓ Success: $uniqueName")
-                return Result.success(workDataOf("uri" to savedUri.toString()))
+                return Result.success(
+                    workDataOf(
+                        "uri" to savedUri.toString(),
+                        KEY_TRANSFER_ID to (transferId ?: "")
+                    )
+                )
             } else {
                 DebugLogger.log("DL", "ERROR: saveToPublicDownloads returned null")
                 Log.e(TAG, "Failed to save to public downloads")

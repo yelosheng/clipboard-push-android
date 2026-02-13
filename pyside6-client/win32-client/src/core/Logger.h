@@ -2,16 +2,29 @@
 #include <windows.h>
 #include <cstdio>
 #include <cstdarg>
+#include <chrono>
+#include <iomanip>
+#include <sstream>
 
 namespace ClipboardPush {
 namespace Logger {
 
 inline void Log(const char* format, ...) {
-    char buffer[4096];
+    char msg[4096];
     va_list args;
     va_start(args, format);
-    vsnprintf(buffer, sizeof(buffer), format, args);
+    vsnprintf(msg, sizeof(msg), format, args);
     va_end(args);
+
+    // Get time
+    auto now = std::chrono::system_clock::now();
+    auto in_time_t = std::chrono::system_clock::to_time_t(now);
+    std::tm tm_struct;
+    localtime_s(&tm_struct, &in_time_t);
+
+    char buffer[5000];
+    snprintf(buffer, sizeof(buffer), "[%02d:%02d:%02d] %s", 
+        tm_struct.tm_hour, tm_struct.tm_min, tm_struct.tm_sec, msg);
 
     OutputDebugStringA(buffer);
     OutputDebugStringA("\n");

@@ -11,10 +11,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 import org.json.JSONObject
 import java.net.URISyntaxException
 
-class RelayRepository {
-    companion object {
-        private const val TAG = "Relay"
-    }
+object RelayRepository {
+    private const val TAG = "Relay"
     
     private var socket: Socket? = null
     
@@ -35,7 +33,7 @@ class RelayRepository {
     private val _peers = MutableSharedFlow<List<String>>(replay = 1)
     val peers = _peers.asSharedFlow()
 
-    fun connect(serverUrl: String, roomId: String, clientId: String) {
+    fun connect(context: android.content.Context, serverUrl: String, roomId: String, clientId: String) {
         disconnect() // Close existing
 
         try {
@@ -57,15 +55,27 @@ class RelayRepository {
                 Log.d("RelayRepository", "Connected to Relay")
                 DebugLogger.log("RelayRepository", "Socket Connected (Ref: ${socket?.id()})")
                 _connectionStatus.tryEmit(true)
-                // Join Room
+                // Join Room with V4 PeerMeta
                 try {
+                    val networkInfo = com.example.clipboardman.util.NetworkUtil.getLocalNetworkInfo(context)
+                    
                     val joinData = JSONObject()
+                    joinData.put("protocol_version", "4.0")
                     joinData.put("room", roomId)
-                    joinData.put("client_id", clientId) // We need to add clientId to connect() param first
-                    joinData.put("client_type", "android")
+                    joinData.put("client_id", clientId)
+                    joinData.put("client_type", "app")
+                    joinData.put("joined_at_ms", System.currentTimeMillis())
+                    
+                    val netObj = JSONObject()
+                    netObj.put("private_ip", networkInfo?.ip ?: "0.0.0.0")
+                    netObj.put("cidr", networkInfo?.cidr ?: "0.0.0.0/0")
+                    netObj.put("network_epoch", 0) // TODO: track changes
+                    joinData.put("network", netObj)
+                    
+                    // App does not have 'probe' section
                     
                     socket?.emit("join", joinData)
-                    DebugLogger.log("RelayRepository", "Emitted join room: $roomId")
+                    DebugLogger.log("RelayRepository", "Emitted V4 join room: $roomId")
                 } catch (e: Exception) {
                     Log.e("RelayRepository", "Failed to join room", e)
                     DebugLogger.log("RelayRepository", "Failed to join room: ${e.message}")
@@ -148,8 +158,57 @@ class RelayRepository {
                 }
             }
             
+            socket?.on("file_sync_completed") { args ->
+                try {
+                     if (args.isNotEmpty() && args[0] is JSONObject) {
+                         val data = args[0] as JSONObject
+                         Log.d("Relay", "Received file_sync_completed: $data")
+                         _events.tryEmit(RelayEvent.FileSyncCompleted(data))
+                    }
+                } catch (e: Exception) {
+                    Log.e("Relay", "Error processing file_sync_completed", e)
+                }
+            }
+            
+            socket?.on("file_need_relay") { args ->
+                try {
+                     if (args.isNotEmpty() && args[0] is JSONObject) {
+                         val data = args[0] as JSONObject
+                         Log.d("Relay", "Received file_need_relay: $data")
+                         _events.tryEmit(RelayEvent.FileNeedRelay(data))
+                    }
+                } catch (e: Exception) {
+                    Log.e("Relay", "Error processing file_need_relay", e)
+                }
+            }
+            
             socket?.on("file_available", fileAvailableHandler)
             socket?.on("file_announcement", fileAvailableHandler) // Dual-listen to be safe
+            
+            // V4: Probe Request
+            socket?.on("lan_probe_request") { args ->
+                try {
+                    if (args.isNotEmpty() && args[0] is JSONObject) {
+                         val data = args[0] as JSONObject
+                         Log.d("Relay", "Received lan_probe_request: $data")
+                         _events.tryEmit(RelayEvent.LanProbeRequest(data))
+                    }
+                } catch (e: Exception) {
+                    Log.e("Relay", "Error processing lan_probe_request", e)
+                }
+            }
+
+            // V4: Room State
+            socket?.on("room_state_changed") { args ->
+                try {
+                    if (args.isNotEmpty() && args[0] is JSONObject) {
+                         val data = args[0] as JSONObject
+                         _events.tryEmit(RelayEvent.RoomStateChanged(data))
+                    }
+                } catch (e: Exception) {
+                    Log.e("Relay", "Error processing room_state_changed", e)
+                }
+            }
             
             socket?.on("room_stats") { args ->
                 try {
@@ -212,29 +271,77 @@ class RelayRepository {
         }
     }
 
-    fun sendFileSyncCompleted(roomId: String, fileId: String, method: String = "lan") {
+    fun sendFileSyncCompleted(roomId: String, fileId: String, transferId: String, method: String = "lan") {
         if (socket?.connected() == true) {
-            // Strict V3.3 Protocol: Flat Payload, Canonical Event
+            // Strict V4.0 Protocol: Include transfer_id
             val payload = JSONObject().apply {
+                put("protocol_version", "4.0")
                 put("room", roomId)
                 put("file_id", fileId)
+                put("transfer_id", transferId)
                 put("method", method)
+                put("received_at_ms", System.currentTimeMillis())
             }
             socket?.emit("file_sync_completed", payload)
             Log.d(TAG, "Sent file_sync_completed: $payload")
         }
     }
 
-    fun sendFileNeedRelay(roomId: String, fileId: String, reason: String) {
+    fun sendFileNeedRelay(roomId: String, fileId: String, transferId: String, reason: String) {
         if (socket?.connected() == true) {
-             // Strict V3.3 Protocol: Flat Payload, Canonical Event
+             // Strict V4.0 Protocol: Include transfer_id
              val payload = JSONObject().apply {
+                put("protocol_version", "4.0")
                 put("room", roomId)
                 put("file_id", fileId)
+                put("transfer_id", transferId)
                 put("reason", reason)
+                put("reported_at_ms", System.currentTimeMillis())
             }
             socket?.emit("file_need_relay", payload)
             Log.d(TAG, "Sent file_need_relay: $payload")
+        }
+    }
+
+    fun sendFileAvailable(roomId: String, fileId: String, transferId: String, localUrl: String, filename: String, type: String, size: Long, senderId: String) {
+        if (socket?.connected() == true) {
+            val payload = JSONObject().apply {
+                put("protocol_version", "4.0")
+                put("room", roomId)
+                put("file_id", fileId)
+                put("transfer_id", transferId)
+                put("filename", filename)
+                put("local_url", localUrl)
+                put("type", type)
+                put("size", size)
+                put("sender_id", senderId)
+                put("announced_at_ms", System.currentTimeMillis())
+            }
+            socket?.emit("file_available", payload)
+            Log.d(TAG, "Sent file_available: $payload")
+        }
+    }
+
+    fun sendProbeResult(roomId: String, probeId: String, result: String, latencyMs: Long, httpStatus: Int? = null, reason: String = "") {
+        if (socket?.connected() == true) {
+            val payload = JSONObject().apply {
+                put("protocol_version", "4.0")
+                put("room", roomId)
+                put("probe_id", probeId)
+                put("result", result)
+                if (result == "ok") {
+                    put("latency_ms", latencyMs)
+                }
+                if (httpStatus != null) {
+                    put("http_status", httpStatus)
+                }
+                if (reason.isNotEmpty()) {
+                    put("reason", reason)
+                }
+                put("reported_at_ms", System.currentTimeMillis())
+            }
+            socket?.emit("lan_probe_result", payload)
+            Log.d(TAG, "Sent lan_probe_result: $result ($latencyMs ms)")
         }
     }
 }
@@ -243,4 +350,8 @@ sealed class RelayEvent {
     data class ClipboardSync(val data: JSONObject) : RelayEvent()
     data class FileSync(val data: JSONObject) : RelayEvent()
     data class FileAvailable(val data: JSONObject) : RelayEvent()
+    data class FileSyncCompleted(val data: JSONObject) : RelayEvent()
+    data class FileNeedRelay(val data: JSONObject) : RelayEvent()
+    data class LanProbeRequest(val data: JSONObject) : RelayEvent()
+    data class RoomStateChanged(val data: JSONObject) : RelayEvent()
 }

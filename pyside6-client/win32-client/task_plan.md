@@ -1,25 +1,28 @@
-# Task Plan: Clipboard Push v3.2 (Telegram-style Notifications)
+# Task Plan: Clipboard Push v4.0 (Signaling Driven LAN Sync)
 
-**Goal**: Implement a custom, high-quality popup notification window that mimics the "Telegram" aesthetic (rounded corners, smooth animation, modern typography).
+**Goal**: Implement the "Room LAN State API" (v1.0.0) to achieve deterministic LAN/Cloud switching driven by server-side state.
 
-## Phase 1: Custom Notification Window Class
-- [ ] **NotificationWindow Class**: Define a new UI component for the popup.
-- [ ] **Window Styling**: Implement a borderless, layered window (`WS_EX_LAYERED`) for transparency and shadows.
-- [ ] **GDI+ Rendering**: Create a modern "bubble" look with rounded corners and a slight drop shadow.
+## Phase 1: Local Server & Metadata (PC Identity)
+- [ ] **LocalServer Enhancement**: Add `/probe` endpoint (returns 200 OK).
+- [ ] **Utils Upgrade**: Implement CIDR calculation and Network Epoch tracking.
+- [ ] **Join Refactor**: Update `SocketIOService::JoinRoom` to send the full `PeerMeta` (Protocol 4.0).
 
-## Phase 2: Animation & Layout
-- [ ] **Animation Logic**: Implement a "slide up" entry and a "fade out" exit.
-- [ ] **Dynamic Sizing**: Adjust bubble size based on the length of the received text.
-- [ ] **Placement Logic**: Automatically position the bubble in the bottom-right corner, respecting the taskbar height.
+## Phase 2: Server-to-PC Commands
+- [ ] **Handle `transfer_command`**: Implement listener for `finish` and `upload_relay`.
+- [ ] **Handle `peer_evicted`**: Implement auto-rejoin logic if evicted.
+- [ ] **Handle `room_state_changed`**: (Optional) Update tray icon or UI with LAN confidence level.
 
-## Phase 3: Integration
-- [ ] **Main Integration**: Replace or augment `TrayIcon::ShowMessage` with the new `NotificationWindow`.
-- [ ] **Thread Safety**: Ensure notifications can be triggered from network threads.
+## Phase 3: Push State Machine 4.0
+- [ ] **Refactor `PushFileData`**:
+    1. Save to `temp/`.
+    2. Emit `file_available` (v4.0 schema).
+    3. Wait for `transfer_command`.
+    4. Execute action (Cloud Upload or Cleanup).
 
-## Phase 4: Polish & Refinement
-- [ ] **Multi-notification handling**: Support stacking multiple notifications if messages arrive quickly.
-- [ ] **Visual Tweaks**: Refine colors (dark/light theme support) and fonts.
+## Phase 4: Visuals & Polish
+- [ ] **Notification Refinement**: Show "LAN Mode" vs "Cloud Mode" in bubble notifications.
+- [ ] **Robustness**: Ensure the 10s fallback still exists but is only a "deadman switch" (last resort).
 
-## Phase 5: Build & Release
-- [ ] **Final Rebuild**: Ensure size remains optimized.
-- [ ] **Release Update**: Update `dist-v3-win32`.
+## Phase 5: Verification
+- [ ] Test `PAIR_SAME_LAN` path (Immediate LAN pull).
+- [ ] Test `PAIR_DIFF_LAN` path (Immediate Server-directed upload).

@@ -104,7 +104,7 @@ class ClipboardService : Service() {
     private lateinit var settingsRepository: SettingsRepository
     private lateinit var messageRepository: MessageRepository
     private lateinit var clipboardHelper: ClipboardHelper
-    private lateinit var relayRepository: RelayRepository // Replaces WebSocketClient
+    private val relayRepository = RelayRepository // Singleton
     private var apiService: ApiService? = null
 
     private var wakeLock: PowerManager.WakeLock? = null
@@ -142,10 +142,12 @@ class ClipboardService : Service() {
         settingsRepository = SettingsRepository(this)
         messageRepository = MessageRepository(this)
         clipboardHelper = ClipboardHelper(this)
-        relayRepository = RelayRepository() // Init Relay
+         // RelayRepository is now Singleton Object
 
         loadMessageHistory()
         observeRelayEvents()
+        
+        LocalFileServer.startServer()
     }
 
     private fun loadMessageHistory() {
@@ -212,6 +214,10 @@ class ClipboardService : Service() {
                         is RelayEvent.ClipboardSync -> handleClipboardSync(event.data)
                         is RelayEvent.FileSync -> handleFileSync(event.data)
                         is RelayEvent.FileAvailable -> handleFileAvailable(event.data)
+                        is RelayEvent.LanProbeRequest -> handleLanProbeRequest(event.data)
+                        is RelayEvent.RoomStateChanged -> handleRoomStateChanged(event.data)
+                        is RelayEvent.FileSyncCompleted -> { /* Handled by UploadWorker */ }
+                        is RelayEvent.FileNeedRelay -> { /* Handled by UploadWorker */ }
                     }
                 }
             } catch (e: Exception) {
@@ -256,6 +262,7 @@ class ClipboardService : Service() {
         releaseWakeLocks()
         stopService()
         serviceScope.cancel()
+        LocalFileServer.stopServer()
         super.onDestroy()
     }
 
@@ -363,7 +370,7 @@ class ClipboardService : Service() {
             
             Log.d(TAG, "Connecting Relay: $wsUrl Room: $id Client: $clientId")
             DebugLogger.log(TAG, "Connecting to Relay: $wsUrl ($clientId)")
-            relayRepository.connect(wsUrl, id, clientId)
+            relayRepository.connect(this, wsUrl, id, clientId)
         }
     }
 
@@ -498,11 +505,12 @@ class ClipboardService : Service() {
         val dataObj = data.optJSONObject("data") ?: data
         
         val fileId = dataObj.optString("file_id")
+        val transferId = dataObj.optString("transfer_id")
         val fileName = dataObj.optString("filename")
         val localUrl = dataObj.optString("local_url")
         val mimeType = dataObj.optString("type")
         
-        DebugLogger.log(TAG, "Received File Invite (v2): $fileName ($localUrl) ID=$fileId")
+        DebugLogger.log(TAG, "Received File Invite (v2): $fileName ($localUrl) ID=$fileId TR=$transferId")
         
         if (fileId.isEmpty() || localUrl.isEmpty()) {
              Log.e(TAG, "Invalid file_available payload (missing ID or URL): $dataObj")
@@ -543,7 +551,8 @@ class ClipboardService : Service() {
             DownloadWorker.KEY_MIME_TYPE to mimeType,
             DownloadWorker.KEY_IS_ENCRYPTED to false, // Local is plaintext
             DownloadWorker.KEY_MESSAGE_ID to messageId,
-            DownloadWorker.KEY_IS_ANNOUNCE to true
+            DownloadWorker.KEY_IS_ANNOUNCE to true,
+            DownloadWorker.KEY_TRANSFER_ID to transferId
         )
 
         val workRequest = OneTimeWorkRequestBuilder<DownloadWorker>()
@@ -560,7 +569,8 @@ class ClipboardService : Service() {
                     when (workInfo.state) {
                         androidx.work.WorkInfo.State.SUCCEEDED -> {
                             DebugLogger.log(TAG, "v2 Download Sucesss! Sending Ack.")
-                            relayRepository.sendFileSyncCompleted(roomId ?: "", fileId)
+                            val outTransferId = workInfo.outputData.getString(DownloadWorker.KEY_TRANSFER_ID) ?: transferId
+                            relayRepository.sendFileSyncCompleted(roomId ?: "", fileId, outTransferId)
                             // Remove from pendingFiles eventually? 
                             // Keep it for a bit in case PC still sends fallback?
                             // For simplicity, we can leave it or remove it delayed. 
@@ -569,7 +579,7 @@ class ClipboardService : Service() {
                         }
                         androidx.work.WorkInfo.State.FAILED, androidx.work.WorkInfo.State.CANCELLED -> {
                             DebugLogger.log(TAG, "v2 Download Failed. Requesting Relay.")
-                            relayRepository.sendFileNeedRelay(roomId ?: "", fileId, "worker_failed")
+                            relayRepository.sendFileNeedRelay(roomId ?: "", fileId, transferId, "worker_failed")
                             this.cancel()
                         }
                         else -> {
@@ -600,6 +610,70 @@ class ClipboardService : Service() {
         currentState = state
         NotificationHelper.updateServiceNotification(this, state, serverAddress, currentPeerCount, currentPeers)
         onStateChanged?.invoke(state)
+    }
+
+    // --- V4 Probe Handling ---
+
+    private fun handleLanProbeRequest(data: JSONObject) {
+        val probeUrl = data.optString("probe_url")
+        val probeId = data.optString("probe_id")
+        
+        DebugLogger.log(TAG, "Received Probe Request: $probeUrl (ID: $probeId)")
+        
+        if (probeUrl.isEmpty() || probeId.isEmpty()) {
+            Log.e(TAG, "Invalid probe request")
+            return
+        }
+        
+        // Execute Probe in background
+        serviceScope.launch(Dispatchers.IO) {
+            val client = okhttp3.OkHttpClient.Builder()
+                .connectTimeout(2, java.util.concurrent.TimeUnit.SECONDS) // Short timeout
+                .readTimeout(2, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
+                
+            val startTime = System.currentTimeMillis()
+            var status = "fail"
+            var latency = 0L
+            var httpStatus = 0
+            var reason = ""
+            
+            try {
+                // Add header to identify self
+                val request = okhttp3.Request.Builder()
+                    .url(probeUrl)
+                    .addHeader("X-Probe-ID", probeId)
+                    .build()
+                    
+                val response = client.newCall(request).execute()
+                latency = System.currentTimeMillis() - startTime
+                httpStatus = response.code
+                response.close()
+                
+                if (response.isSuccessful) {
+                    status = "ok"
+                    DebugLogger.log(TAG, "Probe Success: ${latency}ms")
+                } else {
+                    status = "fail"
+                    reason = "http_$httpStatus"
+                    DebugLogger.log(TAG, "Probe Failed: HTTP $httpStatus")
+                }
+            } catch (e: Exception) {
+                status = "fail" // or timeout
+                reason = e.message ?: "unknown"
+                DebugLogger.log(TAG, "Probe Error: ${e.message}")
+            }
+            
+            relayRepository.sendProbeResult(roomId ?: "", probeId, status, latency, httpStatus, reason)
+        }
+    }
+    
+    private fun handleRoomStateChanged(data: JSONObject) {
+        val state = data.optString("state")
+        val lanConf = data.optString("lan_confidence")
+        DebugLogger.log(TAG, "Room State: $state (Lan: $lanConf)")
+        
+        // TODO: Update UI or notification icon based on state
     }
 
     // --- WakeLock Helpers ---

@@ -1,28 +1,23 @@
-# Findings & Tech Stack - Custom Notifications
+# Findings - v4.0 Architecture Integration
 
-## Telegram-style UI Implementation in pure Win32
+## 1. PC Metadata Collection (PeerMeta)
+- **Private IP**: Use existing `GetLocalIPAddress`.
+- **CIDR**: Calculate based on subnet mask.
+- **Probe URL**: `http://<ip>:<port>/probe`.
+- **Network Epoch**: We can use a simple counter incremented whenever the IP address changes.
 
-### 1. Window Architecture
-- **Window Type**: `WS_POPUP` with `WS_EX_LAYERED` and `WS_EX_TOPMOST`.
-- **Transparency**: Use `UpdateLayeredWindow` for per-pixel alpha transparency (crucial for smooth rounded corners and shadows).
-- **Class**: A dedicated `NotificationWindow` class that manages its own message loop or uses the main one.
+## 2. Local Server Role (The Probe Provider)
+- The PC acts as the **Server** for the probe.
+- Must respond quickly to `GET /probe`.
+- Must not require `X-Room-ID` for the probe itself (to keep it ultra-simple) or we include it in the `probe_url` as a param. 
+- *Correction*: The spec says `probe_url` must match `network.private_ip`. Let's stick to standard `200 OK`.
 
-### 2. Rendering (GDI+)
-- **Background**: Rounded rectangle with a subtle gradient or solid "Telegram Blue" / "Dark Gray".
-- **Shadow**: A feathered alpha-channel shadow around the bubble.
-- **Icon**: Small app icon or "sync" icon inside the bubble.
-- **Text**: `Gdiplus::Font` using "Segoe UI" or "Inter" if available.
+## 3. Server-Side Control
+- This is the biggest change. PC no longer decides when to upload.
+- If the Server emits `transfer_command(upload_relay)`, PC starts uploading.
+- If the Server emits `transfer_command(finish)`, PC cleans up.
+- This removes the "contradictory logs" where PC uploads while Phone downloads.
 
-### 3. Animation
-- **Timers**: Use `SetTimer` for the animation ticks (60fps target).
-- **Logic**: 
-    - Entry: Alpha 0 -> 255 and Y-offset slide.
-    - Stay: Static for 3-5 seconds.
-    - Exit: Alpha 255 -> 0.
-
-### 4. DPI Awareness
-- The window must use `GetDpiForWindow` to scale sizes, paddings, and font sizes correctly on 4K screens.
-
-### 5. Interaction
-- Clicking the notification should focus the main window or clear the notification immediately.
-- Hovering over it should pause the "fade out" timer.
+## 4. Eviction Handling
+- In a 2-peer room, if a 3rd joins (e.g. PC restarts and gets new SID), the old SID is evicted.
+- PC must handle `peer_evicted` and potentially re-register if it was the one evicted.

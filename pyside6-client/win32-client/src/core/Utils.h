@@ -18,12 +18,19 @@
 namespace ClipboardPush {
 namespace Utils {
 
-inline std::string GetLocalIPAddress() {
+struct NetworkMetadata {
+    std::string private_ip = "127.0.0.1";
+    std::string cidr = "127.0.0.1/32";
+    std::string network_id_hash = "";
+    int network_epoch = 0;
+};
+
+inline NetworkMetadata GetNetworkMetadata() {
     ULONG outBufLen = 15000;
     std::vector<uint8_t> buffer(outBufLen);
     PIP_ADAPTER_ADDRESSES pAddresses = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(buffer.data());
 
-    std::string bestIp = "127.0.0.1";
+    NetworkMetadata meta;
     int bestScore = -1;
 
     if (GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER, NULL, pAddresses, &outBufLen) == ERROR_SUCCESS) {
@@ -31,7 +38,6 @@ inline std::string GetLocalIPAddress() {
             if (pCurrAddresses->OperStatus != IfOperStatusUp) continue;
             if (pCurrAddresses->IfType == IF_TYPE_SOFTWARE_LOOPBACK) continue;
             
-            // Skip known virtual adapters by description if possible
             std::wstring desc = pCurrAddresses->Description;
             if (desc.find(L"VMware") != std::wstring::npos || desc.find(L"VirtualBox") != std::wstring::npos) continue;
 
@@ -45,19 +51,29 @@ inline std::string GetLocalIPAddress() {
 
                 int score = 0;
                 if (ip.substr(0, 8) == "192.168.") score = 100;
-                else if (ip.substr(0, 3) == "10." && ip.substr(0, 7) != "10.100.") score = 90; // Prioritize 10.x but maybe not some VPNs
+                else if (ip.substr(0, 3) == "10." && ip.substr(0, 7) != "10.100.") score = 90;
                 else if (ip.substr(0, 4) == "172.") score = 80;
-                else if (ip.substr(0, 7) == "100.64.") score = 10; // Very low priority (CGNAT/VPN)
+                else if (ip.substr(0, 7) == "100.64.") score = 10;
                 else score = 50;
 
                 if (score > bestScore) {
                     bestScore = score;
-                    bestIp = ip;
+                    meta.private_ip = ip;
+                    
+                    // Calculate CIDR suffix manually
+                    meta.cidr = ip + "/" + std::to_string(pUnicast->OnLinkPrefixLength);
+                    
+                    // Use AdapterName as a simple unique network ID (GUID string)
+                    meta.network_id_hash = pCurrAddresses->AdapterName;
                 }
             }
         }
     }
-    return bestIp;
+    return meta;
+}
+
+inline std::string GetLocalIPAddress() {
+    return GetNetworkMetadata().private_ip;
 }
 
 inline std::wstring ToWide(const std::string& str) {

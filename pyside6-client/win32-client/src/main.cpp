@@ -39,11 +39,13 @@ namespace ClipboardPush {
 static bool g_isProcessingRemoteSync = false;
 
 struct PendingPush {
+    std::string transfer_id;
     std::string file_id;
     std::vector<uint8_t> data;
     std::string filename;
     std::string type;
     std::atomic<bool> completed{ false };
+    std::atomic<bool> upload_requested{ false };
     std::atomic<bool> need_relay{ false };
 };
 
@@ -68,6 +70,88 @@ void ProcessReceivedFile(const std::string& filePath, const std::string& filenam
     std::thread([]() {
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
         g_isProcessingRemoteSync = false;
+    }).detach();
+}
+
+void HandleIncomingAnnouncement(const nlohmann::json& data) {
+    auto& config = Config::Instance().Data();
+    std::string transfer_id = data.value("transfer_id", "");
+    std::string file_id = data.value("file_id", "");
+    std::string filename = data.value("filename", "received_file");
+    std::string local_url = data.value("local_url", "");
+    std::string sender_id = data.value("sender_client_id", "unknown");
+    std::string type = data.value("type", "file");
+
+    if (local_url.empty() || transfer_id.empty()) return;
+
+    LOG_INFO("Receiver Mode: Peer announced file via LAN. ID: %s", transfer_id.c_str());
+
+    std::thread([transfer_id, file_id, filename, local_url, type, config]() {
+        // 1. Attempt LAN Pull
+        LOG_INFO("Attempting LAN pull from %s", local_url.c_str());
+        
+        // Add Room-ID header for security
+        std::map<std::string, std::string> headers;
+        headers["X-Room-ID"] = config.room_id;
+        
+        auto res = Network::HttpClient::GetWithHeaders(local_url, headers);
+        
+        if (res && !res->empty()) {
+            LOG_INFO("LAN Pull Successful. Decrypting...");
+            
+            // 2. Decrypt data
+            auto key = Crypto::DecodeKey(config.room_key);
+            auto decData = Crypto::Decrypt(key, *res);
+            if (!decData) {
+                LOG_ERROR("Failed to decrypt data pulled via LAN");
+                return;
+            }
+
+            // 3. Save file
+            fs::path downloadDir(Utils::ToWide(config.download_path));
+            if (!fs::exists(downloadDir)) fs::create_directories(downloadDir);
+            
+            fs::path filePath = downloadDir / Utils::ToWide(filename);
+            // Handle duplicates
+            int count = 1;
+            std::wstring stem = filePath.stem().wstring();
+            std::wstring ext = filePath.extension().wstring();
+            while (fs::exists(filePath)) {
+                filePath = downloadDir / (stem + L"_" + std::to_wstring(count++) + ext);
+            }
+
+            std::ofstream ofs(filePath, std::ios::binary);
+            ofs.write((char*)decData->data(), decData->size());
+            ofs.close();
+
+            // 4. Process (UI & Clipboard)
+            ProcessReceivedFile(filePath.string(), filename, type);
+
+            // 5. Send Success Signal
+            nlohmann::json ack;
+            ack["protocol_version"] = "4.0";
+            ack["room"] = config.room_id;
+            ack["transfer_id"] = transfer_id;
+            ack["file_id"] = file_id;
+            ack["method"] = "lan";
+            ack["received_at_ms"] = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+            
+            SocketIOService::Instance().Emit("file_sync_completed", ack);
+            LOG_INFO("Sent file_sync_completed for ID: %s", transfer_id.c_str());
+        } else {
+            LOG_WARNING("LAN Pull Failed. Requesting Cloud Relay...");
+            
+            // 5. Send Fallback Signal
+            nlohmann::json req;
+            req["protocol_version"] = "4.0";
+            req["room"] = config.room_id;
+            req["transfer_id"] = transfer_id;
+            req["file_id"] = file_id;
+            req["reason"] = "lan_unreachable";
+            req["reported_at_ms"] = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+            
+            SocketIOService::Instance().Emit("file_need_relay", req);
+        }
     }).detach();
 }
 
@@ -176,10 +260,11 @@ void PushFileData(const std::vector<uint8_t>& data, const std::string& filename,
     auto enc = Crypto::Encrypt(key, data);
     if (!enc) return;
 
-    // 1. Create Unique File ID (Timestamp + High-res counter)
+    // 1. Create Unique IDs
     auto now = std::chrono::system_clock::now();
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
     std::string file_id = "f_" + std::to_string(ms);
+    std::string transfer_id = "tr_" + std::to_string(ms) + "_" + std::to_string(rand() % 100);
 
     // 2. Save a local copy to temp folder for LAN sync
     fs::path localPath;
@@ -191,7 +276,6 @@ void PushFileData(const std::vector<uint8_t>& data, const std::string& filename,
         std::ofstream ofs(localPath, std::ios::binary);
         ofs.write((char*)data.data(), data.size());
         ofs.close();
-        LOG_INFO("Announcement: Local copy ready for %s", filename.c_str());
     } catch (...) {
         LOG_ERROR("Failed to save temp copy for LAN sync");
         return;
@@ -200,61 +284,59 @@ void PushFileData(const std::vector<uint8_t>& data, const std::string& filename,
     // 3. Register in Pending Queue
     auto pending = std::make_shared<PendingPush>();
     pending->file_id = file_id;
+    pending->transfer_id = transfer_id;
     pending->data = *enc;
     pending->filename = filename;
     pending->type = fileType;
     {
         std::lock_guard<std::mutex> lock(g_pendingMutex);
-        g_pendingPushes[file_id] = pending;
+        g_pendingPushes[transfer_id] = pending;
     }
 
-    // 4. Send Announcement via Socket.IO
+    // 4. Send Announcement (Protocol 4.0 schema)
     nlohmann::json announce;
+    announce["protocol_version"] = "4.0";
     announce["room"] = config.room_id;
+    announce["transfer_id"] = transfer_id;
     announce["file_id"] = file_id;
     announce["filename"] = filename;
     announce["type"] = fileType;
-    announce["sender_id"] = config.device_id;
-    
-    std::string localUrl = "http://" + LocalServer::Instance().GetIP() + ":" + std::to_string(LocalServer::Instance().GetPort()) + "/files/" + filename;
-    announce["local_url"] = localUrl;
+    announce["size_bytes"] = data.size();
+    announce["sender_client_id"] = config.device_id;
+    announce["local_url"] = "http://" + LocalServer::Instance().GetIP() + ":" + std::to_string(LocalServer::Instance().GetPort()) + "/files/" + filename;
+    announce["sent_at_ms"] = ms;
     
     SocketIOService::Instance().Emit("file_available", announce);
-    LOG_INFO("Event Sent: file_available | Room: %s | ID: %s", config.room_id.c_str(), file_id.c_str());
-    LOG_INFO("Announcement sent for %s, waiting %ds for client pull...", filename.c_str(), config.lan_timeout);
+    LOG_INFO("Event Sent: file_available | ID: %s", transfer_id.c_str());
 
     // 5. Start Background Decision Thread
     int timeoutSecs = config.lan_timeout;
     std::thread([pending, localPath, filename, fileType, timeoutSecs]() {
-        // Wait for ACK or NeedRelay
+        // Wait for server command or app ack
         for (int i = 0; i < timeoutSecs * 10; ++i) {
-            if (pending->completed || pending->need_relay) break;
+            if (pending->completed || pending->upload_requested || pending->need_relay) break;
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
 
         std::error_code ec;
         if (pending->completed) {
-            LOG_INFO("LAN Sync Success: Client pulled %s directly", filename.c_str());
-            // Delete immediately since the client confirmed receipt
+            LOG_INFO("LAN Sync Successful (Directed by Server/App)");
             fs::remove(localPath, ec);
-            LOG_INFO("Temp file deleted: %s", filename.c_str());
         } else {
-            if (pending->need_relay) LOG_INFO("LAN Sync Failed: Client requested cloud relay");
-            else LOG_INFO("LAN Sync Timeout: Falling back to cloud upload");
+            if (pending->upload_requested) LOG_INFO("Server directed immediate Cloud Upload");
+            else if (pending->need_relay) LOG_INFO("App requested Cloud Relay fallback");
+            else LOG_INFO("LAN Sync Timeout (No server response)");
             
             PerformCloudUpload(pending->data, pending->filename, pending->type);
             
-            // Still keep the local file for a short while (30s) in case the client 
-            // makes one last-ditch attempt at LAN sync after receiving the cloud signal.
             std::this_thread::sleep_for(std::chrono::seconds(30));
             fs::remove(localPath, ec);
-            LOG_INFO("Temp file cleaned up after fallback: %s", filename.c_str());
         }
 
         // Cleanup from pending queue
         {
             std::lock_guard<std::mutex> lock(g_pendingMutex);
-            g_pendingPushes.erase(pending->file_id);
+            g_pendingPushes.erase(pending->transfer_id);
         }
     }).detach();
 }
@@ -556,19 +638,49 @@ int main() {
         }
     );
     sio.SetSignalingCallback([](const std::string& event, const nlohmann::json& data) {
-        std::string file_id = data.value("file_id", "");
-        std::string room = data.value("room", "unknown");
-        if (file_id.empty()) return;
+        if (event == "peer_evicted") {
+            LOG_WARNING("Peer evicted from room. Re-joining...");
+            SocketIOService::Instance().Disconnect();
+            auto& d = Config::Instance().Data();
+            SocketIOService::Instance().Connect(d.relay_server_url, d.room_id, d.device_id);
+            return;
+        }
 
-        LOG_INFO("Signal Received: %s | Room: %s | ID: %s", event.c_str(), room.c_str(), file_id.c_str());
+        if (event == "file_available") {
+            HandleIncomingAnnouncement(data);
+            return;
+        }
+
+        std::string transfer_id = data.value("transfer_id", "");
+        if (transfer_id.empty()) return;
+
+        LOG_INFO("Signal Received: %s | ID: %s", event.c_str(), transfer_id.c_str());
 
         std::lock_guard<std::mutex> lock(g_pendingMutex);
-        auto it = g_pendingPushes.find(file_id);
-        if (it != g_pendingPushes.end()) {
-            if (event == "file_sync_completed") {
-                it->second->completed = true;
-            } else if (event == "file_need_relay") {
-                it->second->need_relay = true;
+        // Find by transfer_id or file_id
+        std::shared_ptr<PendingPush> target = nullptr;
+        for (auto& pair : g_pendingPushes) {
+            if (pair.second->transfer_id == transfer_id || pair.second->file_id == transfer_id) {
+                target = pair.second;
+                break;
+            }
+        }
+
+                if (target) {
+                    if (event == "file_sync_completed") {
+                        target->completed = true;
+                    } else if (event == "file_need_relay") {
+                        std::string reason = data.value("reason", "");
+                        if (reason == "room_diff_lan") {
+                            LOG_INFO("Server indicated different LAN. Switching to cloud immediately.");
+                        }
+                        target->need_relay = true;
+                    } else if (event == "transfer_command") {                std::string action = data.value("action", "");
+                if (action == "finish") {
+                    target->completed = true;
+                } else if (action == "upload_relay") {
+                    target->upload_requested = true;
+                }
             }
         }
     });

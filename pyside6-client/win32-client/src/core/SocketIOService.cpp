@@ -1,5 +1,7 @@
 #include "SocketIOService.h"
 #include "Logger.h"
+#include "Utils.h"
+#include "LocalServer.h"
 #include <thread>
 #include <chrono>
 
@@ -175,6 +177,8 @@ void SocketIOService::HandlePacket(const std::string& packet) {
                     else SetStatus(ConnectionStatus::ConnectedLonely);
                 } else if (eventName == "file_sync_completed" || eventName == "file_need_relay") {
                     if (m_onSignaling) m_onSignaling(eventName, eventData);
+                } else if (eventName == "file_available" || eventName == "transfer_command" || eventName == "peer_evicted" || eventName == "room_state_changed") {
+                    if (m_onSignaling) m_onSignaling(eventName, eventData);
                 }
             }
         } catch (...) {
@@ -186,14 +190,30 @@ void SocketIOService::HandlePacket(const std::string& packet) {
 void SocketIOService::JoinRoom() {
     if (m_roomId.empty()) return;
     
+    auto meta = Utils::GetNetworkMetadata();
+    uint64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+
     nlohmann::json data;
+    data["protocol_version"] = "4.0";
     data["room"] = m_roomId;
     data["client_id"] = m_clientId;
-    data["client_type"] = "windows";
+    data["client_type"] = "pc";
+    data["joined_at_ms"] = now_ms;
+
+    nlohmann::json network;
+    network["private_ip"] = meta.private_ip;
+    network["cidr"] = meta.cidr;
+    network["network_id_hash"] = meta.network_id_hash;
+    network["network_epoch"] = 0; // Simple epoch
+    data["network"] = network;
+
+    nlohmann::json probe;
+    probe["probe_url"] = "http://" + meta.private_ip + ":" + std::to_string(LocalServer::Instance().GetPort()) + "/probe";
+    probe["probe_ttl_ms"] = 30000;
+    data["probe"] = probe;
     
-    // 42 is Message type (4) + Event type (2)
     SendPacket("42" + nlohmann::json({"join", data}).dump());
-    LOG_INFO("Joined room: %s", m_roomId.c_str());
+    LOG_INFO("Joined room %s via Protocol 4.0 (IP: %s)", m_roomId.c_str(), meta.private_ip.c_str());
 }
 
 void SocketIOService::SendPacket(const std::string& packet) {
