@@ -1,9 +1,64 @@
 #pragma once
-#include <string>
+
+// MUST include winsock2 before windows.h
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <iphlpapi.h>
 #include <windows.h>
+
+#include <string>
+#include <vector>
+
+#pragma comment(lib, "iphlpapi.lib")
+#pragma comment(lib, "ws2_32.lib")
 
 namespace ClipboardPush {
 namespace Utils {
+
+inline std::string GetLocalIPAddress() {
+    ULONG outBufLen = 15000;
+    std::vector<uint8_t> buffer(outBufLen);
+    PIP_ADAPTER_ADDRESSES pAddresses = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(buffer.data());
+
+    std::string bestIp = "127.0.0.1";
+    int bestScore = -1;
+
+    if (GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER, NULL, pAddresses, &outBufLen) == ERROR_SUCCESS) {
+        for (PIP_ADAPTER_ADDRESSES pCurrAddresses = pAddresses; pCurrAddresses != NULL; pCurrAddresses = pCurrAddresses->Next) {
+            if (pCurrAddresses->OperStatus != IfOperStatusUp) continue;
+            if (pCurrAddresses->IfType == IF_TYPE_SOFTWARE_LOOPBACK) continue;
+            
+            // Skip known virtual adapters by description if possible
+            std::wstring desc = pCurrAddresses->Description;
+            if (desc.find(L"VMware") != std::wstring::npos || desc.find(L"VirtualBox") != std::wstring::npos) continue;
+
+            for (PIP_ADAPTER_UNICAST_ADDRESS pUnicast = pCurrAddresses->FirstUnicastAddress; pUnicast != NULL; pUnicast = pUnicast->Next) {
+                sockaddr_in* sa_in = reinterpret_cast<sockaddr_in*>(pUnicast->Address.lpSockaddr);
+                char addr[INET_ADDRSTRLEN];
+                inet_ntop(AF_INET, &(sa_in->sin_addr), addr, INET_ADDRSTRLEN);
+                
+                std::string ip(addr);
+                if (ip == "127.0.0.1") continue;
+
+                int score = 0;
+                if (ip.substr(0, 8) == "192.168.") score = 100;
+                else if (ip.substr(0, 3) == "10." && ip.substr(0, 7) != "10.100.") score = 90; // Prioritize 10.x but maybe not some VPNs
+                else if (ip.substr(0, 4) == "172.") score = 80;
+                else if (ip.substr(0, 7) == "100.64.") score = 10; // Very low priority (CGNAT/VPN)
+                else score = 50;
+
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestIp = ip;
+                }
+            }
+        }
+    }
+    return bestIp;
+}
 
 inline std::wstring ToWide(const std::string& str) {
     if (str.empty()) return std::wstring();

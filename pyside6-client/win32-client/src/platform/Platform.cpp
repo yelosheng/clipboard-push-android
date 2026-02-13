@@ -1,5 +1,4 @@
 #include "Platform.h"
-#include <windows.h>
 #include <gdiplus.h>
 
 namespace ClipboardPush {

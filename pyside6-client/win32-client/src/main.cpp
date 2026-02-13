@@ -1,3 +1,4 @@
+#include <winsock2.h>
 #include <windows.h>
 #include "core/Logger.h"
 #include "core/Config.h"
@@ -7,6 +8,7 @@
 #include "platform/Clipboard.h"
 #include "platform/Hotkey.h"
 #include "core/SocketIOService.h"
+#include "core/LocalServer.h"
 #include "platform/ClipboardMonitor.h"
 #include "ui/TrayIcon.h"
 #include "ui/MainWindow.h"
@@ -317,7 +319,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     return 0;
 }
 
-int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
+int main() {
     // Single Instance Protection
     HANDLE hMutex = CreateMutexW(NULL, TRUE, L"Global\\ClipboardPushWin32_SingleInstance_Mutex");
     if (hMutex == NULL || GetLastError() == ERROR_ALREADY_EXISTS) {
@@ -326,6 +328,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     }
 
     SetProcessDPIAware();
+    HINSTANCE hInstance = GetModuleHandle(NULL);
     ClipboardPush::Platform::Init();
     ClipboardPush::Config::Instance().Load();
     auto& data = ClipboardPush::Config::Instance().Data();
@@ -352,6 +355,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     ClipboardPush::UI::MainWindow::Instance().Create(hInstance);
     ClipboardPush::UI::SettingsWindow::Instance().Create(hInstance, hWnd);
     ClipboardPush::UI::TrayIcon::Instance().Init(hWnd, hInstance);
+
+    // Start Local Server for LAN Sync
+    ClipboardPush::LocalServer::Instance().Start();
 
     // Setup Socket.IO
     auto& sio = ClipboardPush::SocketIOService::Instance();
@@ -476,6 +482,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     }
 
     ClipboardPush::Platform::ClipboardMonitor::Instance().Stop(hWnd);
+    ClipboardPush::LocalServer::Instance().Stop();
     ClipboardPush::UI::TrayIcon::Instance().Remove();
     ClipboardPush::Platform::Shutdown();
     return 0;

@@ -15,6 +15,7 @@ inline void Log(const char* format, ...) {
 
     OutputDebugStringA(buffer);
     OutputDebugStringA("\n");
+    printf("%s\n", buffer);
 }
 
 }

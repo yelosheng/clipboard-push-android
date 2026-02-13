@@ -3,6 +3,7 @@
 #include "core/Config.h"
 #include "core/Utils.h"
 #include "core/Logger.h"
+#include "core/LocalServer.h"
 #include "qrcodegen.hpp"
 #include <shlobj.h>
 #include <commctrl.h>
@@ -116,6 +117,8 @@ void SettingsWindow::LoadSettings() {
     j["key"] = data.room_key;
     j["room"] = data.room_id;
     j["server"] = data.relay_server_url;
+    j["local_ip"] = LocalServer::Instance().GetIP();
+    j["local_port"] = LocalServer::Instance().GetPort();
     UpdateQR(j.dump());
 }
 

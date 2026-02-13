@@ -1,6 +1,7 @@
 #include "Network.h"
 #include "Utils.h"
 #include "Logger.h"
+#include <winsock2.h>
 #include <windows.h>
 #include <winhttp.h>
 #include <thread>

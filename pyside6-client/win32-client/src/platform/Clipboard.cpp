@@ -1,7 +1,9 @@
 #include "Clipboard.h"
 #include "core/Utils.h"
 #include "core/Logger.h"
+#include <winsock2.h>
 #include <windows.h>
+#include <shellapi.h>
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <gdiplus.h>

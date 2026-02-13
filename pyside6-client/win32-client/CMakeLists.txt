@@ -20,6 +20,8 @@ set(SYSTEM_LIBS
     gdiplus
     crypt32
     shlwapi
+    iphlpapi
+    ws2_32
 )
 
 # Source files
@@ -29,6 +31,7 @@ set(SOURCES
     src/core/Crypto.cpp
     src/core/Network.cpp
     src/core/SocketIOService.cpp
+    src/core/LocalServer.cpp
     src/platform/Platform.cpp
     src/platform/Clipboard.cpp
     src/platform/ClipboardMonitor.cpp
@@ -42,7 +45,7 @@ set(SOURCES
 # Resources
 set(RESOURCES src/ClipboardPush.rc)
 
-add_executable(ClipboardPushWin32 WIN32
+add_executable(ClipboardPushWin32
     ${SOURCES}
     ${RESOURCES}
 )
@@ -67,4 +70,7 @@ if(MSVC)
     )
 endif()
 
-target_compile_definitions(ClipboardPushWin32 PRIVATE NOMINMAX)
+target_compile_definitions(ClipboardPushWin32 PRIVATE 
+    NOMINMAX
+    WIN32_LEAN_AND_MEAN
+)
