@@ -408,12 +408,20 @@ class ClipboardService : Service() {
         }
         
         if (content.isNotEmpty()) {
+            // Generate deterministic ID for deduplication
+            // If timestamp is available, use it + content hash
+            val messageId = if (!timestamp.isNullOrEmpty()) {
+                "text_${timestamp}_${content.hashCode()}"
+            } else {
+                System.currentTimeMillis().toString()
+            }
+            
             // Save & Notify
             val msg = PushMessage(
-                id = System.currentTimeMillis().toString(),
+                id = messageId,
                 type = PushMessage.TYPE_TEXT,
                 content = content,
-                timestamp = timestamp
+                timestamp = timestamp ?: System.currentTimeMillis().toString()
             )
             saveAndNotifyMessage(msg)
             

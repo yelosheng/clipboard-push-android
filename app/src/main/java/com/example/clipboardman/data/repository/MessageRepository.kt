@@ -84,6 +84,17 @@ class MessageRepository(private val context: Context) {
                 mutableListOf()
             }
             
+            // Deduplication Check
+            val exists = currentMessages.any { 
+                (it.id != null && it.id == message.id) || 
+                (it.safeId == message.safeId)
+            }
+            
+            if (exists) {
+                DebugLogger.log("MsgRepo", "Duplicate message ignored: ${message.id}")
+                return@edit
+            }
+            
             DebugLogger.log("MsgRepo", "Current: ${currentMessages.size} msgs, adding new...")
             
             // 添加到开头
