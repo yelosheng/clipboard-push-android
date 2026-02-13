@@ -16,6 +16,7 @@ import com.example.clipboardman.util.FileUtil
 import com.example.clipboardman.util.NotificationHelper
 import kotlinx.coroutines.flow.first
 import java.io.File
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 
 class UploadWorker(
     context: Context,
@@ -54,9 +55,56 @@ class UploadWorker(
 
             val baseUrl = settingsRepository.getHttpBaseUrl(serverAddress, useHttps)
             val apiService = ApiService(baseUrl)
+            
+            val fileName = FileUtil.getFileName(applicationContext, uri) ?: "upload.bin"
+            
+            // --- 0. Try Local Upload (Plaintext) ---
+            val peerIp = settingsRepository.peerLocalIpFlow.first()
+            val peerPort = settingsRepository.peerLocalPortFlow.first()
+            
+            if (!peerIp.isNullOrBlank() && peerPort != null && peerPort > 0) {
+                 setForeground(createForegroundInfo(notificationId, "Uploading...", "Sending to PC (LAN)..."))
+                 try {
+                     val localUrl = "http://$peerIp:$peerPort/upload"
+                     val client = okhttp3.OkHttpClient.Builder()
+                         .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                         .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                         .build()
+                         
+                     // Read file content
+                     val fileBytes = applicationContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                         ?: throw IllegalStateException("Cannot read file")
+                         
+                     val requestBody = okhttp3.MultipartBody.Builder()
+                         .setType(okhttp3.MultipartBody.FORM)
+                         .addFormDataPart("file", fileName, 
+                             okhttp3.RequestBody.create(mimeType.toMediaTypeOrNull(), fileBytes))
+                         .build()
+                         
+                     val request = okhttp3.Request.Builder()
+                         .url(localUrl)
+                         .addHeader("X-Room-ID", roomId ?: "")
+                         .post(requestBody)
+                         .build()
+                         
+                     client.newCall(request).execute().use { response ->
+                         if (response.isSuccessful) {
+                             NotificationHelper.showPushNotification(
+                                applicationContext,
+                                "Upload Complete",
+                                "Sent $fileName to PC (LAN)"
+                            )
+                            return Result.success() 
+                         }
+                     }
+                 } catch (e: Exception) {
+                     Log.w(TAG, "Local upload failed, falling back to cloud", e)
+                 }
+            }
+
+            // --- Fallback: Cloud Upload (Encrypted) ---
 
             // 1. Copy to temp file (for size calculation & stable reading)
-            val fileName = FileUtil.getFileName(applicationContext, uri) ?: "upload.bin"
             tempSourceFile = File.createTempFile("src_", ".tmp", applicationContext.cacheDir)
             
             applicationContext.contentResolver.openInputStream(uri)?.use { input ->

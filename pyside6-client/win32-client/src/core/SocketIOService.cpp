@@ -69,6 +69,17 @@ void SocketIOService::SetCallbacks(ClipboardCallback onClipboard, FileCallback o
     m_onCountdown = onCountdown;
 }
 
+void SocketIOService::SetSignalingCallback(SignalingCallback cb) {
+    m_onSignaling = cb;
+}
+
+void SocketIOService::Emit(const std::string& event, const nlohmann::json& data) {
+    nlohmann::json j = nlohmann::json::array();
+    j.push_back(event);
+    j.push_back(data);
+    SendPacket("42" + j.dump());
+}
+
 void SocketIOService::SetStatus(ConnectionStatus status) {
     m_status = status;
     if (m_onStatus) m_onStatus(status);
@@ -162,6 +173,8 @@ void SocketIOService::HandlePacket(const std::string& packet) {
                     int count = eventData.value("count", 1);
                     if (count > 1) SetStatus(ConnectionStatus::ConnectedSynced);
                     else SetStatus(ConnectionStatus::ConnectedLonely);
+                } else if (eventName == "file_sync_completed" || eventName == "file_need_relay") {
+                    if (m_onSignaling) m_onSignaling(eventName, eventData);
                 }
             }
         } catch (...) {

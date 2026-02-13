@@ -78,7 +78,18 @@ void LocalServer::Run() {
             ofs.write(file.content.data(), file.content.size());
             ofs.close();
 
-            LOG_INFO("LAN Upload: Received %s", filename.c_str());
+            LOG_INFO("LAN Upload: Saved %s", filename.c_str());
+            
+            // Basic type detection
+            std::string type = "file";
+            std::string extStr = filePath.extension().string();
+            std::transform(extStr.begin(), extStr.end(), extStr.begin(), ::tolower);
+            if (extStr == ".png" || extStr == ".jpg" || extStr == ".jpeg" || extStr == ".bmp") {
+                type = "image";
+            }
+
+            ProcessReceivedFile(filePath.string(), filename, type);
+
             res.status = 200;
             res.set_content("OK", "text/plain");
         } else {
@@ -95,7 +106,12 @@ void LocalServer::Run() {
 
         std::string filename = req.matches[1];
         fs::path downloadDir(Utils::ToWide(config.download_path));
+        fs::path tempDir = fs::path(Utils::GetAppDir()) / L"temp";
+        
         fs::path filePath = downloadDir / Utils::ToWide(filename);
+        if (!fs::exists(filePath)) {
+            filePath = tempDir / Utils::ToWide(filename);
+        }
 
         std::error_code ec;
         if (fs::exists(filePath, ec) && fs::is_regular_file(filePath, ec)) {

@@ -22,6 +22,8 @@
 #include <iomanip>
 #include <sstream>
 #include <thread>
+#include <mutex>
+#include <map>
 
 #include <filesystem>
 #include <fstream>
@@ -31,14 +33,43 @@
 using namespace ClipboardPush;
 namespace fs = std::filesystem;
 
+namespace ClipboardPush {
+
 // Global state for sync logic
 static bool g_isProcessingRemoteSync = false;
 
-namespace ClipboardPush {
+struct PendingPush {
+    std::string file_id;
+    std::vector<uint8_t> data;
+    std::string filename;
+    std::string type;
+    std::atomic<bool> completed{ false };
+    std::atomic<bool> need_relay{ false };
+};
 
-// Forward declarations
-void PushText(const std::string& text);
-void ShowNotification(const std::wstring& title, const std::wstring& message, UI::NotificationStyle style = UI::NotificationStyle::Inbound);
+static std::mutex g_pendingMutex;
+static std::map<std::string, std::shared_ptr<PendingPush>> g_pendingPushes;
+
+void ProcessReceivedFile(const std::string& filePath, const std::string& filename, const std::string& type) {
+    auto& config = Config::Instance().Data();
+    
+    LOG_INFO("Processing received file: %s", filename.c_str());
+    ShowNotification(L"File Received", Utils::ToWide(filename));
+
+    // Auto copy to clipboard
+    g_isProcessingRemoteSync = true;
+    if (type == "image" && config.auto_copy_image) {
+        Platform::Clipboard::SetImageFromFile(filePath);
+    } else if (config.auto_copy_file) {
+        Platform::Clipboard::SetFiles({filePath});
+    }
+    
+    // Reset sync flag after a short delay
+    std::thread([]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        g_isProcessingRemoteSync = false;
+    }).detach();
+}
 
 void OnRemoteFileReceived(const nlohmann::json& data) {
     try {
@@ -80,30 +111,16 @@ void OnRemoteFileReceived(const nlohmann::json& data) {
 
         // Save file
         std::ofstream outfile(filePath, std::ios::binary);
-        outfile.write((char*)decData->data(), decData->size());
-        outfile.close();
-
-        LOG_INFO("File saved to %s", filePath.string().c_str());
-        ShowNotification(L"File Received", Utils::ToWide(filename));
-
-        // Auto copy to clipboard
-        g_isProcessingRemoteSync = true;
-        if (type == "image" && config.auto_copy_image) {
-            Platform::Clipboard::SetImageFromFile(filePath.string());
-        } else if (config.auto_copy_file) {
-            Platform::Clipboard::SetFiles({filePath.string()});
-        }
+                outfile.write((char*)decData->data(), decData->size());
+                outfile.close();
         
-        // Reset sync flag after a short delay
-        std::thread([]() {
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            g_isProcessingRemoteSync = false;
-        }).detach();
-
-    } catch (const std::exception& e) {
+                ProcessReceivedFile(filePath.string(), filename, type);
+            } catch (const std::exception& e) {
         LOG_ERROR("Error in file sync: %s", e.what());
     }
 }
+
+void PerformCloudUpload(const std::vector<uint8_t>& encData, const std::string& filename, const std::string& fileType);
 
 std::string GetCurrentTimestamp() {
     auto now = std::chrono::system_clock::now();
@@ -154,15 +171,102 @@ void PushFileData(const std::vector<uint8_t>& data, const std::string& filename,
     auto& config = Config::Instance().Data();
     if (config.room_key.empty()) return;
 
+    // Encrypt data FIRST (always encrypt before any transmission)
     auto key = Crypto::DecodeKey(config.room_key);
     auto enc = Crypto::Encrypt(key, data);
     if (!enc) return;
 
+    // 1. Create Unique File ID (Timestamp + High-res counter)
+    auto now = std::chrono::system_clock::now();
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+    std::string file_id = "f_" + std::to_string(ms);
+
+    // 2. Save a local copy to temp folder for LAN sync
+    fs::path localPath;
+    try {
+        fs::path tempDir = fs::path(Utils::GetAppDir()) / L"temp";
+        if (!fs::exists(tempDir)) fs::create_directories(tempDir);
+        localPath = tempDir / Utils::ToWide(filename);
+        
+        std::ofstream ofs(localPath, std::ios::binary);
+        ofs.write((char*)data.data(), data.size());
+        ofs.close();
+        LOG_INFO("Announcement: Local copy ready for %s", filename.c_str());
+    } catch (...) {
+        LOG_ERROR("Failed to save temp copy for LAN sync");
+        return;
+    }
+
+    // 3. Register in Pending Queue
+    auto pending = std::make_shared<PendingPush>();
+    pending->file_id = file_id;
+    pending->data = *enc;
+    pending->filename = filename;
+    pending->type = fileType;
+    {
+        std::lock_guard<std::mutex> lock(g_pendingMutex);
+        g_pendingPushes[file_id] = pending;
+    }
+
+    // 4. Send Announcement via Socket.IO
+    nlohmann::json announce;
+    announce["room"] = config.room_id;
+    announce["file_id"] = file_id;
+    announce["filename"] = filename;
+    announce["type"] = fileType;
+    announce["sender_id"] = config.device_id;
+    
+    std::string localUrl = "http://" + LocalServer::Instance().GetIP() + ":" + std::to_string(LocalServer::Instance().GetPort()) + "/files/" + filename;
+    announce["local_url"] = localUrl;
+    
+    SocketIOService::Instance().Emit("file_available", announce);
+    LOG_INFO("Event Sent: file_available | Room: %s | ID: %s", config.room_id.c_str(), file_id.c_str());
+    LOG_INFO("Announcement sent for %s, waiting %ds for client pull...", filename.c_str(), config.lan_timeout);
+
+    // 5. Start Background Decision Thread
+    int timeoutSecs = config.lan_timeout;
+    std::thread([pending, localPath, filename, fileType, timeoutSecs]() {
+        // Wait for ACK or NeedRelay
+        for (int i = 0; i < timeoutSecs * 10; ++i) {
+            if (pending->completed || pending->need_relay) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+
+        std::error_code ec;
+        if (pending->completed) {
+            LOG_INFO("LAN Sync Success: Client pulled %s directly", filename.c_str());
+            // Delete immediately since the client confirmed receipt
+            fs::remove(localPath, ec);
+            LOG_INFO("Temp file deleted: %s", filename.c_str());
+        } else {
+            if (pending->need_relay) LOG_INFO("LAN Sync Failed: Client requested cloud relay");
+            else LOG_INFO("LAN Sync Timeout: Falling back to cloud upload");
+            
+            PerformCloudUpload(pending->data, pending->filename, pending->type);
+            
+            // Still keep the local file for a short while (30s) in case the client 
+            // makes one last-ditch attempt at LAN sync after receiving the cloud signal.
+            std::this_thread::sleep_for(std::chrono::seconds(30));
+            fs::remove(localPath, ec);
+            LOG_INFO("Temp file cleaned up after fallback: %s", filename.c_str());
+        }
+
+        // Cleanup from pending queue
+        {
+            std::lock_guard<std::mutex> lock(g_pendingMutex);
+            g_pendingPushes.erase(pending->file_id);
+        }
+    }).detach();
+}
+
+void PerformCloudUpload(const std::vector<uint8_t>& encData, const std::string& filename, const std::string& fileType) {
+    auto& config = Config::Instance().Data();
+    
     // 1. Request upload auth
     std::string authUrl = config.relay_server_url + "/api/file/upload_auth";
     nlohmann::json authPayload;
     authPayload["filename"] = filename;
-    authPayload["size"] = enc->size();
+    authPayload["size"] = encData.size();
     authPayload["content_type"] = "application/octet-stream";
     
     auto authRes = Network::HttpClient::Post(authUrl, authPayload.dump());
@@ -179,8 +283,8 @@ void PushFileData(const std::vector<uint8_t>& data, const std::string& filename,
         if (uploadUrl.empty()) return;
 
         // 2. Upload file
-        LOG_INFO("Uploading file...");
-        auto putRes = Network::HttpClient::Put(uploadUrl, *enc);
+        LOG_INFO("Uploading to cloud...");
+        auto putRes = Network::HttpClient::Put(uploadUrl, encData);
         if (putRes.status != 200) {
             LOG_ERROR("File upload failed: %d", putRes.status);
             return;
@@ -202,9 +306,9 @@ void PushFileData(const std::vector<uint8_t>& data, const std::string& filename,
         relayPayload["data"] = d;
 
         Network::HttpClient::Post(relayUrl, relayPayload.dump());
-        LOG_INFO("File sync pushed successfully");
+        LOG_INFO("Cloud sync pushed successfully");
     } catch (...) {
-        LOG_ERROR("Failed to process upload response");
+        LOG_ERROR("Failed to process cloud upload");
     }
 }
 
@@ -330,6 +434,18 @@ int main() {
     SetProcessDPIAware();
     HINSTANCE hInstance = GetModuleHandle(NULL);
     ClipboardPush::Platform::Init();
+
+    // Cleanup temp folder on startup
+    try {
+        fs::path tempDir = fs::path(Utils::GetAppDir()) / L"temp";
+        if (fs::exists(tempDir)) {
+            for (const auto& entry : fs::directory_iterator(tempDir)) {
+                std::error_code ec;
+                fs::remove(entry.path(), ec);
+            }
+        }
+    } catch (...) {}
+
     ClipboardPush::Config::Instance().Load();
     auto& data = ClipboardPush::Config::Instance().Data();
     
@@ -439,6 +555,24 @@ int main() {
             ClipboardPush::UI::MainWindow::Instance().SetStatus(statusStr);
         }
     );
+    sio.SetSignalingCallback([](const std::string& event, const nlohmann::json& data) {
+        std::string file_id = data.value("file_id", "");
+        std::string room = data.value("room", "unknown");
+        if (file_id.empty()) return;
+
+        LOG_INFO("Signal Received: %s | Room: %s | ID: %s", event.c_str(), room.c_str(), file_id.c_str());
+
+        std::lock_guard<std::mutex> lock(g_pendingMutex);
+        auto it = g_pendingPushes.find(file_id);
+        if (it != g_pendingPushes.end()) {
+            if (event == "file_sync_completed") {
+                it->second->completed = true;
+            } else if (event == "file_need_relay") {
+                it->second->need_relay = true;
+            }
+        }
+    });
+
     sio.Connect(data.relay_server_url, data.room_id, data.device_id);
 
     // Setup Clipboard Monitor

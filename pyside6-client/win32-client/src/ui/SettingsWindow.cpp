@@ -104,6 +104,7 @@ void SettingsWindow::LoadSettings() {
     auto& data = Config::Instance().Data();
     SetDlgItemTextW(m_hWnd, IDC_SETTINGS_PATH, Utils::ToWide(data.download_path).c_str());
     SetDlgItemTextW(m_hWnd, IDC_SETTINGS_HOTKEY, Utils::ToWide(data.push_hotkey).c_str());
+    SetDlgItemInt(m_hWnd, IDC_SETTINGS_LAN_TIMEOUT, data.lan_timeout, FALSE);
     SetDlgItemTextW(m_hWnd, IDC_SETTINGS_DEVICEID, Utils::ToWide(data.device_id).c_str());
     
     CheckDlgButton(m_hWnd, IDC_SETTINGS_IMAGES, data.auto_copy_image ? BST_CHECKED : BST_UNCHECKED);
@@ -131,6 +132,9 @@ void SettingsWindow::SaveSettings() {
     
     GetDlgItemTextW(m_hWnd, IDC_SETTINGS_HOTKEY, buffer, MAX_PATH);
     data.push_hotkey = Utils::ToUtf8(buffer);
+
+    data.lan_timeout = GetDlgItemInt(m_hWnd, IDC_SETTINGS_LAN_TIMEOUT, NULL, FALSE);
+    if (data.lan_timeout <= 0) data.lan_timeout = 10;
 
     GetDlgItemTextW(m_hWnd, IDC_SETTINGS_DEVICEID, buffer, MAX_PATH);
     data.device_id = Utils::ToUtf8(buffer);

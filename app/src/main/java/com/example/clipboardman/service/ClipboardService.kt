@@ -211,6 +211,7 @@ class ClipboardService : Service() {
                     when (event) {
                         is RelayEvent.ClipboardSync -> handleClipboardSync(event.data)
                         is RelayEvent.FileSync -> handleFileSync(event.data)
+                        is RelayEvent.FileAvailable -> handleFileAvailable(event.data)
                     }
                 }
             } catch (e: Exception) {
@@ -423,6 +424,8 @@ class ClipboardService : Service() {
         }
     }
 
+    private val pendingFiles = Collections.synchronizedMap(java.util.HashMap<String, String>())
+
     private fun handleFileSync(data: JSONObject) {
         val downloadUrl = data.optString("download_url")
         val fileName = data.optString("filename")
@@ -431,25 +434,46 @@ class ClipboardService : Service() {
         DebugLogger.log(TAG, "Received File Sync: $fileName")
         
         if (downloadUrl.isNotEmpty()) {
-            val messageId = System.currentTimeMillis().toString()
-             val msg = PushMessage(
-                id = messageId,
-                type = if (mimeType == "image") PushMessage.TYPE_IMAGE else PushMessage.TYPE_FILE,
-                content = fileName,
-                timestamp = data.optString("timestamp"),
-                fileUrl = downloadUrl,
-                fileName = fileName
-            )
-            saveAndNotifyMessage(msg)
+            val messageId: String
             
-            // 发送系统通知
-            val typeLabel = if (mimeType == "image") "图片" else "文件"
-            NotificationHelper.showPushNotification(
-                this,
-                "收到$typeLabel",
-                "正在下载: $fileName",
-                messageId.hashCode()  // 使用 hashCode 而非 toInt()，避免溢出
-            )
+            // Check if we are already handling this file (e.g. via file_available fallback)
+            val existingId = pendingFiles[fileName]
+            if (existingId != null) {
+                DebugLogger.log(TAG, "Reusing existing message ID for fallback: $existingId")
+                messageId = existingId
+                // No need to create new message or notify, just start worker to update it
+                
+                // Optional: Update status to "Downloading from Cloud..." via notification?
+                NotificationHelper.showPushNotification(
+                    this,
+                    "下载中 (云端)",
+                    "正在从云端下载: $fileName",
+                    messageId.hashCode()
+                )
+            } else {
+                messageId = System.currentTimeMillis().toString()
+                 val msg = PushMessage(
+                    id = messageId,
+                    type = if (mimeType == "image") PushMessage.TYPE_IMAGE else PushMessage.TYPE_FILE,
+                    content = fileName,
+                    timestamp = data.optString("timestamp"),
+                    fileUrl = downloadUrl,
+                    fileName = fileName
+                )
+                saveAndNotifyMessage(msg)
+                
+                // 发送系统通知
+                val typeLabel = if (mimeType == "image") "图片" else "文件"
+                NotificationHelper.showPushNotification(
+                    this,
+                    "收到$typeLabel",
+                    "正在下载: $fileName",
+                    messageId.hashCode()
+                )
+                
+                // Add to pending
+                pendingFiles[fileName] = messageId
+            }
 
             // Start Download Worker with message ID
             val workData = workDataOf(
@@ -465,6 +489,95 @@ class ClipboardService : Service() {
                 .build()
                 
             WorkManager.getInstance(applicationContext).enqueue(workRequest)
+        }
+    }
+
+    private fun handleFileAvailable(data: JSONObject) {
+        // V3.3 Protocol: Flat Payload. Legacy/Wrapper: Wrapped in "data".
+        // We handle both by checking if "data" exists as a child object.
+        val dataObj = data.optJSONObject("data") ?: data
+        
+        val fileId = dataObj.optString("file_id")
+        val fileName = dataObj.optString("filename")
+        val localUrl = dataObj.optString("local_url")
+        val mimeType = dataObj.optString("type")
+        
+        DebugLogger.log(TAG, "Received File Invite (v2): $fileName ($localUrl) ID=$fileId")
+        
+        if (fileId.isEmpty() || localUrl.isEmpty()) {
+             Log.e(TAG, "Invalid file_available payload (missing ID or URL): $dataObj")
+             return
+        }
+        
+        // Deduplication: Check if we are already handling this file
+        if (pendingFiles.containsKey(fileName)) {
+            DebugLogger.log(TAG, "Ignoring duplicate file announcement: $fileName")
+            return
+        }
+        
+        val messageId = System.currentTimeMillis().toString()
+        val msg = PushMessage(
+            id = messageId,
+            type = if (mimeType == "image") PushMessage.TYPE_IMAGE else PushMessage.TYPE_FILE,
+            content = fileName,
+            timestamp = System.currentTimeMillis().toString(),
+            fileUrl = localUrl, // Temporary, will update
+            fileName = fileName
+        )
+        // We save message now so user sees something is happening
+        saveAndNotifyMessage(msg)
+        
+        // Track pending file
+        pendingFiles[fileName] = messageId
+
+        NotificationHelper.showPushNotification(
+            this,
+            "收到局域网文件",
+            "正在高速下载: $fileName",
+            messageId.hashCode()
+        )
+
+        val workData = workDataOf(
+            DownloadWorker.KEY_FILE_URL to localUrl,
+            DownloadWorker.KEY_FILE_NAME to fileName,
+            DownloadWorker.KEY_MIME_TYPE to mimeType,
+            DownloadWorker.KEY_IS_ENCRYPTED to false, // Local is plaintext
+            DownloadWorker.KEY_MESSAGE_ID to messageId,
+            DownloadWorker.KEY_IS_ANNOUNCE to true
+        )
+
+        val workRequest = OneTimeWorkRequestBuilder<DownloadWorker>()
+            .setInputData(workData)
+            .build()
+            
+        val workManager = WorkManager.getInstance(applicationContext)
+        workManager.enqueue(workRequest)
+        
+        // Observe result
+        serviceScope.launch {
+            workManager.getWorkInfoByIdFlow(workRequest.id).collect { workInfo ->
+                if (workInfo != null) {
+                    when (workInfo.state) {
+                        androidx.work.WorkInfo.State.SUCCEEDED -> {
+                            DebugLogger.log(TAG, "v2 Download Sucesss! Sending Ack.")
+                            relayRepository.sendFileSyncCompleted(roomId ?: "", fileId)
+                            // Remove from pendingFiles eventually? 
+                            // Keep it for a bit in case PC still sends fallback?
+                            // For simplicity, we can leave it or remove it delayed. 
+                            // Let's leave it for this session to prevent dupes.
+                            this.cancel() 
+                        }
+                        androidx.work.WorkInfo.State.FAILED, androidx.work.WorkInfo.State.CANCELLED -> {
+                            DebugLogger.log(TAG, "v2 Download Failed. Requesting Relay.")
+                            relayRepository.sendFileNeedRelay(roomId ?: "", fileId, "worker_failed")
+                            this.cancel()
+                        }
+                        else -> {
+                            // Running/Enqueued... wait
+                        }
+                    }
+                }
+            }
         }
     }
 

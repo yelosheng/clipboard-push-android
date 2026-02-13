@@ -36,6 +36,7 @@ class DownloadWorker(
         const val KEY_MIME_TYPE = "key_mime_type"
         const val KEY_IS_ENCRYPTED = "key_is_encrypted"
         const val KEY_MESSAGE_ID = "key_message_id"
+        const val KEY_IS_ANNOUNCE = "key_is_announce"
         
         private const val TAG = "DownloadWorker"
     }
@@ -49,9 +50,40 @@ class DownloadWorker(
         val fileName = inputData.getString(KEY_FILE_NAME) ?: "unknown_file"
         val mimeType = inputData.getString(KEY_MIME_TYPE) ?: "application/octet-stream"
         val messageId = inputData.getString(KEY_MESSAGE_ID)
+        val isAnnounce = inputData.getBoolean(KEY_IS_ANNOUNCE, false)
         
-        DebugLogger.log("DL", "Start: $fileName msgId=$messageId")
+        DebugLogger.log("DL", "Start: $fileName msgId=$messageId announce=$isAnnounce")
         
+        // --- ANNOUNCE MODE (v2) ---
+        if (isAnnounce) {
+            // In Announce mode, fileUrl IS the local_url. We try it once.
+            // If it fails, we fail the worker so Service can request Relay.
+            val notificationId = System.currentTimeMillis().toInt()
+            setForeground(createForegroundInfo(notificationId, fileName, "Downloading from LAN..."))
+            
+            return try {
+                val roomId = settingsRepository.roomIdFlow.first()
+                val tempLocal = File.createTempFile("loc_v2_", ".tmp", applicationContext.cacheDir)
+                
+                DebugLogger.log("DL", "v2 Attempt: $fileUrl")
+                downloadToFile(fileUrl, tempLocal, roomId)
+                
+                if (tempLocal.length() > 0) {
+                     DebugLogger.log("DL", "v2 Local Success")
+                     processDownloadedFile(tempLocal, fileName, mimeType, messageId)
+                } else {
+                     tempLocal.delete()
+                     DebugLogger.log("DL", "v2 Local Empty")
+                     Result.failure()
+                }
+            } catch (e: Exception) {
+                DebugLogger.log("DL", "v2 Local Failed: ${e.message}")
+                Result.failure()
+            }
+        }
+        
+        // --- LEGACY/FALLBACK MODE (v1) ---
+
         // Construct full URL if relative
         val serverAddress = settingsRepository.serverAddressFlow.first()
         val useHttps = settingsRepository.useHttpsFlow.first()
@@ -66,45 +98,95 @@ class DownloadWorker(
         setForeground(createForegroundInfo(notificationId, fileName, "Downloading..."))
 
         return try {
-            // 1. Download
-            val tempEncryptedFile = File.createTempFile("enc_", ".tmp", applicationContext.cacheDir)
+            // Get Pairing Info for Local Sync
+            val peerIp = settingsRepository.peerLocalIpFlow.first()
+            val peerPort = settingsRepository.peerLocalPortFlow.first()
+            val roomId = settingsRepository.roomIdFlow.first()
             
-            DebugLogger.log("DL", "Downloading: $fullUrl")
-            Log.d(TAG, "Starting download: $fullUrl")
-            downloadToFile(fullUrl, tempEncryptedFile)
-            DebugLogger.log("DL", "Downloaded ${tempEncryptedFile.length()} bytes")
+            var sourceFile: File? = null
+            var isLocalTransfer = false
 
-            // 2. Decrypt (if needed) - Assume all R2 files are encrypted
-            val roomKey = settingsRepository.roomKeyFlow.first()
-            if (roomKey.isNullOrEmpty()) {
-                DebugLogger.log("DL", "ERROR: No room key!")
-                Log.e(TAG, "No room key found for decryption")
-                return Result.failure()
-            }
-
-            val cryptoManager = CryptoManager(roomKey)
-            val decryptedFile = File.createTempFile("dec_", ".tmp", applicationContext.cacheDir)
-            
-            Log.d(TAG, "Decrypting file...")
-            tempEncryptedFile.inputStream().use { input ->
-                decryptedFile.outputStream().use { output ->
-                    cryptoManager.decryptFile(input, output)
+            // 1. Try Local Download (Plaintext)
+            if (!peerIp.isNullOrBlank() && peerPort != null && peerPort > 0) {
+                val localUrl = "http://$peerIp:$peerPort/files/$fileName"
+                DebugLogger.log("DL", "Trying Local: $localUrl")
+                try {
+                    val tempLocal = File.createTempFile("loc_", ".tmp", applicationContext.cacheDir)
+                    // Short timeout for local check? OkHttpClient defaults are 10s.
+                    // Ideally we'd use a shorter timeout client, but for now reuse 'client'
+                    downloadToFile(localUrl, tempLocal, roomId)
+                    if (tempLocal.length() > 0) {
+                        sourceFile = tempLocal
+                        isLocalTransfer = true
+                        DebugLogger.log("DL", "Local Download Success: ${tempLocal.length()} bytes")
+                    } else {
+                         tempLocal.delete()
+                    }
+                } catch (e: Exception) {
+                    DebugLogger.log("DL", "Local Download Failed: ${e.message}")
+                    Log.w(TAG, "Local download failed, falling back to cloud", e)
                 }
             }
 
+            // 2. Fallback to Cloud Download (Encrypted)
+            if (sourceFile == null) {
+                DebugLogger.log("DL", "Using Cloud Download: $fullUrl")
+                val tempEncryptedFile = File.createTempFile("enc_", ".tmp", applicationContext.cacheDir)
+                downloadToFile(fullUrl, tempEncryptedFile)
+                DebugLogger.log("DL", "Cloud Downloaded ${tempEncryptedFile.length()} bytes")
+
+                // Decrypt
+                val roomKey = settingsRepository.roomKeyFlow.first()
+                if (roomKey.isNullOrEmpty()) {
+                    DebugLogger.log("DL", "ERROR: No room key!")
+                    return Result.failure()
+                }
+
+                val cryptoManager = CryptoManager(roomKey)
+                val tempDecrypted = File.createTempFile("dec_", ".tmp", applicationContext.cacheDir)
+                
+                Log.d(TAG, "Decrypting file...")
+                tempEncryptedFile.inputStream().use { input ->
+                    tempDecrypted.outputStream().use { output ->
+                        cryptoManager.decryptFile(input, output)
+                    }
+                }
+                tempEncryptedFile.delete()
+                sourceFile = tempDecrypted
+            }
+
             // 3. Save to Public Directory
+            if (sourceFile == null || !sourceFile.exists()) {
+                 DebugLogger.log("DL", "Critical Error: Source file missing")
+                 return Result.failure()
+            }
+            
+            processDownloadedFile(sourceFile, fileName, mimeType, messageId)
+
+        } catch (e: Exception) {
+            DebugLogger.log("DL", "ERROR: ${e.message}")
+            Log.e(TAG, "Download failed", e)
+            NotificationHelper.showPushNotification(
+                applicationContext,
+                "Download Failed",
+                e.message ?: "Unknown error"
+            )
+            Result.failure()
+        }
+    }
+
+    private suspend fun processDownloadedFile(sourceFile: File, fileName: String, mimeType: String, messageId: String?): Result {
             Log.d(TAG, "Saving to public directory...")
             val uniqueName = FileUtil.generateUniqueFileName(fileName)
             val savedUri = FileUtil.saveToPublicDownloads(
                 applicationContext, 
-                decryptedFile, 
+                sourceFile, 
                 uniqueName, 
                 mimeType
             )
 
             // Cleanup
-            tempEncryptedFile.delete()
-            decryptedFile.delete()
+            sourceFile.delete()
 
             if (savedUri != null) {
                 // 4. Check file handling mode and copy to clipboard if needed
@@ -168,28 +250,21 @@ class DownloadWorker(
                     "Saved to Downloads: $uniqueName"
                 )
                 DebugLogger.log("DL", "✓ Success: $uniqueName")
-                Result.success(workDataOf("uri" to savedUri.toString()))
+                return Result.success(workDataOf("uri" to savedUri.toString()))
             } else {
                 DebugLogger.log("DL", "ERROR: saveToPublicDownloads returned null")
                 Log.e(TAG, "Failed to save to public downloads")
-                Result.failure()
+                return Result.failure()
             }
-
-        } catch (e: Exception) {
-            DebugLogger.log("DL", "ERROR: ${e.message}")
-            Log.e(TAG, "Download failed", e)
-            NotificationHelper.showPushNotification(
-                applicationContext,
-                "Download Failed",
-                e.message ?: "Unknown error"
-            )
-            Result.failure()
-        }
     }
 
-    private suspend fun downloadToFile(url: String, file: File) {
+    private suspend fun downloadToFile(url: String, file: File, roomId: String? = null) {
         withContext(Dispatchers.IO) {
-            val request = Request.Builder().url(url).build()
+            val requestBuilder = Request.Builder().url(url)
+            if (!roomId.isNullOrEmpty()) {
+                requestBuilder.addHeader("X-Room-ID", roomId)
+            }
+            val request = requestBuilder.build()
             val response = client.newCall(request).execute()
             if (!response.isSuccessful) throw IOException("Unexpected code $response")
 

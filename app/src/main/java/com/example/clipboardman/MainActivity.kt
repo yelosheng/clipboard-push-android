@@ -138,12 +138,56 @@ class MainActivity : ComponentActivity() {
             val room = obj.getString("room")
             val key = obj.getString("key")
             
+            // Optional Local Sync Info
+            val localIp = if (obj.has("local_ip")) obj.getString("local_ip") else null
+            val localPort = if (obj.has("local_port")) obj.getInt("local_port") else null
+            
             lifecycleScope.launch {
-                com.example.clipboardman.util.DebugLogger.log("QR_SCAN", "Saving pairing info...")
+                com.example.clipboardman.util.DebugLogger.log("QR_SCAN", "Saving pairing info... LocalIP=$localIp")
                 val settingsRepo = com.example.clipboardman.data.repository.SettingsRepository(applicationContext)
-                settingsRepo.savePairingInfo(server, room, key)
+                settingsRepo.savePairingInfo(server, room, key, localIp, localPort)
                 
                 com.example.clipboardman.util.DebugLogger.log("QR_SCAN", "Restarting Service...")
+                
+                // --- Immediate Local Connection Test ---
+                if (!localIp.isNullOrBlank() && localPort != null && localPort > 0) {
+                    launch(Dispatchers.IO) {
+                        try {
+                            val testUrl = "http://$localIp:$localPort/ping"
+                            com.example.clipboardman.util.DebugLogger.log("QR_SCAN", "Testing Local Connection: $testUrl")
+                            
+                            val client = okhttp3.OkHttpClient.Builder()
+                                .connectTimeout(2, java.util.concurrent.TimeUnit.SECONDS)
+                                .readTimeout(2, java.util.concurrent.TimeUnit.SECONDS)
+                                .build()
+                                
+                            val request = okhttp3.Request.Builder()
+                                .url(testUrl)
+                                .addHeader("X-Room-ID", room)
+                                .build()
+                            client.newCall(request).execute().use { response ->
+                                if (response.isSuccessful) {
+                                    val body = response.body?.string() ?: ""
+                                    com.example.clipboardman.util.DebugLogger.log("QR_SCAN", "Local Test Success: $body")
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(this@MainActivity, "Local Connection: OK", Toast.LENGTH_SHORT).show()
+                                    }
+                                } else {
+                                    com.example.clipboardman.util.DebugLogger.log("QR_SCAN", "Local Test Failed: ${response.code}")
+                                     withContext(Dispatchers.Main) {
+                                        Toast.makeText(this@MainActivity, "Local Connection: Failed (${response.code})", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            com.example.clipboardman.util.DebugLogger.log("QR_SCAN", "Local Test Error: ${e.message}")
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(this@MainActivity, "Local Connection: Unreachable", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }
+                // ---------------------------------------
                 
                 // Restart Service with ACTION_START
                 val intent = Intent(this@MainActivity, ClipboardService::class.java).apply {

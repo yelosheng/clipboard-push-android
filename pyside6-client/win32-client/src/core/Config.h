@@ -16,6 +16,7 @@ struct ConfigData {
     bool auto_start = false;
     bool start_minimized = false;
     bool show_notifications = true;
+    int lan_timeout = 10;
 };
 
 class Config {

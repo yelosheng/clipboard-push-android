@@ -27,6 +27,8 @@ class SettingsRepository(private val context: Context) {
         // Pairing Info
         private val KEY_ROOM_ID = stringPreferencesKey("room_id")
         private val KEY_ROOM_KEY = stringPreferencesKey("room_key")
+        private val KEY_PEER_LOCAL_IP = stringPreferencesKey("peer_local_ip")
+        private val KEY_PEER_LOCAL_PORT = intPreferencesKey("peer_local_port")
 
         // 文件处理模式
         const val FILE_MODE_SAVE_LOCAL = 0          // 保存到本地
@@ -154,13 +156,27 @@ class SettingsRepository(private val context: Context) {
         preferences[KEY_ROOM_KEY]
     }
 
-    suspend fun savePairingInfo(server: String, room: String, key: String) {
-        com.example.clipboardman.util.DebugLogger.log("SettingsRepo", "Saving - Server: $server Room: $room")
+    val peerLocalIpFlow: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[KEY_PEER_LOCAL_IP]
+    }
+
+    val peerLocalPortFlow: Flow<Int?> = context.dataStore.data.map { preferences ->
+        preferences[KEY_PEER_LOCAL_PORT]
+    }
+
+    suspend fun savePairingInfo(server: String, room: String, key: String, localIp: String? = null, localPort: Int? = null) {
+        com.example.clipboardman.util.DebugLogger.log("SettingsRepo", "Saving - Server: $server Room: $room LocalIP: $localIp")
         context.dataStore.edit { preferences ->
             preferences[KEY_SERVER_ADDRESS] = server
             preferences[KEY_ROOM_ID] = room
             preferences[KEY_ROOM_KEY] = key
             preferences[KEY_USE_HTTPS] = false // Default to HTTP for local relay
+            
+            if (localIp != null) preferences[KEY_PEER_LOCAL_IP] = localIp
+            else preferences.remove(KEY_PEER_LOCAL_IP)
+            
+            if (localPort != null) preferences[KEY_PEER_LOCAL_PORT] = localPort
+            else preferences.remove(KEY_PEER_LOCAL_PORT)
         }
     }
 
@@ -168,6 +184,8 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { preferences ->
             preferences.remove(KEY_ROOM_ID)
             preferences.remove(KEY_ROOM_KEY)
+            preferences.remove(KEY_PEER_LOCAL_IP)
+            preferences.remove(KEY_PEER_LOCAL_PORT)
         }
     }
 }

@@ -103,17 +103,53 @@ class RelayRepository {
             
             socket?.on("file_sync") { args ->
                 try {
-                    if (args.isNotEmpty() && args[0] is JSONObject) {
-                        val data = args[0] as JSONObject
-                        Log.d("Relay", "Received file_sync: $data")
-                        _events.tryEmit(RelayEvent.FileSync(data))
-                    } else {
-                        Log.w("Relay", "file_sync: Invalid data format: ${args.getOrNull(0)}")
+                    Log.d("Relay", "Raw file_sync: ${args.joinToString()}")
+                    if (args.isNotEmpty()) {
+                        val arg = args[0]
+                        val data = when (arg) {
+                            is JSONObject -> arg
+                            is String -> JSONObject(arg)
+                            else -> null
+                        }
+                        
+                        if (data != null) {
+                             Log.d("Relay", "Received file_sync: $data")
+                            _events.tryEmit(RelayEvent.FileSync(data))
+                        } else {
+                            Log.w("Relay", "file_sync: Invalid data format: $arg")
+                        }
                     }
                 } catch (e: Exception) {
                     Log.e("Relay", "Error processing file_sync", e)
                 }
             }
+
+            // Handler for file_available (and alias file_announcement)
+            val fileAvailableHandler: (Array<Any>) -> Unit = { args ->
+                try {
+                    Log.d("Relay", "Raw file_available/announcement: ${args.joinToString()}")
+                    if (args.isNotEmpty()) {
+                         val arg = args[0]
+                        val data = when (arg) {
+                            is JSONObject -> arg
+                            is String -> JSONObject(arg)
+                            else -> null
+                        }
+                        
+                        if (data != null) {
+                            Log.d("Relay", "Received file_available: $data")
+                            _events.tryEmit(RelayEvent.FileAvailable(data))
+                        } else {
+                             Log.w("Relay", "file_available: Invalid data format: $arg")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("Relay", "Error processing file_available", e)
+                }
+            }
+            
+            socket?.on("file_available", fileAvailableHandler)
+            socket?.on("file_announcement", fileAvailableHandler) // Dual-listen to be safe
             
             socket?.on("room_stats") { args ->
                 try {
@@ -175,9 +211,36 @@ class RelayRepository {
             Log.w(TAG, "Cannot send: socket not connected")
         }
     }
+
+    fun sendFileSyncCompleted(roomId: String, fileId: String, method: String = "lan") {
+        if (socket?.connected() == true) {
+            // Strict V3.3 Protocol: Flat Payload, Canonical Event
+            val payload = JSONObject().apply {
+                put("room", roomId)
+                put("file_id", fileId)
+                put("method", method)
+            }
+            socket?.emit("file_sync_completed", payload)
+            Log.d(TAG, "Sent file_sync_completed: $payload")
+        }
+    }
+
+    fun sendFileNeedRelay(roomId: String, fileId: String, reason: String) {
+        if (socket?.connected() == true) {
+             // Strict V3.3 Protocol: Flat Payload, Canonical Event
+             val payload = JSONObject().apply {
+                put("room", roomId)
+                put("file_id", fileId)
+                put("reason", reason)
+            }
+            socket?.emit("file_need_relay", payload)
+            Log.d(TAG, "Sent file_need_relay: $payload")
+        }
+    }
 }
 
 sealed class RelayEvent {
     data class ClipboardSync(val data: JSONObject) : RelayEvent()
     data class FileSync(val data: JSONObject) : RelayEvent()
+    data class FileAvailable(val data: JSONObject) : RelayEvent()
 }

@@ -1,143 +1,98 @@
-# Clipboard Push - LAN Direct Sync Development Plan
+# Clipboard Push - LAN Direct Sync Development Plan (v2.0)
 
-**Version:** 1.0  
+**Version:** 2.0 (Announce & Pull)  
 **Date:** 2026-02-13  
-**Target Platforms:** Windows (C++ Win32), Android (Kotlin)
+**Objective:** Transition from "Always Upload" to "Opportunistic LAN Transfer" to achieve zero cloud traffic and near-instant synchronization when devices are co-located.
 
 ---
 
-## 1. Overview & Objective
+## 1. Architecture: "Announce & Pull" Model
 
-**Objective:** Enable high-speed, direct file transfers between PC and Android devices when they are on the same Local Area Network (LAN), bypassing the cloud relay server for data transmission.
+Instead of the PC immediately pushing data to the cloud, it now "announces" its availability.
 
-**Architecture: "Hybrid Relay + Direct"**
--   **Control Plane (Signaling):** Continues to use the Cloud Relay (Socket.IO) for reliable connection establishment, clipboard text sync, and signaling file availability.
--   **Data Plane (Transfer):** Opportunistically switches to direct HTTP transfer over LAN for files/images.
--   **Fallback:** Unexpected network conditions (Firewall, AP Isolation) will automatically trigger a fallback to Cloud Relay for seamless user experience.
+1.  **Announcement**: PC saves the file locally and broadcasts an availability signal via the Relay (Signaling only).
+2.  **Pull**: Android receives the signal and attempts a high-speed LAN download from the PC.
+3.  **Fallback**: If the LAN pull fails (not on same network, firewall, etc.), Android requests the PC to perform a traditional Cloud Upload.
 
 ---
 
-## 2. Discovery Protocol (QR Code Update)
+## 2. Communication Protocol (New Signaling)
 
-To enable direct connection, the devices must know each other's local IP address. The simplest discovery method (MVP) is to embed this information in the pairing QR Code.
+The following Socket.IO events must be implemented to manage the state machine.
 
-**Current QR Payload:**
+### 2.1 Event: `file_announcement` (PC -> App)
+Sent when the user triggers a push on the PC.
 ```json
 {
-  "server": "https://kxkl.tk:12561",
-  "room": "room_123",
-  "key": "aes_key_base64..."
+  "event": "file_available",
+  "data": {
+    "file_id": "unique_id_123",
+    "filename": "screenshot.png",
+    "type": "image",
+    "local_url": "http://192.168.1.5:54321/files/screenshot.png",
+    "sender_id": "pc_Huang_230"
+  }
 }
 ```
 
-**New QR Payload:**
+### 2.2 Event: `file_ack` (App -> PC)
+Sent when the App successfully downloads the file via LAN. PC can then stop its waiting timer.
 ```json
 {
-  "server": "https://kxkl.tk:12561",
-  "room": "room_123",
-  "key": "aes_key_base64...",
-  "local_ip": "192.168.1.5",       // [NEW] PC's Local IPv4
-  "local_port": 54321              // [NEW] Local HTTP Server Port
+  "event": "file_sync_completed",
+  "data": { "file_id": "unique_id_123", "method": "lan" }
+}
+```
+
+### 2.3 Event: `file_request_relay` (App -> PC)
+Sent when the App's LAN attempt fails or it detects it is on a different network (e.g., LTE).
+```json
+{
+  "event": "file_need_relay",
+  "data": { "file_id": "unique_id_123", "reason": "timeout_or_unreachable" }
 }
 ```
 
 ---
 
-## 3. PC Client Implementation (Win32 C++)
+## 3. Component Implementation Requirements
 
-### 3.1 Technology Stack
--   **Library:** `cpp-httplib` (Header-only, lightweight).
--   **Integration:** `vcpkg install cpp-httplib`.
+### 3.1 PC Client (Win32 C++)
+- **Stage 1 (Buffer)**: On push, save file to `temp/` folder. Do NOT call Cloud Upload yet.
+- **Stage 2 (Announce)**: Send `file_available` via Socket.IO.
+- **Stage 3 (Wait)**: Start a 5-second "Decision Timer".
+    - If `file_sync_completed` received: Success! Cleanup `temp/` immediately.
+    - If `file_need_relay` received: Stop timer, proceed to Stage 4 (Upload).
+    - If Timeout (5s): Proceed to Stage 4 (Upload).
+- **Stage 4 (Legacy Push)**: Standard Cloud Upload -> Send original `file_sync` event.
 
-### 3.2 Core Components
-1.  **`LocalServer` Class**:
-    -   Runs on a dedicated background thread.
-    -   Binds to `0.0.0.0` on a random port (Range: 50000-60000).
-    -   **Lifecycle**: Starts on app launch, stops on exit.
+### 3.2 Android Client (Kotlin)
+- **Logic Branching**: 
+    - On `file_available`:
+        1. Attempt `GET local_url`.
+        2. If success (200 OK): Notify user, send `file_sync_completed`.
+        3. If fail (Timeout/404/NetworkError): Send `file_need_relay`.
+    - On `file_sync` (Traditional):
+        - Direct Cloud Download (existing logic).
 
-2.  **API Endpoints**:
-
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/ping` | Connectivity check. Returns `200 OK`. |
-| `POST` | `/upload` | Receives file from Android. Saves to `Downloads`. Returns `200` on success. |
-| `GET` | `/files/<filename>` | Serves a specific file from `Downloads` to Android. |
-
-### 3.3 Security Logic
--   **Auth**: Validate `room_id` in headers (e.g., `X-Room-ID: room_123`) to prevent unauthorized local access.
--   **Path Traversal**: Sanitize `<filename>` in `GET /files/...` to ensure it only serves from the allowed Download directory.
-
-### 3.4 Implementation Checklist
-- [ ] Add `cpp-httplib` to `vcpkg.json`.
-- [ ] Implement `Utils::GetLocalIPAddress()` using `GetAdaptersAddresses` (Win32 IP Helper API).
-- [ ] Create `src/core/LocalServer.h/.cpp`.
-- [ ] Update `SettingsWindow.cpp` to include `local_ip` & `local_port` in QR JSON.
-- [ ] Add strict firewall disclaimer/handling (Windows Firewall will prompt on first run).
+### 3.3 Relay Server (Python)
+- **Message Passing**: No logic changes needed to the core, but `relay_server.py` should be updated to ensure these new event names are permitted in the `activity_log` for the dashboard.
+- **Protocol Stability**: Ensure Socket.IO `emit` correctly excludes the sender to prevent echoing the announcement back to the PC.
 
 ---
 
-## 4. Android Client Implementation
+## 4. Security & Robustness
 
-### 4.1 Data Model Changes
--   **`SettingsRepository`**: Add `peerLocalIp` (String) and `peerLocalPort` (Int).
--   **Scan Logic**: Parse new fields from QR code and save to DataStore.
-
-### 4.2 Local Discovery Logic
--   **When to check**: When `WorkManager` starts an Upload/Download job.
--   **How to check**: `HEAD http://<peerIP>:<peerPort>/ping`. Timeout: 2 seconds.
-    -   If Success (200 OK): Use **Local Mode**.
-    -   If Fail: Use **Cloud Mode**.
-
-### 4.3 Transfer Logic (Smart Routing)
-
-#### Case A: Phone Sending File to PC (Upload)
-1.  Worker starts. Checks Local Mode.
-2.  **If Local**:
-    -   `POST` file to `http://<peerIP>:<peerPort>/upload`.
-    -   On Success: Send "File Sent" signal to Relay (so PC knows to notify user).
-    -   On Fail: Catch exception, switch to Cloud Upload.
-3.  **If Cloud** (Default/Fallback):
-    -   Request Presigned URL from Relay -> Upload to Cloud Storage.
-
-#### Case B: PC Sending File to Phone (Download)
-1.  PC sends `file_sync` event via Relay.
-    -   Payload includes BOTH `download_url` (Cloud) AND `local_filename`.
-2.  Android receives event. `DownloadWorker` starts.
-3.  **Smart Download**:
-    -   Construct `localUrl = http://<peerIP>:<peerPort>/files/<filename>`.
-    -   Try `GET localUrl`.
-    -   If Success: Save file, notify user.
-    -   If Fail: Fallback to `GET download_url` (Cloud).
+1.  **Unique IDs**: `file_id` must be unique per session to prevent `ack` collisions.
+2.  **Tokenized Local Access**: The `local_url` could optionally include a one-time token if the `X-Room-ID` header is deemed insufficient for public LANs.
+3.  **Graceful Degeneracy**: If the PC app crashes during Stage 3, the App simply won't get the file. The next time the user tries, the system resets.
 
 ---
 
-## 5. Security & Privacy Considerations
+## 5. Development Roadmap
 
-1.  **Local Encryption**:
-    -   **Current**: HTTP (Plaintext). Safe enough for Home LANs (WPA2/3).
-    -   **Future**: Could implement `AES-GCM` on the HTTP stream itself, utilizing the shared `room_key`.
-    -   **Recommendation**: For MVP, allow plaintext HTTP on LAN, as setting up HTTPS with self-signed certs causes unavoidable trust errors on Android using standard HttpClients.
-
-2.  **Network Isolation**:
-    -   Public Wi-Fi (Coffee Shops, Airports) often enables "AP Isolation", blocking Client-to-Client communication.
-    -   **Mitigation**: The system *must* seamlessly fallback to Cloud Relay in these scenarios without user intervention.
-
-3.  **IP Address Changes**:
-    -   PC IP may change via DHCP.
-    -   **Solution**: PC Client should periodically (e.g., every 10 mins or on IP change detection) send a `system_info` event via Relay containing the new `local_ip`. Android updates its record.
-
----
-
-## 6. Verification Plan
-
-1.  **Environment Setup**: Connect PC and Phone to the same Wi-Fi.
-2.  **Pairing**: Scan updated QR Code. Verify `peerLocalIp` is saved in Android logs.
-3.  **Firewall Test**: Ensure Windows Firewall prompt is accepted for the PC Client.
-4.  **Transfer Test**:
-    -   Send a large video (100MB+) from Phone -> PC.
-    -   Verify transfer speed is > 10MB/s (typical Wi-Fi 5 speed).
-    -   Verify PC logs show "Httplib" request handling.
-5.  **Fallback Test**:
-    -   Disable Wi-Fi on Phone (use 5G/LTE).
-    -   Send file.
-    -   Verify transfer still succeeds via Cloud Relay (slower).
+- [ ] **PC**: Refactor `PushFileData` into an asynchronous state machine.
+- [ ] **PC**: Implement listener for `file_need_relay`.
+- [ ] **Android**: Implement `AnnouncementReceiver` and LAN Download client.
+- [ ] **Android**: Implement `RelayRequester` logic.
+- [ ] **Testing**: Large file (500MB+) transfer test. Verify 0% Cloud usage.

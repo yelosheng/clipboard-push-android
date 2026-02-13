@@ -100,5 +100,12 @@ inline bool SetAutoStart(bool enabled) {
     return true;
 }
 
+inline std::wstring GetAppDir() {
+    wchar_t buffer[MAX_PATH];
+    GetModuleFileNameW(NULL, buffer, MAX_PATH);
+    std::wstring path(buffer);
+    return path.substr(0, path.find_last_of(L"\\/"));
+}
+
 }
 }

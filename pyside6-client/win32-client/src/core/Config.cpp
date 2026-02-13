@@ -125,6 +125,7 @@ bool Config::Save() {
     j["auto_start"] = m_data.auto_start;
     j["start_minimized"] = m_data.start_minimized;
     j["show_notifications"] = m_data.show_notifications;
+    j["lan_timeout"] = m_data.lan_timeout;
     
     std::ofstream file(path);
     if (file.is_open()) {

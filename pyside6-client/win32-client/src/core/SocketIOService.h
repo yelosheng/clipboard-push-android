@@ -20,13 +20,16 @@ public:
     using FileCallback = std::function<void(const nlohmann::json& data)>;
     using StatusCallback = std::function<void(ConnectionStatus status)>;
     using CountdownCallback = std::function<void(int secondsLeft)>;
+    using SignalingCallback = std::function<void(const std::string& event, const nlohmann::json& data)>;
 
     static SocketIOService& Instance();
 
     void Connect(const std::string& serverUrl, const std::string& roomId, const std::string& clientId);
     void Disconnect();
+    void Emit(const std::string& event, const nlohmann::json& data);
     
     void SetCallbacks(ClipboardCallback onClipboard, FileCallback onFile, StatusCallback onStatus, CountdownCallback onCountdown);
+    void SetSignalingCallback(SignalingCallback cb);
 
 private:
     SocketIOService();
@@ -51,6 +54,7 @@ private:
     FileCallback m_onFile;
     StatusCallback m_onStatus;
     CountdownCallback m_onCountdown;
+    SignalingCallback m_onSignaling;
 };
 
 }
