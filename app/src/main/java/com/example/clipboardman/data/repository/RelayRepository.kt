@@ -210,6 +210,18 @@ object RelayRepository {
                 }
             }
             
+            // V4: Peer Evicted
+            socket?.on("peer_evicted") { args ->
+                 try {
+                     val data = if (args.isNotEmpty() && args[0] is JSONObject) args[0] as JSONObject else JSONObject()
+                     Log.w("Relay", "Received peer_evicted event")
+                     DebugLogger.log("Relay", "Received peer_evicted! You have been removed from the room.")
+                     _events.tryEmit(RelayEvent.PeerEvicted(data))
+                 } catch (e: Exception) {
+                     Log.e("Relay", "Error processing peer_evicted", e)
+                 }
+            }
+            
             socket?.on("room_stats") { args ->
                 try {
                     if (args.isNotEmpty() && args[0] is JSONObject) {
@@ -352,6 +364,7 @@ sealed class RelayEvent {
     data class FileAvailable(val data: JSONObject) : RelayEvent()
     data class FileSyncCompleted(val data: JSONObject) : RelayEvent()
     data class FileNeedRelay(val data: JSONObject) : RelayEvent()
+    data class PeerEvicted(val data: JSONObject) : RelayEvent()
     data class LanProbeRequest(val data: JSONObject) : RelayEvent()
     data class RoomStateChanged(val data: JSONObject) : RelayEvent()
 }

@@ -214,6 +214,7 @@ class ClipboardService : Service() {
                         is RelayEvent.ClipboardSync -> handleClipboardSync(event.data)
                         is RelayEvent.FileSync -> handleFileSync(event.data)
                         is RelayEvent.FileAvailable -> handleFileAvailable(event.data)
+                        is RelayEvent.PeerEvicted -> handlePeerEvicted(event.data)
                         is RelayEvent.LanProbeRequest -> handleLanProbeRequest(event.data)
                         is RelayEvent.RoomStateChanged -> handleRoomStateChanged(event.data)
                         is RelayEvent.FileSyncCompleted -> { /* Handled by UploadWorker */ }
@@ -676,6 +677,40 @@ class ClipboardService : Service() {
         }
     }
     
+    private fun handlePeerEvicted(data: JSONObject) {
+        val reason = data.optString("reason", "unknown")
+        DebugLogger.log(TAG, "PEER EVICTED! Reason: $reason. Disconnecting...")
+        Log.w(TAG, "Peer Evicted: $reason")
+        
+        // 0. Clear Pairing Info (Suspend)
+        serviceScope.launch {
+            try {
+                settingsRepository.clearPairingInfo()
+                DebugLogger.log(TAG, "Pairing info cleared.")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to clear pairing info", e)
+            }
+        }
+        
+        // 1. Force Disconnect
+        stopService()
+        
+        // 2. Update State (Explicitly Error to prevent auto-reconnect loops if any)
+        updateState(ConnectionState.ERROR)
+        
+        // 3. Notify User
+        NotificationHelper.showPushNotification(
+            this,
+            "已从房间移除",
+            "您已被移出房间 (原因: $reason)。请重新连接。"
+        )
+        
+        // 4. Toast (Main Thread)
+        serviceScope.launch(Dispatchers.Main) {
+            android.widget.Toast.makeText(applicationContext, "您已被移出房间! ($reason)", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
     private fun handleRoomStateChanged(data: JSONObject) {
         val state = data.optString("state")
         val lanConf = data.optString("lan_confidence")
