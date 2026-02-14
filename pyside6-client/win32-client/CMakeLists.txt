@@ -45,7 +45,7 @@ set(SOURCES
 # Resources
 set(RESOURCES src/ClipboardPush.rc)
 
-add_executable(ClipboardPushWin32
+add_executable(ClipboardPushWin32 WIN32
     ${SOURCES}
     ${RESOURCES}
 )

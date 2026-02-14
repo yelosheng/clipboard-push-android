@@ -508,7 +508,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     return 0;
 }
 
-int main() {
+int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nCmdShow) {
     // Single Instance Protection
     HANDLE hMutex = CreateMutexW(NULL, TRUE, L"Global\\ClipboardPushWin32_SingleInstance_Mutex");
     if (hMutex == NULL || GetLastError() == ERROR_ALREADY_EXISTS) {
@@ -517,7 +517,7 @@ int main() {
     }
 
     SetProcessDPIAware();
-    HINSTANCE hInstance = GetModuleHandle(NULL);
+    // HINSTANCE hInstance = GetModuleHandle(NULL);
     ClipboardPush::Platform::Init();
 
     // Cleanup temp folder on startup
