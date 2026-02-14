@@ -198,6 +198,19 @@ object RelayRepository {
                 }
             }
 
+            // V4: Transfer Command
+            socket?.on("transfer_command") { args ->
+                try {
+                    if (args.isNotEmpty() && args[0] is JSONObject) {
+                         val data = args[0] as JSONObject
+                         Log.d("Relay", "Received transfer_command: $data")
+                         _events.tryEmit(RelayEvent.TransferCommand(data))
+                    }
+                } catch (e: Exception) {
+                    Log.e("Relay", "Error processing transfer_command", e)
+                }
+            }
+
             // V4: Room State
             socket?.on("room_state_changed") { args ->
                 try {
@@ -216,6 +229,7 @@ object RelayRepository {
                      val data = if (args.isNotEmpty() && args[0] is JSONObject) args[0] as JSONObject else JSONObject()
                      Log.w("Relay", "Received peer_evicted event")
                      DebugLogger.log("Relay", "Received peer_evicted! You have been removed from the room.")
+                     isEvicted = true
                      _events.tryEmit(RelayEvent.PeerEvicted(data))
                  } catch (e: Exception) {
                      Log.e("Relay", "Error processing peer_evicted", e)
@@ -227,7 +241,7 @@ object RelayRepository {
                     if (args.isNotEmpty() && args[0] is JSONObject) {
                         val data = args[0] as JSONObject
                         val count = data.optInt("count", 0)
-                        Log.d("Relay", "Received room_stats: $count")
+//                        Log.d("Relay", "Received room_stats: $count")
                         _peerCount.tryEmit(count)
                         
                         // Parse clients list
@@ -238,8 +252,8 @@ object RelayRepository {
                                 clientList.add(clientsArray.getString(i))
                             }
                         }
-                        Log.d("Relay", "Clients: $clientList")
-                        DebugLogger.log("Relay", "Clients received: $clientList")
+//                        Log.d("Relay", "Clients: $clientList")
+//                        DebugLogger.log("Relay", "Clients received: $clientList")
                         _peers.tryEmit(clientList)
                     }
                 } catch (e: Exception) {
@@ -260,12 +274,17 @@ object RelayRepository {
         socket?.disconnect()
         socket?.off()
         socket = null
-        socket = null
         _connectionStatus.tryEmit(false)
         _peerCount.tryEmit(0)
     }
 
+    private var isEvicted = false
+
     fun sendClipboardSync(roomId: String, content: String, clientId: String, isEncrypted: Boolean = false) {
+        if (isEvicted) {
+             Log.w(TAG, "Evicted: Cannot send clipboard_sync")
+             return
+        }
         if (socket?.connected() == true) {
             val payload = JSONObject().apply {
                 put("room", roomId)
@@ -284,6 +303,7 @@ object RelayRepository {
     }
 
     fun sendFileSyncCompleted(roomId: String, fileId: String, transferId: String, method: String = "lan") {
+        if (isEvicted) return
         if (socket?.connected() == true) {
             // Strict V4.0 Protocol: Include transfer_id
             val payload = JSONObject().apply {
@@ -300,6 +320,7 @@ object RelayRepository {
     }
 
     fun sendFileNeedRelay(roomId: String, fileId: String, transferId: String, reason: String) {
+        if (isEvicted) return
         if (socket?.connected() == true) {
              // Strict V4.0 Protocol: Include transfer_id
              val payload = JSONObject().apply {
@@ -316,6 +337,7 @@ object RelayRepository {
     }
 
     fun sendFileAvailable(roomId: String, fileId: String, transferId: String, localUrl: String, filename: String, type: String, size: Long, senderId: String) {
+        if (isEvicted) return
         if (socket?.connected() == true) {
             val payload = JSONObject().apply {
                 put("protocol_version", "4.0")
@@ -335,6 +357,7 @@ object RelayRepository {
     }
 
     fun sendProbeResult(roomId: String, probeId: String, result: String, latencyMs: Long, httpStatus: Int? = null, reason: String = "") {
+        if (isEvicted) return
         if (socket?.connected() == true) {
             val payload = JSONObject().apply {
                 put("protocol_version", "4.0")
@@ -356,6 +379,22 @@ object RelayRepository {
             Log.d(TAG, "Sent lan_probe_result: $result ($latencyMs ms)")
         }
     }
+    
+    fun sendPeerNetworkUpdate(roomId: String, privateIp: String, cidr: String, networkEpoch: Int) {
+        if (isEvicted) return
+        if (socket?.connected() == true) {
+            val payload = JSONObject().apply {
+                put("protocol_version", "4.0")
+                put("room", roomId)
+                put("private_ip", privateIp)
+                put("cidr", cidr)
+                put("network_epoch", networkEpoch)
+                put("updated_at_ms", System.currentTimeMillis())
+            }
+            socket?.emit("peer_network_update", payload)
+            Log.d(TAG, "Sent peer_network_update: $payload")
+        }
+    }
 }
 
 sealed class RelayEvent {
@@ -367,4 +406,5 @@ sealed class RelayEvent {
     data class PeerEvicted(val data: JSONObject) : RelayEvent()
     data class LanProbeRequest(val data: JSONObject) : RelayEvent()
     data class RoomStateChanged(val data: JSONObject) : RelayEvent()
+    data class TransferCommand(val data: JSONObject) : RelayEvent()
 }

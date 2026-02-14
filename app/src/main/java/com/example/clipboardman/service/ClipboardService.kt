@@ -148,6 +148,55 @@ class ClipboardService : Service() {
         observeRelayEvents()
         
         LocalFileServer.startServer()
+        
+        registerNetworkCallback()
+    }
+    
+    private var networkEpoch = 0
+    private lateinit var connectivityManager: android.net.ConnectivityManager
+    private lateinit var networkCallback: android.net.ConnectivityManager.NetworkCallback
+    
+    private fun registerNetworkCallback() {
+        connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        networkCallback = object : android.net.ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: android.net.Network) {
+                // Wait a bit for IP to settle?
+                serviceScope.launch(Dispatchers.IO) {
+                    delay(1000)
+                    sendNetworkUpdate()
+                }
+            }
+            
+            override fun onLost(network: android.net.Network) {
+                 serviceScope.launch(Dispatchers.IO) {
+                    delay(1000)
+                    sendNetworkUpdate()
+                }
+            }
+            
+            override fun onCapabilitiesChanged(network: android.net.Network, networkCapabilities: android.net.NetworkCapabilities) {
+                // Optional: handle strict changes. onAvailable covers most IP changes for our purpose.
+            }
+        }
+        
+        try {
+            connectivityManager.registerDefaultNetworkCallback(networkCallback)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to register network callback", e)
+        }
+    }
+    
+    private suspend fun sendNetworkUpdate() {
+        val roomId = settingsRepository.roomIdFlow.first()
+        if (!roomId.isNullOrEmpty() && relayRepository.connectionStatus.first()) {
+             val info = com.example.clipboardman.util.NetworkUtil.getLocalNetworkInfo(applicationContext)
+             networkEpoch++
+             val ip = info?.ip ?: "0.0.0.0"
+             val cidr = info?.cidr ?: "0.0.0.0/0"
+             
+             DebugLogger.log(TAG, "Network Change (Epoch $networkEpoch): $ip ($cidr)")
+             relayRepository.sendPeerNetworkUpdate(roomId, ip, cidr, networkEpoch)
+        }
     }
 
     private fun loadMessageHistory() {
@@ -219,6 +268,7 @@ class ClipboardService : Service() {
                         is RelayEvent.RoomStateChanged -> handleRoomStateChanged(event.data)
                         is RelayEvent.FileSyncCompleted -> { /* Handled by UploadWorker */ }
                         is RelayEvent.FileNeedRelay -> { /* Handled by UploadWorker */ }
+                        is RelayEvent.TransferCommand -> { /* Handled by UploadWorker */ }
                     }
                 }
             } catch (e: Exception) {
@@ -264,6 +314,11 @@ class ClipboardService : Service() {
         stopService()
         serviceScope.cancel()
         LocalFileServer.stopServer()
+        try {
+            connectivityManager.unregisterNetworkCallback(networkCallback)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to unregister network callback", e)
+        }
         super.onDestroy()
     }
 

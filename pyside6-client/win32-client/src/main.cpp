@@ -39,6 +39,7 @@ namespace ClipboardPush {
 static bool g_isProcessingRemoteSync = false;
 
 struct PendingPush {
+    std::string room;
     std::string transfer_id;
     std::string file_id;
     std::vector<uint8_t> data;
@@ -46,6 +47,7 @@ struct PendingPush {
     std::string type;
     std::atomic<bool> completed{ false };
     std::atomic<bool> upload_requested{ false };
+    std::atomic<bool> upload_started{ false };
     std::atomic<bool> need_relay{ false };
 };
 
@@ -255,12 +257,12 @@ void PushFileData(const std::vector<uint8_t>& data, const std::string& filename,
     auto& config = Config::Instance().Data();
     if (config.room_key.empty()) return;
 
-    // Encrypt data FIRST (always encrypt before any transmission)
+    // Encrypt data FIRST
     auto key = Crypto::DecodeKey(config.room_key);
     auto enc = Crypto::Encrypt(key, data);
     if (!enc) return;
 
-    // 1. Create Unique IDs
+    // 1. Create Unique IDs (Stable for the whole process)
     auto now = std::chrono::system_clock::now();
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
     std::string file_id = "f_" + std::to_string(ms);
@@ -272,7 +274,6 @@ void PushFileData(const std::vector<uint8_t>& data, const std::string& filename,
         fs::path tempDir = fs::path(Utils::GetAppDir()) / L"temp";
         if (!fs::exists(tempDir)) fs::create_directories(tempDir);
         localPath = tempDir / Utils::ToWide(filename);
-        
         std::ofstream ofs(localPath, std::ios::binary);
         ofs.write((char*)data.data(), data.size());
         ofs.close();
@@ -283,6 +284,7 @@ void PushFileData(const std::vector<uint8_t>& data, const std::string& filename,
 
     // 3. Register in Pending Queue
     auto pending = std::make_shared<PendingPush>();
+    pending->room = config.room_id;
     pending->file_id = file_id;
     pending->transfer_id = transfer_id;
     pending->data = *enc;
@@ -307,28 +309,29 @@ void PushFileData(const std::vector<uint8_t>& data, const std::string& filename,
     announce["sent_at_ms"] = ms;
     
     SocketIOService::Instance().Emit("file_available", announce);
-    LOG_INFO("Event Sent: file_available | ID: %s", transfer_id.c_str());
+    LOG_INFO("tx file_available: id=%s, room=%s", transfer_id.c_str(), config.room_id.c_str());
 
     // 5. Start Background Decision Thread
     int timeoutSecs = config.lan_timeout;
-    std::thread([pending, localPath, filename, fileType, timeoutSecs]() {
+    std::thread([pending, localPath, transfer_id, timeoutSecs]() {
         // Wait for server command or app ack
-        for (int i = 0; i < timeoutSecs * 10; ++i) {
+        for (int i = 0; i < timeoutSecs * 20; ++i) {
             if (pending->completed || pending->upload_requested || pending->need_relay) break;
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
 
         std::error_code ec;
         if (pending->completed) {
-            LOG_INFO("LAN Sync Successful (Directed by Server/App)");
+            LOG_INFO("LAN sync finished: id=%s", transfer_id.c_str());
             fs::remove(localPath, ec);
         } else {
-            if (pending->upload_requested) LOG_INFO("Server directed immediate Cloud Upload");
-            else if (pending->need_relay) LOG_INFO("App requested Cloud Relay fallback");
-            else LOG_INFO("LAN Sync Timeout (No server response)");
-            
-            PerformCloudUpload(pending->data, pending->filename, pending->type);
-            
+            // Idempotent Upload trigger
+            if (!pending->upload_started.exchange(true)) {
+                LOG_INFO("upload start: id=%s (reason: %s)", transfer_id.c_str(), 
+                    pending->upload_requested ? "server_directed" : (pending->need_relay ? "app_fallback" : "timeout"));
+                PerformCloudUpload(pending->data, pending->filename, pending->type);
+                LOG_INFO("upload end: id=%s", transfer_id.c_str());
+            }
             std::this_thread::sleep_for(std::chrono::seconds(30));
             fs::remove(localPath, ec);
         }
@@ -336,7 +339,7 @@ void PushFileData(const std::vector<uint8_t>& data, const std::string& filename,
         // Cleanup from pending queue
         {
             std::lock_guard<std::mutex> lock(g_pendingMutex);
-            g_pendingPushes.erase(pending->transfer_id);
+            g_pendingPushes.erase(transfer_id);
         }
     }).detach();
 }
@@ -638,11 +641,13 @@ int main() {
         }
     );
     sio.SetSignalingCallback([](const std::string& event, const nlohmann::json& data) {
+        auto& config = Config::Instance().Data();
+        std::string room = data.value("room", "");
+        
         if (event == "peer_evicted") {
             LOG_WARNING("Peer evicted from room. Re-joining...");
             SocketIOService::Instance().Disconnect();
-            auto& d = Config::Instance().Data();
-            SocketIOService::Instance().Connect(d.relay_server_url, d.room_id, d.device_id);
+            SocketIOService::Instance().Connect(config.relay_server_url, config.room_id, config.device_id);
             return;
         }
 
@@ -652,35 +657,29 @@ int main() {
         }
 
         std::string transfer_id = data.value("transfer_id", "");
+        if (transfer_id.empty()) transfer_id = data.value("file_id", "");
         if (transfer_id.empty()) return;
 
-        LOG_INFO("Signal Received: %s | ID: %s", event.c_str(), transfer_id.c_str());
-
+        // Strict Matching: transfer_id + room
         std::lock_guard<std::mutex> lock(g_pendingMutex);
-        // Find by transfer_id or file_id
-        std::shared_ptr<PendingPush> target = nullptr;
-        for (auto& pair : g_pendingPushes) {
-            if (pair.second->transfer_id == transfer_id || pair.second->file_id == transfer_id) {
-                target = pair.second;
-                break;
-            }
-        }
+        if (g_pendingPushes.count(transfer_id)) {
+            auto pending = g_pendingPushes[transfer_id];
+            if (pending->room != room) return;
 
-                if (target) {
-                    if (event == "file_sync_completed") {
-                        target->completed = true;
-                    } else if (event == "file_need_relay") {
-                        std::string reason = data.value("reason", "");
-                        if (reason == "room_diff_lan") {
-                            LOG_INFO("Server indicated different LAN. Switching to cloud immediately.");
-                        }
-                        target->need_relay = true;
-                    } else if (event == "transfer_command") {                std::string action = data.value("action", "");
+            if (event == "transfer_command") {
+                std::string action = data.value("action", "");
+                std::string reason = data.value("reason", "none");
+                LOG_INFO("rx transfer_command: action=%s, reason=%s, id=%s", action.c_str(), reason.c_str(), transfer_id.c_str());
+                
                 if (action == "finish") {
-                    target->completed = true;
+                    pending->completed = true;
                 } else if (action == "upload_relay") {
-                    target->upload_requested = true;
+                    pending->upload_requested = true;
                 }
+            } else if (event == "file_sync_completed") {
+                pending->completed = true;
+            } else if (event == "file_need_relay") {
+                pending->need_relay = true;
             }
         }
     });

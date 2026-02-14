@@ -134,18 +134,34 @@ class UploadWorker(
                                  if (event is com.example.clipboardman.data.repository.RelayEvent.FileSyncCompleted) {
                                       // Check if it matches our transfer
                                       val receivedTransferId = event.data.optString("transfer_id")
+                                      val reason = event.data.optString("method", "lan")
                                       if (receivedTransferId == transferId) {
                                           lanSuccess = true
-                                          DebugLogger.log(TAG, "Received ACK for TR=$transferId. Success!")
+                                          DebugLogger.log(TAG, "RX file_sync_completed: TR=$transferId method=$reason")
                                           throw java.util.concurrent.CancellationException("Completed") // Break collect
                                       }
                                  } else if (event is com.example.clipboardman.data.repository.RelayEvent.FileNeedRelay) {
                                       val receivedTransferId = event.data.optString("transfer_id")
                                       val reason = event.data.optString("reason")
                                       if (receivedTransferId == transferId) {
-                                          DebugLogger.log(TAG, "Received file_need_relay for TR=$transferId (Reason: $reason). Falling back to Cloud.")
+                                          DebugLogger.log(TAG, "RX file_need_relay: TR=$transferId Reason: $reason. Fallback.")
                                           lanSuccess = false
                                           throw java.util.concurrent.CancellationException("NeedRelay") // Break collect
+                                      }
+                                 } else if (event is com.example.clipboardman.data.repository.RelayEvent.TransferCommand) {
+                                      val cmdTransferId = event.data.optString("transfer_id")
+                                      val action = event.data.optString("action")
+                                      val reason = event.data.optString("reason", "")
+                                      
+                                      if (cmdTransferId == transferId) {
+                                          DebugLogger.log(TAG, "RX transfer_command: action=$action reason=$reason TR=$transferId")
+                                          if (action == "finish") {
+                                              lanSuccess = true
+                                              throw java.util.concurrent.CancellationException("Completed")
+                                          } else if (action == "upload_relay") {
+                                              lanSuccess = false // Fallback
+                                              throw java.util.concurrent.CancellationException("NeedRelay")
+                                          }
                                       }
                                  }
                              }
@@ -201,6 +217,7 @@ class UploadWorker(
             val encryptedSize = tempEncryptedFile!!.length()
 
             // 3. Get Auth
+            DebugLogger.log(TAG, "Fallback Upload Start: TR=$transferId")
             setForeground(createForegroundInfo(notificationId, "Uploading...", "Requesting Auth..."))
             val authResult = apiService.getUploadAuth(fileName, encryptedSize, "application/octet-stream")
             val auth = authResult.getOrThrow()
@@ -208,6 +225,8 @@ class UploadWorker(
             // 4. Upload R2
             setForeground(createForegroundInfo(notificationId, "Uploading...", "Sending to Cloud..."))
             apiService.uploadToR2(auth.upload_url, tempEncryptedFile, "application/octet-stream")
+            
+            DebugLogger.log(TAG, "Fallback Upload End: TR=$transferId URL=${auth.download_url}")
 
             // 5. Notify Relay
             setForeground(createForegroundInfo(notificationId, "Uploading...", "Finalizing..."))
