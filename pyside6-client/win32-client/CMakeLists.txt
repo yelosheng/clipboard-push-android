@@ -60,10 +60,14 @@ target_include_directories(ClipboardPushWin32 PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-# Compilation options for size
+# Compilation options for size and compatibility
 if(MSVC)
+    # Force Static CRT (/MT)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    
     target_compile_options(ClipboardPushWin32 PRIVATE
-        $<$<CONFIG:Release>:/O1 /Ob2 /Oi /Os /GL>
+        $<$<CONFIG:Release>:/O1 /Ob2 /Oi /Os /GL /MT>
+        $<$<CONFIG:Debug>:/MTd>
     )
     target_link_options(ClipboardPushWin32 PRIVATE
         $<$<CONFIG:Release>:/LTCG /OPT:REF /OPT:ICF>
