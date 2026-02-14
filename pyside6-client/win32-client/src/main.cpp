@@ -731,5 +731,6 @@ int main() {
     ClipboardPush::LocalServer::Instance().Stop();
     ClipboardPush::UI::TrayIcon::Instance().Remove();
     ClipboardPush::Platform::Shutdown();
+    LOG_INFO("--- Application Terminated Gracefully ---");
     return 0;
 }
