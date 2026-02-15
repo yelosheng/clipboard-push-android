@@ -66,7 +66,7 @@ if(MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     
     target_compile_options(ClipboardPushWin32 PRIVATE
-        $<$<CONFIG:Release>:/O1 /Ob2 /Oi /Os /GL /MT>
+        $<$<CONFIG:Release>:/O2 /Ob2 /Oi /Os /GL /MT>
         $<$<CONFIG:Debug>:/MTd>
     )
     target_link_options(ClipboardPushWin32 PRIVATE
