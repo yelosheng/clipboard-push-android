@@ -404,7 +404,7 @@ void PushImage(const std::vector<uint8_t>& pngData) {
 
 void PushPhysicalFile(const std::string& filePath) {
     std::wstring wPath = Utils::ToWide(filePath);
-    std::ifstream file(wPath, std::ios::binary);
+    std::ifstream file(wPath.c_str(), std::ios::binary);
     if (!file.is_open()) {
         LOG_ERROR("Failed to open file for pushing: %s", filePath.c_str());
         return;

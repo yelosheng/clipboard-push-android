@@ -77,4 +77,5 @@ endif()
 target_compile_definitions(ClipboardPushWin32 PRIVATE 
     NOMINMAX
     WIN32_LEAN_AND_MEAN
+    _WIN32_WINNT=0x0A00
 )
