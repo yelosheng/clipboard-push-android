@@ -1,5 +1,6 @@
 #include "TrayIcon.h"
 #include "Resource.h"
+#include "core/Config.h"
 #include <shellapi.h>
 
 #define WM_TRAYICON (WM_USER + 1)
@@ -60,6 +61,17 @@ void TrayIcon::ShowContextMenu(HWND hWnd) {
     POINT pt;
     GetCursorPos(&pt);
     HMENU hSubMenu = GetSubMenu(m_hMenu, 0);
+    
+    // Update check states before showing
+    auto& data = Config::Instance().Data();
+    CheckMenuItem(hSubMenu, IDM_TRAY_AUTO_PUSH_TEXT, MF_BYCOMMAND | (data.auto_push_text ? MF_CHECKED : MF_UNCHECKED));
+    CheckMenuItem(hSubMenu, IDM_TRAY_AUTO_PUSH_IMG, MF_BYCOMMAND | (data.auto_push_image ? MF_CHECKED : MF_UNCHECKED));
+    CheckMenuItem(hSubMenu, IDM_TRAY_AUTO_PUSH_FILE, MF_BYCOMMAND | (data.auto_push_file ? MF_CHECKED : MF_UNCHECKED));
+    CheckMenuItem(hSubMenu, IDM_TRAY_AUTO_COPY_IMG, MF_BYCOMMAND | (data.auto_copy_image ? MF_CHECKED : MF_UNCHECKED));
+    CheckMenuItem(hSubMenu, IDM_TRAY_AUTO_COPY_FILE, MF_BYCOMMAND | (data.auto_copy_file ? MF_CHECKED : MF_UNCHECKED));
+    CheckMenuItem(hSubMenu, IDM_TRAY_AUTO_START, MF_BYCOMMAND | (data.auto_start ? MF_CHECKED : MF_UNCHECKED));
+    CheckMenuItem(hSubMenu, IDM_TRAY_NOTIFICATIONS, MF_BYCOMMAND | (data.show_notifications ? MF_CHECKED : MF_UNCHECKED));
+
     SetForegroundWindow(hWnd);
     TrackPopupMenu(hSubMenu, TPM_RIGHTBUTTON, pt.x, pt.y, 0, hWnd, NULL);
 }

@@ -477,6 +477,56 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 }
             }
             break;
+        case IDM_TRAY_AUTO_PUSH_TEXT:
+            {
+                auto& d = Config::Instance().Data();
+                d.auto_push_text = !d.auto_push_text;
+                Config::Instance().Save();
+            }
+            break;
+        case IDM_TRAY_AUTO_PUSH_IMG:
+            {
+                auto& d = Config::Instance().Data();
+                d.auto_push_image = !d.auto_push_image;
+                Config::Instance().Save();
+            }
+            break;
+        case IDM_TRAY_AUTO_PUSH_FILE:
+            {
+                auto& d = Config::Instance().Data();
+                d.auto_push_file = !d.auto_push_file;
+                Config::Instance().Save();
+            }
+            break;
+        case IDM_TRAY_AUTO_COPY_IMG:
+            {
+                auto& d = Config::Instance().Data();
+                d.auto_copy_image = !d.auto_copy_image;
+                Config::Instance().Save();
+            }
+            break;
+        case IDM_TRAY_AUTO_COPY_FILE:
+            {
+                auto& d = Config::Instance().Data();
+                d.auto_copy_file = !d.auto_copy_file;
+                Config::Instance().Save();
+            }
+            break;
+        case IDM_TRAY_AUTO_START:
+            {
+                auto& d = Config::Instance().Data();
+                d.auto_start = !d.auto_start;
+                ClipboardPush::Utils::SetAutoStart(d.auto_start);
+                Config::Instance().Save();
+            }
+            break;
+        case IDM_TRAY_NOTIFICATIONS:
+            {
+                auto& d = Config::Instance().Data();
+                d.show_notifications = !d.show_notifications;
+                Config::Instance().Save();
+            }
+            break;
         case IDC_SETTINGS_RECONNECT:
             {
                 auto& d = ClipboardPush::Config::Instance().Data();

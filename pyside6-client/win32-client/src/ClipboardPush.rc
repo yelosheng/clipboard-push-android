@@ -10,10 +10,20 @@ IDR_TRAY_MENU MENU
 BEGIN
     POPUP "Tray"
     BEGIN
-        MENUITEM "Push Clipboard", IDM_TRAY_PUSH
-        MENUITEM SEPARATOR
         MENUITEM "Open Main Window", IDM_TRAY_OPEN
         MENUITEM "Settings", IDM_TRAY_SETTINGS
+        MENUITEM SEPARATOR
+        MENUITEM "Push Clipboard Now", IDM_TRAY_PUSH
+        MENUITEM SEPARATOR
+        MENUITEM "Auto Push Text", IDM_TRAY_AUTO_PUSH_TEXT
+        MENUITEM "Auto Push Images", IDM_TRAY_AUTO_PUSH_IMG
+        MENUITEM "Auto Push Files", IDM_TRAY_AUTO_PUSH_FILE
+        MENUITEM SEPARATOR
+        MENUITEM "Auto Copy Images", IDM_TRAY_AUTO_COPY_IMG
+        MENUITEM "Auto Copy Files", IDM_TRAY_AUTO_COPY_FILE
+        MENUITEM SEPARATOR
+        MENUITEM "Run at Startup", IDM_TRAY_AUTO_START
+        MENUITEM "Enable Notifications", IDM_TRAY_NOTIFICATIONS
         MENUITEM SEPARATOR
         MENUITEM "Exit", IDM_TRAY_EXIT
     END
