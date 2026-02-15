@@ -1,6 +1,9 @@
 {
     "auto_copy_file": true,
     "auto_copy_image": true,
+    "auto_push_file": false,
+    "auto_push_image": true,
+    "auto_push_text": true,
     "auto_start": true,
     "device_id": "pc3f",
     "download_path": "Z:\\ReceivedFiles",

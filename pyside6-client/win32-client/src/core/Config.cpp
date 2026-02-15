@@ -89,6 +89,9 @@ bool Config::Load() {
         m_data.push_hotkey = j.value("push_hotkey", m_data.push_hotkey);
         m_data.auto_copy_image = j.value("auto_copy_image", m_data.auto_copy_image);
         m_data.auto_copy_file = j.value("auto_copy_file", m_data.auto_copy_file);
+        m_data.auto_push_text = j.value("auto_push_text", false);
+        m_data.auto_push_image = j.value("auto_push_image", false);
+        m_data.auto_push_file = j.value("auto_push_file", false);
         m_data.auto_start = j.value("auto_start", m_data.auto_start);
         m_data.start_minimized = j.value("start_minimized", m_data.start_minimized);
         m_data.show_notifications = j.value("show_notifications", true);
@@ -122,6 +125,9 @@ bool Config::Save() {
     j["push_hotkey"] = m_data.push_hotkey;
     j["auto_copy_image"] = m_data.auto_copy_image;
     j["auto_copy_file"] = m_data.auto_copy_file;
+    j["auto_push_text"] = m_data.auto_push_text;
+    j["auto_push_image"] = m_data.auto_push_image;
+    j["auto_push_file"] = m_data.auto_push_file;
     j["auto_start"] = m_data.auto_start;
     j["start_minimized"] = m_data.start_minimized;
     j["show_notifications"] = m_data.show_notifications;

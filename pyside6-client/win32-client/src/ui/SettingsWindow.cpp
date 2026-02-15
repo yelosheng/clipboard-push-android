@@ -109,6 +109,9 @@ void SettingsWindow::LoadSettings() {
     
     CheckDlgButton(m_hWnd, IDC_SETTINGS_IMAGES, data.auto_copy_image ? BST_CHECKED : BST_UNCHECKED);
     CheckDlgButton(m_hWnd, IDC_SETTINGS_FILES, data.auto_copy_file ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(m_hWnd, IDC_SETTINGS_PUSH_TEXT, data.auto_push_text ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(m_hWnd, IDC_SETTINGS_PUSH_IMAGE, data.auto_push_image ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(m_hWnd, IDC_SETTINGS_PUSH_FILE, data.auto_push_file ? BST_CHECKED : BST_UNCHECKED);
     CheckDlgButton(m_hWnd, IDC_SETTINGS_STARTUP, data.auto_start ? BST_CHECKED : BST_UNCHECKED);
     CheckDlgButton(m_hWnd, IDC_SETTINGS_MINIMIZED, data.start_minimized ? BST_CHECKED : BST_UNCHECKED);
     CheckDlgButton(m_hWnd, IDC_SETTINGS_NOTIFICATIONS, data.show_notifications ? BST_CHECKED : BST_UNCHECKED);
@@ -141,6 +144,9 @@ void SettingsWindow::SaveSettings() {
     
     data.auto_copy_image = (IsDlgButtonChecked(m_hWnd, IDC_SETTINGS_IMAGES) == BST_CHECKED);
     data.auto_copy_file = (IsDlgButtonChecked(m_hWnd, IDC_SETTINGS_FILES) == BST_CHECKED);
+    data.auto_push_text = (IsDlgButtonChecked(m_hWnd, IDC_SETTINGS_PUSH_TEXT) == BST_CHECKED);
+    data.auto_push_image = (IsDlgButtonChecked(m_hWnd, IDC_SETTINGS_PUSH_IMAGE) == BST_CHECKED);
+    data.auto_push_file = (IsDlgButtonChecked(m_hWnd, IDC_SETTINGS_PUSH_FILE) == BST_CHECKED);
     data.auto_start = (IsDlgButtonChecked(m_hWnd, IDC_SETTINGS_STARTUP) == BST_CHECKED);
     data.start_minimized = (IsDlgButtonChecked(m_hWnd, IDC_SETTINGS_MINIMIZED) == BST_CHECKED);
     data.show_notifications = (IsDlgButtonChecked(m_hWnd, IDC_SETTINGS_NOTIFICATIONS) == BST_CHECKED);

@@ -689,7 +689,28 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
     // Setup Clipboard Monitor
     ClipboardPush::Platform::ClipboardMonitor::Instance().SetCallback([]() {
         if (g_isProcessingRemoteSync) return;
-        LOG_DEBUG("Local clipboard changed (automatic sync is disabled)");
+        
+        auto& config = Config::Instance().Data();
+        if (!config.auto_push_text && !config.auto_push_image && !config.auto_push_file) return;
+
+        LOG_INFO("Local clipboard changed, checking for auto-push...");
+        auto cb = ClipboardPush::Platform::Clipboard::Get();
+        
+        if (cb.type == ClipboardPush::Platform::ClipboardType::Text && config.auto_push_text && !cb.text.empty()) {
+            LOG_INFO("Auto-pushing text...");
+            ClipboardPush::PushText(cb.text);
+            ClipboardPush::ShowNotification(L"Auto Pushed", L"Text content sent automatically", ClipboardPush::UI::NotificationStyle::Outbound);
+        } else if (cb.type == ClipboardPush::Platform::ClipboardType::Image && config.auto_push_image) {
+            LOG_INFO("Auto-pushing image...");
+            ClipboardPush::PushImage(cb.image_data);
+            ClipboardPush::ShowNotification(L"Auto Pushed", L"Image content sent automatically", ClipboardPush::UI::NotificationStyle::Outbound);
+        } else if (cb.type == ClipboardPush::Platform::ClipboardType::Files && config.auto_push_file) {
+            LOG_INFO("Auto-pushing %zu file(s)...", cb.files.size());
+            for (const auto& file : cb.files) {
+                ClipboardPush::PushPhysicalFile(file);
+            }
+            ClipboardPush::ShowNotification(L"Auto Pushed", L"File(s) sent automatically", ClipboardPush::UI::NotificationStyle::Outbound);
+        }
     });
     ClipboardPush::Platform::ClipboardMonitor::Instance().Start(hWnd);
 

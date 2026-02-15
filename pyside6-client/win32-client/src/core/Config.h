@@ -13,6 +13,9 @@ struct ConfigData {
     std::string push_hotkey = "Ctrl+F6";
     bool auto_copy_image = true;
     bool auto_copy_file = true;
+    bool auto_push_text = false;
+    bool auto_push_image = false;
+    bool auto_push_file = false;
     bool auto_start = false;
     bool start_minimized = false;
     bool show_notifications = true;
