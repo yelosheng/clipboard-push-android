@@ -71,6 +71,11 @@ class ClipboardService : Service() {
 
     fun sendClipboardText(text: String) {
         serviceScope.launch {
+             // Peer guard: skip if no peers online (auto-sync protection)
+             if (currentPeerCount <= 0) {
+                 DebugLogger.log(TAG, "Skipped send: no peers online (activePeerCount=0)")
+                 return@launch
+             }
              DebugLogger.log(TAG, "Requesting send clipboard text: '${text.take(50)}...' len=${text.length}")
              roomId?.let { id ->
                  val manager = cryptoManager
@@ -769,9 +774,10 @@ class ClipboardService : Service() {
     private fun handleRoomStateChanged(data: JSONObject) {
         val state = data.optString("state")
         val lanConf = data.optString("lan_confidence")
-        DebugLogger.log(TAG, "Room State: $state (Lan: $lanConf)")
+        DebugLogger.log(TAG, "Room State: $state (Lan: $lanConf) Peers: $currentPeerCount")
         
-        // TODO: Update UI or notification icon based on state
+        // Peer count and list are updated via RelayRepository flows in observeRelayEvents()
+        // Notification is updated automatically when peerCount/peers flows emit
     }
 
     // --- WakeLock Helpers ---

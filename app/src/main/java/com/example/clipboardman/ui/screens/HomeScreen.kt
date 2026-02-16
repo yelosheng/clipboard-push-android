@@ -179,7 +179,7 @@ fun HomeScreen(
                         // 显示连接状态图标
                         val (icon, tint, description) = when (connectionState) {
                             ConnectionState.CONNECTED -> {
-                                if (peerCount > 1) {
+                                if (peerCount > 0) {
                                     Triple(Icons.Default.Cloud, Green500, "已连接 (可传输)")
                                 } else {
                                     Triple(Icons.Default.Cloud, androidx.compose.ui.graphics.Color(0xFFFFC107), "已连接 (无设备)") // Yellow for Alone
@@ -216,12 +216,16 @@ fun HomeScreen(
                         }
                     },
                     actions = {
-                        // 推送剪贴板按钮
-                        IconButton(onClick = onPushClipboard) {
+                        // 推送剪贴板按钮 - disabled when no peers online
+                        val isPushEnabled = connectionState != ConnectionState.CONNECTED || peerCount > 0
+                        IconButton(
+                            onClick = onPushClipboard,
+                            enabled = isPushEnabled
+                        ) {
                             // 使用 Send 图标表示推送
                             Icon(
                                 imageVector = Icons.Default.Send,
-                                contentDescription = "推送剪贴板内容到服务器"
+                                contentDescription = if (isPushEnabled) "推送剪贴板内容到服务器" else "等待 PC 端连接..."
                             )
                         }
                         // 设置按钮
@@ -294,7 +298,7 @@ fun HomeScreen(
                     ) {
                         Text(
                             text = if (connectionState == ConnectionState.CONNECTED) {
-                                "等待接收消息..."
+                                if (peerCount > 0) "等待接收消息..." else "等待 PC 端连接..."
                             } else {
                                 "连接服务器后可接收消息"
                             },

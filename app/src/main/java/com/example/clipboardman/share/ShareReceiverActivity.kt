@@ -99,6 +99,13 @@ class ShareReceiverActivity : ComponentActivity() {
      * 处理文本分享 - 使用 Relay API
      */
     private suspend fun handleTextShare(intent: Intent) {
+        // Peer guard: check if any peers are online before sharing
+        val currentPeerCount = com.example.clipboardman.data.repository.RelayRepository.peerCount.replayCache.firstOrNull() ?: 0
+        if (currentPeerCount <= 0) {
+            showError("推送失败：房间内没有其他在线设备")
+            return
+        }
+
         var text = intent.getStringExtra(Intent.EXTRA_TEXT)
         if (text.isNullOrBlank()) {
             showError("分享内容为空")

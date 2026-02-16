@@ -434,6 +434,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handlePushClipboard() {
+        // Peer guard: block push if no peers online
+        if (mainViewModel.peerCount.value <= 0) {
+            Toast.makeText(this, "推送失败：房间内没有其他在线设备", Toast.LENGTH_SHORT).show()
+            return
+        }
+
         val clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         if (!clipboardManager.hasPrimaryClip() || clipboardManager.primaryClipDescription == null) {
             Toast.makeText(this, "剪贴板为空", Toast.LENGTH_SHORT).show()

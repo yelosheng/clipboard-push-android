@@ -64,6 +64,14 @@ class QuickPushActivity : ComponentActivity() {
             delay(300)
 
             try {
+                // Peer guard: check if any peers are online before pushing
+                val currentPeerCount = com.example.clipboardman.data.repository.RelayRepository.peerCount.replayCache.firstOrNull() ?: 0
+                if (currentPeerCount <= 0) {
+                    Toast.makeText(this@QuickPushActivity, "推送失败：没有在线设备", Toast.LENGTH_SHORT).show()
+                    finish()
+                    return@launch
+                }
+
                 // 读取剪贴板
                 val clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val clipData = clipboardManager.primaryClip

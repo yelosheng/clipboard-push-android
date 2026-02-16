@@ -86,13 +86,19 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         val statusText = when (connectionState) {
-                            ConnectionState.CONNECTED -> "已连接"
+                            ConnectionState.CONNECTED -> {
+                                val otherPeers = peers.filter { !it.startsWith("android_") }
+                                if (otherPeers.isNotEmpty()) "已连接 (可传输)" else "已连接 (等待 PC 端...)"
+                            }
                             ConnectionState.CONNECTING -> "连接中..."
                             ConnectionState.DISCONNECTED -> "未连接"
                             ConnectionState.ERROR -> "连接错误"
                         }
                         val statusColor = when (connectionState) {
-                            ConnectionState.CONNECTED -> Green500
+                            ConnectionState.CONNECTED -> {
+                                val otherPeers = peers.filter { !it.startsWith("android_") }
+                                if (otherPeers.isNotEmpty()) Green500 else androidx.compose.ui.graphics.Color(0xFFFFC107)
+                            }
                             ConnectionState.CONNECTING -> Orange500
                             ConnectionState.ERROR -> Red500
                             ConnectionState.DISCONNECTED -> Grey500
@@ -105,16 +111,21 @@ fun SettingsScreen(
                                 color = statusColor
                             )
 
-                            // Display Connected PC Name
+                            // Display Connected PC Name or waiting hint
                             if (connectionState == ConnectionState.CONNECTED) {
                                 val otherPeers = peers.filter { !it.startsWith("android_") }
+                                Spacer(modifier = Modifier.height(2.dp))
                                 if (otherPeers.isNotEmpty()) {
-                                    val peerNames = otherPeers.joinToString(", ") { it }
-                                    Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = "Remote client: $peerNames",
+                                        text = "目标设备: ${otherPeers.joinToString(", ")}",
                                         style = MaterialTheme.typography.labelMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                } else {
+                                    Text(
+                                        text = "等待 PC 端连接后即可传输...",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = androidx.compose.ui.graphics.Color(0xFFFFC107)
                                     )
                                 }
                             }

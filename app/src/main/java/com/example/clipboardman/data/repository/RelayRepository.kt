@@ -15,6 +15,7 @@ object RelayRepository {
     private const val TAG = "Relay"
     
     private var socket: Socket? = null
+    private var currentClientId: String = ""
     
     // Events exposed to Service / UI
     private val _events = MutableSharedFlow<RelayEvent>(
@@ -35,6 +36,7 @@ object RelayRepository {
 
     fun connect(context: android.content.Context, serverUrl: String, roomId: String, clientId: String) {
         disconnect() // Close existing
+        currentClientId = clientId
 
         try {
             val opts = IO.Options()
@@ -64,6 +66,7 @@ object RelayRepository {
                     joinData.put("room", roomId)
                     joinData.put("client_id", clientId)
                     joinData.put("client_type", "app")
+                    joinData.put("device_name", android.os.Build.MODEL ?: "Android")
                     joinData.put("joined_at_ms", System.currentTimeMillis())
                     
                     val netObj = JSONObject()
@@ -211,11 +214,31 @@ object RelayRepository {
                 }
             }
 
-            // V4: Room State
+            // V4: Room State - Primary source for peer tracking
             socket?.on("room_state_changed") { args ->
                 try {
                     if (args.isNotEmpty() && args[0] is JSONObject) {
                          val data = args[0] as JSONObject
+                         
+                         // Parse peers array, filter out self
+                         val peersArray = data.optJSONArray("peers")
+                         val peerNames = mutableListOf<String>()
+                         if (peersArray != null) {
+                             for (i in 0 until peersArray.length()) {
+                                 val peer = peersArray.getJSONObject(i)
+                                 val cid = peer.optString("client_id", "")
+                                 if (cid.isNotEmpty() && cid != currentClientId) {
+                                     // Use device_name if available, otherwise client_id
+                                     val displayName = peer.optString("device_name", cid)
+                                     peerNames.add(displayName)
+                                 }
+                             }
+                         }
+                         
+                         DebugLogger.log(TAG, "Room state changed: ${peerNames.size} active peers: $peerNames")
+                         _peerCount.tryEmit(peerNames.size)
+                         _peers.tryEmit(peerNames)
+                         
                          _events.tryEmit(RelayEvent.RoomStateChanged(data))
                     }
                 } catch (e: Exception) {
@@ -274,8 +297,10 @@ object RelayRepository {
         socket?.disconnect()
         socket?.off()
         socket = null
+        currentClientId = ""
         _connectionStatus.tryEmit(false)
         _peerCount.tryEmit(0)
+        _peers.tryEmit(emptyList())
     }
 
     private var isEvicted = false
