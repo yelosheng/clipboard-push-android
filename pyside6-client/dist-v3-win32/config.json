@@ -3,7 +3,7 @@
     "auto_copy_image": true,
     "auto_push_file": false,
     "auto_push_image": false,
-    "auto_push_text": true,
+    "auto_push_text": false,
     "auto_start": true,
     "device_id": "pc3f",
     "download_path": "Z:\\ReceivedFiles",

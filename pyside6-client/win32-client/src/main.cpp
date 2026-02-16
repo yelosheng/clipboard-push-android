@@ -37,6 +37,7 @@ namespace ClipboardPush {
 
 // Global state for sync logic
 static bool g_isProcessingRemoteSync = false;
+static std::atomic<int> g_activePeerCount{ 0 };
 
 struct PendingPush {
     std::string room;
@@ -690,12 +691,27 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
             ClipboardPush::UI::MainWindow::Instance().SetStatus(statusStr);
         }
     );
-    sio.SetSignalingCallback([](const std::string& event, const nlohmann::json& data) {
-        auto& config = Config::Instance().Data();
-        std::string room = data.value("room", "");
-        
-        if (event == "peer_evicted") {
-            LOG_WARNING("Peer evicted from room. Re-joining...");
+            sio.SetSignalingCallback([](const std::string& event, const nlohmann::json& data) {
+                auto& config = Config::Instance().Data();
+                std::string room = data.value("room", "");
+                
+                if (event == "room_state_changed") {
+                    std::vector<std::string> peerNames;
+                    if (data.contains("peers") && data["peers"].is_array()) {
+                        for (const auto& peer : data["peers"]) {
+                            std::string cid = peer.value("client_id", "");
+                            if (!cid.empty() && cid != config.device_id) {
+                                peerNames.push_back(cid);
+                            }
+                        }
+                    }
+                                    LOG_INFO("Room state changed: %zu active peers", peerNames.size());
+                                    g_activePeerCount = (int)peerNames.size();
+                                    UI::MainWindow::Instance().UpdatePeerInfo(peerNames);
+                                    UI::TrayIcon::Instance().SetPeerState(!peerNames.empty());
+                                    return;                }
+    
+                if (event == "peer_evicted") {            LOG_WARNING("Peer evicted from room. Re-joining...");
             SocketIOService::Instance().Disconnect();
             SocketIOService::Instance().Connect(config.relay_server_url, config.room_id, config.device_id);
             return;
@@ -738,11 +754,16 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 
     // Setup Clipboard Monitor
     ClipboardPush::Platform::ClipboardMonitor::Instance().SetCallback([]() {
-        if (g_isProcessingRemoteSync) return;
+        if (g_isProcessingRemoteSync || g_activePeerCount <= 0) return;
         
         auto& config = Config::Instance().Data();
         if (!config.auto_push_text && !config.auto_push_image && !config.auto_push_file) return;
 
+        // Skip if no peers to receive (avoid wasted crypto/upload)
+        // We'll use a simple check: if MainWindow says we're waiting for peers
+        // Actually, let's keep it simple: if the push button would be disabled, skip.
+        // This is safe because SetCallback runs on main thread or we can check peer count.
+        
         LOG_INFO("Local clipboard changed, checking for auto-push...");
         auto cb = ClipboardPush::Platform::Clipboard::Get();
         
@@ -766,6 +787,11 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmd
 
     // Register Hotkey
     ClipboardPush::Platform::Hotkey::Instance().SetCallback([]() {
+        if (g_activePeerCount <= 0) {
+            LOG_WARNING("Hotkey: No peers connected, push ignored.");
+            ClipboardPush::ShowNotification(L"Push Failed", L"No target devices connected to this room.", UI::NotificationStyle::Inbound);
+            return;
+        }
         LOG_INFO("Hotkey Triggered!");
         auto cb = ClipboardPush::Platform::Clipboard::Get();
         if (cb.type == ClipboardPush::Platform::ClipboardType::Text && !cb.text.empty()) {

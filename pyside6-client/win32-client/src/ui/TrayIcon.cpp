@@ -72,6 +72,9 @@ void TrayIcon::ShowContextMenu(HWND hWnd) {
     CheckMenuItem(hSubMenu, IDM_TRAY_AUTO_START, MF_BYCOMMAND | (data.auto_start ? MF_CHECKED : MF_UNCHECKED));
     CheckMenuItem(hSubMenu, IDM_TRAY_NOTIFICATIONS, MF_BYCOMMAND | (data.show_notifications ? MF_CHECKED : MF_UNCHECKED));
 
+    // Disable Push if no active peers
+    EnableMenuItem(hSubMenu, IDM_TRAY_PUSH, MF_BYCOMMAND | (m_hasPeers ? MF_ENABLED : MF_GRAYED));
+
     SetForegroundWindow(hWnd);
     TrackPopupMenu(hSubMenu, TPM_RIGHTBUTTON, pt.x, pt.y, 0, hWnd, NULL);
 }

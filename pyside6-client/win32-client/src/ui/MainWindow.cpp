@@ -52,13 +52,44 @@ void MainWindow::Show(bool show) {
 }
 
 void MainWindow::SetStatus(const std::wstring& status) {
-    std::wstring title = L"Clipboard Push v3.0 - " + status;
+    // Current base title will be managed by UpdatePeerInfo or this fallback
+    std::wstring title = L"Clipboard Push - " + status;
     SetWindowTextW(m_hWnd, title.c_str());
     
     // Also update hint text with current hotkey
     auto& config = Config::Instance().Data();
-    std::wstring hint = L"Press " + Utils::ToWide(config.push_hotkey) + L" to push clipboard contents to your phone.";
+    std::wstring hint = L"Press " + Utils::ToWide(config.push_hotkey) + L" to push clipboard contents.";
     SetDlgItemTextW(m_hWnd, IDC_MAIN_HINT, hint.c_str());
+}
+
+void MainWindow::UpdatePeerInfo(const std::vector<std::string>& peerNames) {
+    if (!m_hWnd) return;
+
+    std::wstring title = L"Clipboard Push";
+    bool canPush = !peerNames.empty();
+
+    if (peerNames.empty()) {
+        title += L" [Waiting for Peers...]";
+    } else if (peerNames.size() == 1) {
+        title += L" [Connected: " + Utils::ToWide(peerNames[0]) + L"]";
+    } else {
+        title += L" [Connected: " + std::to_wstring(peerNames.size()) + L" Peers]";
+    }
+
+    SetWindowTextW(m_hWnd, title.c_str());
+
+    // Enable/Disable the Push button
+    HWND hButton = GetDlgItem(m_hWnd, IDC_MAIN_PUSH);
+    EnableWindow(hButton, canPush ? TRUE : FALSE);
+
+    // Update Hint Text based on availability
+    if (!canPush) {
+        SetDlgItemTextW(m_hWnd, IDC_MAIN_HINT, L"Status: No peers connected. Connect your phone to enable pushing.");
+    } else {
+        auto& config = Config::Instance().Data();
+        std::wstring hint = L"Ready to sync. Press " + Utils::ToWide(config.push_hotkey) + L" or use the button below.";
+        SetDlgItemTextW(m_hWnd, IDC_MAIN_HINT, hint.c_str());
+    }
 }
 
 INT_PTR CALLBACK MainWindow::DialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {

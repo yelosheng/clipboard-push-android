@@ -16,6 +16,7 @@ public:
     void ShowMessage(const std::wstring& title, const std::wstring& msg);
     void ShowContextMenu(HWND hWnd);
     void UpdateIcon(HICON hNewIcon);
+    void SetPeerState(bool hasPeers) { m_hasPeers = hasPeers; }
 
 private:
     TrayIcon() = default;
@@ -23,6 +24,7 @@ private:
     HMENU m_hMenu = NULL;
     HICON m_hCurrentIcon = NULL;
     HINSTANCE m_hInst = NULL;
+    bool m_hasPeers = false;
 };
 
 }
