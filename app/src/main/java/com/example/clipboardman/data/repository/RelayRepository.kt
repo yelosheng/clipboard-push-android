@@ -81,6 +81,7 @@ object RelayRepository {
                         if (model.startsWith(manufacturer, ignoreCase = true)) model else "$manufacturer $model"
                     }
                     joinData.put("device_name", friendlyName)
+                    DebugLogger.log(TAG, "Device name: '$friendlyName' (raw: '$userDeviceName', model: '${android.os.Build.MODEL}')")
                     joinData.put("joined_at_ms", System.currentTimeMillis())
                     
                     val netObj = JSONObject()
@@ -92,7 +93,7 @@ object RelayRepository {
                     // App does not have 'probe' section
                     
                     socket?.emit("join", joinData)
-                    DebugLogger.log("RelayRepository", "Emitted V4 join room: $roomId")
+                    DebugLogger.log(TAG, "V4 Join payload: $joinData")
                 } catch (e: Exception) {
                     Log.e("RelayRepository", "Failed to join room", e)
                     DebugLogger.log("RelayRepository", "Failed to join room: ${e.message}")
