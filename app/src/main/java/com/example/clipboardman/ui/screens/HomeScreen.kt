@@ -164,10 +164,10 @@ fun HomeScreen(
                     title = {
                         if (connectionState == ConnectionState.CONNECTED) {
                             // Filter logic: same as SettingsScreen
-                            val otherPeers = peers.filter { !it.startsWith("android_") }
-                            if (otherPeers.isNotEmpty()) {
+                            // peers list is already self-filtered by RelayRepository
+                            if (peers.isNotEmpty()) {
                                 Text(
-                                    text = otherPeers.joinToString(", "),
+                                    text = peers.joinToString(", "),
                                     style = MaterialTheme.typography.titleMedium,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis

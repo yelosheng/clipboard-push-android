@@ -41,9 +41,9 @@ object NotificationHelper {
     ): Notification {
         val contentText = when (state) {
             ConnectionState.CONNECTED -> {
-                val otherPeers = peers.filter { !it.startsWith("android_") }
-                if (otherPeers.isNotEmpty()) {
-                    "已连接: ${otherPeers.joinToString(", ")}"
+                // peers list is already self-filtered by RelayRepository
+                if (peers.isNotEmpty()) {
+                    "已连接: ${peers.joinToString(", ")}"
                 } else {
                     if (peerCount > 0) "已连接 (可传输)" else "已连接 (无设备)"
                 }

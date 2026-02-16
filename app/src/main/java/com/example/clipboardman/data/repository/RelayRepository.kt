@@ -66,7 +66,21 @@ object RelayRepository {
                     joinData.put("room", roomId)
                     joinData.put("client_id", clientId)
                     joinData.put("client_type", "app")
-                    joinData.put("device_name", android.os.Build.MODEL ?: "Android")
+                    
+                    // Friendly device name: prefer user-set name, fallback to manufacturer+model
+                    val userDeviceName = try {
+                        android.provider.Settings.Global.getString(
+                            context.contentResolver, "device_name"
+                        )
+                    } catch (_: Exception) { null }
+                    val friendlyName = if (!userDeviceName.isNullOrBlank()) {
+                        userDeviceName
+                    } else {
+                        val manufacturer = android.os.Build.MANUFACTURER?.replaceFirstChar { it.uppercase() } ?: ""
+                        val model = android.os.Build.MODEL ?: "Android"
+                        if (model.startsWith(manufacturer, ignoreCase = true)) model else "$manufacturer $model"
+                    }
+                    joinData.put("device_name", friendlyName)
                     joinData.put("joined_at_ms", System.currentTimeMillis())
                     
                     val netObj = JSONObject()

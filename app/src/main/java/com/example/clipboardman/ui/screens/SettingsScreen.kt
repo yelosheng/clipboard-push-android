@@ -87,8 +87,7 @@ fun SettingsScreen(
                     ) {
                         val statusText = when (connectionState) {
                             ConnectionState.CONNECTED -> {
-                                val otherPeers = peers.filter { !it.startsWith("android_") }
-                                if (otherPeers.isNotEmpty()) "已连接 (可传输)" else "已连接 (等待 PC 端...)"
+                                if (peers.isNotEmpty()) "已连接 (可传输)" else "已连接 (等待 PC 端...)"
                             }
                             ConnectionState.CONNECTING -> "连接中..."
                             ConnectionState.DISCONNECTED -> "未连接"
@@ -96,8 +95,7 @@ fun SettingsScreen(
                         }
                         val statusColor = when (connectionState) {
                             ConnectionState.CONNECTED -> {
-                                val otherPeers = peers.filter { !it.startsWith("android_") }
-                                if (otherPeers.isNotEmpty()) Green500 else androidx.compose.ui.graphics.Color(0xFFFFC107)
+                                if (peers.isNotEmpty()) Green500 else androidx.compose.ui.graphics.Color(0xFFFFC107)
                             }
                             ConnectionState.CONNECTING -> Orange500
                             ConnectionState.ERROR -> Red500
@@ -113,11 +111,10 @@ fun SettingsScreen(
 
                             // Display Connected PC Name or waiting hint
                             if (connectionState == ConnectionState.CONNECTED) {
-                                val otherPeers = peers.filter { !it.startsWith("android_") }
                                 Spacer(modifier = Modifier.height(2.dp))
-                                if (otherPeers.isNotEmpty()) {
+                                if (peers.isNotEmpty()) {
                                     Text(
-                                        text = "目标设备: ${otherPeers.joinToString(", ")}",
+                                        text = "目标设备: ${peers.joinToString(", ")}",
                                         style = MaterialTheme.typography.labelMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )

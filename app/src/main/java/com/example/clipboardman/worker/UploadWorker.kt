@@ -240,7 +240,7 @@ class UploadWorker(
             )
             
             
-            apiService.relayEvent(roomId, "file_sync", eventData, "android_$deviceId")
+            apiService.relayEvent(roomId, "file_sync", eventData, senderId)
 
             NotificationHelper.showPushNotification(
                 applicationContext,

@@ -423,7 +423,7 @@ class ClipboardService : Service() {
         roomId?.let { id ->
             val wsUrl = settingsRepository.getHttpBaseUrl(serverAddress, useHttps) // Socket.IO uses HTTP base
             
-            // Get Client ID (Device ID) - make it a property so we can reuse
+            // Get Client ID (Device ID) - must be stable & unique for self-filtering
             if (clientId.isEmpty()) {
                 val deviceId = android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "android_unknown"
                 clientId = "android_$deviceId"
