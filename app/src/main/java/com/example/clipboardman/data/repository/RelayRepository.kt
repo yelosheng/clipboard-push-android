@@ -278,20 +278,21 @@ object RelayRepository {
                 try {
                     if (args.isNotEmpty() && args[0] is JSONObject) {
                         val data = args[0] as JSONObject
-                        val count = data.optInt("count", 0)
-//                        Log.d("Relay", "Received room_stats: $count")
-                        _peerCount.tryEmit(count)
                         
-                        // Parse clients list
+                        // Parse clients list, filtering out self
                         val clientsArray = data.optJSONArray("clients")
                         val clientList = mutableListOf<String>()
                         if (clientsArray != null) {
                             for (i in 0 until clientsArray.length()) {
-                                clientList.add(clientsArray.getString(i))
+                                val cid = clientsArray.getString(i)
+                                // Filter out self by client_id
+                                if (cid != currentClientId) {
+                                    clientList.add(cid)
+                                }
                             }
                         }
-//                        Log.d("Relay", "Clients: $clientList")
-//                        DebugLogger.log("Relay", "Clients received: $clientList")
+                        DebugLogger.log(TAG, "room_stats: filtered peers=$clientList (self=$currentClientId)")
+                        _peerCount.tryEmit(clientList.size)
                         _peers.tryEmit(clientList)
                     }
                 } catch (e: Exception) {
