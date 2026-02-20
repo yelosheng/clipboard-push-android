@@ -4,7 +4,7 @@
     "auto_push_file": false,
     "auto_push_image": false,
     "auto_push_text": false,
-    "auto_start": true,
+    "auto_start": false,
     "device_id": "pc3f",
     "download_path": "Z:\\ReceivedFiles",
     "lan_timeout": 10,

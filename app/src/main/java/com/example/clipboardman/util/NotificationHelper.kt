@@ -45,7 +45,7 @@ object NotificationHelper {
                 if (peers.isNotEmpty()) {
                     "已连接: ${peers.joinToString(", ")}"
                 } else {
-                    if (peerCount > 0) "已连接 (可传输)" else "已连接 (无设备)"
+                    "已连接 (无设备)"
                 }
             }
             ConnectionState.CONNECTING -> "正在连接..."
@@ -55,7 +55,7 @@ object NotificationHelper {
         
         val color = when (state) {
             ConnectionState.CONNECTED -> {
-                if (peerCount > 0) Color.GREEN else Color.YELLOW
+                if (peers.isNotEmpty()) Color.GREEN else Color.YELLOW
             }
             ConnectionState.CONNECTING -> Color.parseColor("#FFA500") // Orange
             ConnectionState.ERROR -> Color.RED
