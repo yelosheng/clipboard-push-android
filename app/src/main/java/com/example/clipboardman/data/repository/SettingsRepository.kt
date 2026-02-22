@@ -34,11 +34,12 @@ class SettingsRepository(private val context: Context) {
         const val FILE_MODE_SAVE_LOCAL = 0          // 保存到本地
         const val FILE_MODE_COPY_REFERENCE = 1      // 仅复制引用
         const val FILE_MODE_SAVE_AND_COPY_IMAGE = 2 // 保存并复制图片到剪贴板
+        const val FILE_MODE_CLIPBOARD_ONLY = 3      // 仅复制到剪贴板（不保存到本地）
 
         // 默认值
         private const val DEFAULT_SERVER_ADDRESS = "kxkl.tk:5055"
         private const val DEFAULT_USE_HTTPS = false
-        private const val DEFAULT_FILE_HANDLE_MODE = FILE_MODE_SAVE_LOCAL // Changed from COPY_REFERENCE
+        private const val DEFAULT_FILE_HANDLE_MODE = FILE_MODE_SAVE_LOCAL
         private const val DEFAULT_AUTO_CONNECT = false
         private const val DEFAULT_MAX_HISTORY_COUNT = 100
     }

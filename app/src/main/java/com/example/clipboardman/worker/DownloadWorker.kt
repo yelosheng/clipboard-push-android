@@ -179,6 +179,54 @@ class DownloadWorker(
 
     private suspend fun processDownloadedFile(sourceFile: File, fileName: String, mimeType: String, messageId: String?, transferId: String?): Result {
             Log.d(TAG, "Saving to public directory...")
+            
+            val fileHandleMode = settingsRepository.fileHandleModeFlow.first()
+            Log.d(TAG, "File handle mode: $fileHandleMode")
+
+            // --- Clipboard-Only Mode: do NOT save to public Downloads ---
+            if (fileHandleMode == SettingsRepository.FILE_MODE_CLIPBOARD_ONLY) {
+                val clipboardHelper = com.example.clipboardman.service.ClipboardHelper(applicationContext)
+                try {
+                    if (mimeType.startsWith("image")) {
+                        // Save to a content-accessible temp location so ClipboardHelper can read it
+                        val uniqueName = FileUtil.generateUniqueFileName(fileName)
+                        val savedUri = FileUtil.saveToPublicDownloads(applicationContext, sourceFile, uniqueName, mimeType)
+                        sourceFile.delete()
+                        if (savedUri != null) {
+                            clipboardHelper.copyImageUri(savedUri, mimeType)
+                            Log.d(TAG, "Clipboard-only: copied image URI to clipboard")
+                            // Update message record if needed
+                            if (messageId != null) {
+                                messageRepository.updateMessageLocalPath(messageId, savedUri.toString())
+                            }
+                            NotificationHelper.showPushNotification(
+                                applicationContext, "已复制到剪贴板", fileName
+                            )
+                            return Result.success(workDataOf("uri" to savedUri.toString(), KEY_TRANSFER_ID to (transferId ?: "")))
+                        } else {
+                            DebugLogger.log("DL", "Clipboard-only: failed to get URI for image copy")
+                            return Result.failure()
+                        }
+                    } else {
+                        // 非图片: 复制文件路径到剪贴板，不保存到 Downloads
+                        val clipboard = applicationContext.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        val clip = android.content.ClipData.newPlainText("File", sourceFile.absolutePath)
+                        clipboard.setPrimaryClip(clip)
+                        Log.d(TAG, "Clipboard-only: copied file path to clipboard")
+                        sourceFile.delete()
+                        NotificationHelper.showPushNotification(
+                            applicationContext, "已复制到剪贴板", fileName
+                        )
+                        return Result.success(workDataOf(KEY_TRANSFER_ID to (transferId ?: "")))
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Clipboard-only mode failed", e)
+                    sourceFile.delete()
+                    return Result.failure()
+                }
+            }
+
+            // --- Normal Modes: save to public Downloads first ---
             val uniqueName = FileUtil.generateUniqueFileName(fileName)
             val savedUri = FileUtil.saveToPublicDownloads(
                 applicationContext, 
@@ -191,10 +239,7 @@ class DownloadWorker(
             sourceFile.delete()
 
             if (savedUri != null) {
-                // 4. Check file handling mode and copy to clipboard if needed
-                val fileHandleMode = settingsRepository.fileHandleModeFlow.first()
-                Log.d(TAG, "File handle mode: $fileHandleMode")
-                
+                // Check file handling mode and copy to clipboard if needed
                 val clipboardHelper = com.example.clipboardman.service.ClipboardHelper(applicationContext)
                 
                 // Construct absolute path for clipboard

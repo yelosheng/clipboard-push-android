@@ -102,6 +102,18 @@ class ClipboardHelper(private val context: Context) {
     }
 
     /**
+     * 获取当前剪贴板 ClipData（用于自动推送时检测内容类型）
+     */
+    fun getPrimaryClip(): ClipData? {
+        return try {
+            if (clipboardManager.hasPrimaryClip()) clipboardManager.primaryClip else null
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get primary clip: ${e.message}")
+            null
+        }
+    }
+
+    /**
      * 清空剪贴板
      */
     fun clear() {

@@ -36,7 +36,6 @@ fun SettingsScreen(
     useHttps: Boolean,
     fileHandleMode: Int,
     autoConnect: Boolean,
-
     maxHistoryCount: Int,
     connectionState: ConnectionState,
     onConnectClick: () -> Unit,
@@ -216,6 +215,13 @@ fun SettingsScreen(
                         description = "下载图片到本地，并复制图片到剪贴板可直接粘贴",
                         selected = fileHandleMode == SettingsRepository.FILE_MODE_SAVE_AND_COPY_IMAGE,
                         onClick = { onFileHandleModeChange(SettingsRepository.FILE_MODE_SAVE_AND_COPY_IMAGE) }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    RadioButtonOption(
+                        text = "仅复制到剪贴板",
+                        description = "图片/文件仅复制到剪贴板，不保存到本地",
+                        selected = fileHandleMode == SettingsRepository.FILE_MODE_CLIPBOARD_ONLY,
+                        onClick = { onFileHandleModeChange(SettingsRepository.FILE_MODE_CLIPBOARD_ONLY) }
                     )
                 }
             }

@@ -285,14 +285,13 @@ class ClipboardService : Service() {
         try {
             clipboardHelper.addPrimaryClipChangedListener(object : ClipboardHelper.OnPrimaryClipChangedListener {
                 override fun onPrimaryClipChanged() {
-                    // Determine if changed by us (ignore) or external
-                    // For MVP, just try to send whatever is new
-                    // TODO: Avoid loops
+                    // Reserved for future use
                 }
             })
         } catch (e: Exception) {
             Log.e(TAG, "Error adding clipboard listener", e)
         }
+
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
