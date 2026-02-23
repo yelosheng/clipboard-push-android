@@ -4,6 +4,9 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.clipboardman.data.model.PeerEntry
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -26,6 +29,7 @@ class SettingsRepository(private val context: Context) {
         
         // Pairing Info
         private val KEY_ROOM_ID = stringPreferencesKey("room_id")
+        private val KEY_RECENT_PEERS = stringPreferencesKey("recent_peers")
         private val KEY_ROOM_KEY = stringPreferencesKey("room_key")
         private val KEY_PEER_LOCAL_IP = stringPreferencesKey("peer_local_ip")
         private val KEY_PEER_LOCAL_PORT = intPreferencesKey("peer_local_port")
@@ -42,6 +46,16 @@ class SettingsRepository(private val context: Context) {
         private const val DEFAULT_FILE_HANDLE_MODE = FILE_MODE_SAVE_LOCAL
         private const val DEFAULT_AUTO_CONNECT = false
         private const val DEFAULT_MAX_HISTORY_COUNT = 100
+    }
+
+    private fun deserializePeers(json: String?): List<PeerEntry> {
+        if (json.isNullOrBlank()) return emptyList()
+        return try {
+            val type = object : TypeToken<List<PeerEntry>>() {}.type
+            Gson().fromJson<List<PeerEntry>>(json, type) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 
     /**
@@ -187,6 +201,35 @@ class SettingsRepository(private val context: Context) {
             preferences.remove(KEY_ROOM_KEY)
             preferences.remove(KEY_PEER_LOCAL_IP)
             preferences.remove(KEY_PEER_LOCAL_PORT)
+        }
+    }
+
+    // --- Recent Peers History ---
+
+    val recentPeersFlow: Flow<List<PeerEntry>> = context.dataStore.data.map { preferences ->
+        deserializePeers(preferences[KEY_RECENT_PEERS])
+    }
+
+    suspend fun addOrUpdateRecentPeer(peer: PeerEntry) {
+        context.dataStore.edit { preferences ->
+            val current = deserializePeers(preferences[KEY_RECENT_PEERS])
+            val updated = PeerEntry.upsert(current, peer)
+            preferences[KEY_RECENT_PEERS] = Gson().toJson(updated)
+        }
+    }
+
+    suspend fun removeRecentPeer(room: String) {
+        context.dataStore.edit { preferences ->
+            val current = deserializePeers(preferences[KEY_RECENT_PEERS])
+            preferences[KEY_RECENT_PEERS] = Gson().toJson(current.filter { it.room != room })
+        }
+    }
+
+    suspend fun updateRecentPeerDisplayName(room: String, name: String) {
+        context.dataStore.edit { preferences ->
+            val current = deserializePeers(preferences[KEY_RECENT_PEERS])
+            val updated = current.map { if (it.room == room) it.copy(displayName = name) else it }
+            preferences[KEY_RECENT_PEERS] = Gson().toJson(updated)
         }
     }
 }
