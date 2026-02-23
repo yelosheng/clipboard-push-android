@@ -29,6 +29,7 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.example.clipboardman.data.model.ConnectionState
+import com.example.clipboardman.data.model.PeerEntry
 import com.example.clipboardman.data.model.PushMessage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -79,6 +80,13 @@ class MainActivity : ComponentActivity() {
             // 设置 Peers 回调
             clipboardService?.onPeersChanged = { peers ->
                 mainViewModel.updatePeers(peers)
+                // Update display name for active room once PC reports its identity
+                if (peers.isNotEmpty()) {
+                    val currentRoom = mainViewModel.activeRoomId.value
+                    if (!currentRoom.isNullOrBlank()) {
+                        mainViewModel.updateRecentPeerDisplayName(currentRoom, peers.first())
+                    }
+                }
             }
 
             // 同步当前状态
@@ -146,7 +154,22 @@ class MainActivity : ComponentActivity() {
                 com.example.clipboardman.util.DebugLogger.log("QR_SCAN", "Saving pairing info... LocalIP=$localIp")
                 val settingsRepo = com.example.clipboardman.data.repository.SettingsRepository(applicationContext)
                 settingsRepo.savePairingInfo(server, room, key, localIp, localPort)
-                
+
+                // Write to recent peers history (placeholder name until PC connects)
+                val displayName = if (!localIp.isNullOrBlank()) "PC @ $localIp"
+                                  else "PC (${room.takeLast(8)})"
+                mainViewModel.addOrUpdateRecentPeer(
+                    PeerEntry(
+                        room = room,
+                        server = server,
+                        key = key,
+                        localIp = localIp,
+                        localPort = localPort,
+                        displayName = displayName,
+                        lastConnectedAt = System.currentTimeMillis()
+                    )
+                )
+
                 com.example.clipboardman.util.DebugLogger.log("QR_SCAN", "Restarting Service...")
                 
                 // --- Immediate Local Connection Test ---
@@ -234,7 +257,9 @@ class MainActivity : ComponentActivity() {
                         onStopService = { stopClipboardService() },
                         onMessageClick = { message, serverAddr, useHttps -> handleMessageClick(message, serverAddr, useHttps) },
                         onPushClipboard = { handlePushClipboard() },
-                        onScanClick = { launchQRScanner() }
+                        onScanClick = { launchQRScanner() },
+                        onPeerSelected = { entry -> handlePeerSelected(entry) },
+                        onPeerRemoved = { entry -> mainViewModel.removeRecentPeer(entry.room) }
                     )
                 }
             }
@@ -462,6 +487,18 @@ class MainActivity : ComponentActivity() {
         clipboardService?.sendClipboardText(text)
         Toast.makeText(this, "推送成功", Toast.LENGTH_SHORT).show()
     }
+
+    private fun handlePeerSelected(entry: PeerEntry) {
+        lifecycleScope.launch {
+            val settingsRepo = com.example.clipboardman.data.repository.SettingsRepository(applicationContext)
+            settingsRepo.savePairingInfo(entry.server, entry.room, entry.key, entry.localIp, entry.localPort)
+            mainViewModel.addOrUpdateRecentPeer(entry.copy(lastConnectedAt = System.currentTimeMillis()))
+            com.example.clipboardman.util.DebugLogger.log("MainActivity", "Switching to peer: ${entry.displayName}")
+        }
+        stopClipboardService()
+        startClipboardService()
+        Toast.makeText(this, "正在切换到 ${entry.displayName}...", Toast.LENGTH_SHORT).show()
+    }
 }
 
 @Composable
@@ -470,9 +507,10 @@ fun MainNavigation(
     onStartService: () -> Unit,
     onStopService: () -> Unit,
     onMessageClick: (PushMessage, String, Boolean) -> Unit,
-
     onPushClipboard: () -> Unit,
-    onScanClick: () -> Unit
+    onScanClick: () -> Unit,
+    onPeerSelected: (PeerEntry) -> Unit,
+    onPeerRemoved: (PeerEntry) -> Unit
 ) {
     val navController = rememberNavController()
 
@@ -485,6 +523,8 @@ fun MainNavigation(
     val autoConnect by viewModel.autoConnect.collectAsState()
     val maxHistoryCount by viewModel.maxHistoryCount.collectAsState()
     val peers by viewModel.peers.collectAsState()
+    val recentPeers by viewModel.recentPeers.collectAsState()
+    val activeRoomId by viewModel.activeRoomId.collectAsState()
 
     // 自动连接 (仅当设置改变时触发，或者首次进入时)
     LaunchedEffect(autoConnect, serverAddress) {
@@ -544,7 +584,11 @@ fun MainNavigation(
                 onAutoConnectChange = { viewModel.saveAutoConnect(it) },
                 onMaxHistoryCountChange = { viewModel.saveMaxHistoryCount(it) },
                 onScanClick = onScanClick,
-                onBackClick = { navController.popBackStack() }
+                onBackClick = { navController.popBackStack() },
+                recentPeers = recentPeers,
+                activeRoomId = activeRoomId,
+                onPeerSelected = onPeerSelected,
+                onPeerRemoved = onPeerRemoved
             )
         }
     }
