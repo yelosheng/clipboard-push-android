@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.clipboardman.data.model.ConnectionState
+import com.example.clipboardman.data.model.PeerEntry
 import com.example.clipboardman.data.model.PushMessage
 import com.example.clipboardman.data.repository.MessageRepository
 import com.example.clipboardman.data.repository.SettingsRepository
@@ -76,6 +77,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val maxHistoryCount: StateFlow<Int> = settingsRepository.maxHistoryCountFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, 100)
+
+    val recentPeers: StateFlow<List<PeerEntry>> = settingsRepository.recentPeersFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val activeRoomId: StateFlow<String?> = settingsRepository.roomIdFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /**
      * 更新连接状态 (由 Service 调用)
@@ -177,6 +184,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun saveMaxHistoryCount(count: Int) {
         viewModelScope.launch {
             settingsRepository.saveMaxHistoryCount(count)
+        }
+    }
+
+    fun addOrUpdateRecentPeer(peer: PeerEntry) {
+        viewModelScope.launch {
+            settingsRepository.addOrUpdateRecentPeer(peer)
+        }
+    }
+
+    fun removeRecentPeer(room: String) {
+        viewModelScope.launch {
+            settingsRepository.removeRecentPeer(room)
+        }
+    }
+
+    fun updateRecentPeerDisplayName(room: String, name: String) {
+        viewModelScope.launch {
+            settingsRepository.updateRecentPeerDisplayName(room, name)
         }
     }
 
