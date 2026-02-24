@@ -501,7 +501,7 @@ class ClipboardService : Service() {
                 id = messageId,
                 type = PushMessage.TYPE_TEXT,
                 content = content,
-                timestamp = timestamp ?: System.currentTimeMillis().toString()
+                timestamp = timestamp.ifEmpty { System.currentTimeMillis().toString() }
             )
             saveAndNotifyMessage(msg)
             
@@ -551,7 +551,8 @@ class ClipboardService : Service() {
                     content = fileName,
                     timestamp = data.optString("timestamp"),
                     fileUrl = downloadUrl,
-                    fileName = fileName
+                    fileName = fileName,
+                    fileSize = (data.optLong("file_size").takeIf { it > 0 } ?: data.optLong("size").takeIf { it > 0 })
                 )
                 saveAndNotifyMessage(msg)
                 
@@ -631,7 +632,8 @@ class ClipboardService : Service() {
             content = fileName,
             timestamp = System.currentTimeMillis().toString(),
             fileUrl = localUrl, // Temporary, will update
-            fileName = fileName
+            fileName = fileName,
+            fileSize = (dataObj.optLong("size").takeIf { it > 0 } ?: dataObj.optLong("file_size").takeIf { it > 0 })
         )
         // We save message now so user sees something is happening
         saveAndNotifyMessage(msg)

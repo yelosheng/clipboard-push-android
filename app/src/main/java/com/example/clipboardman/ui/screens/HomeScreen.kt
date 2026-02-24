@@ -21,6 +21,18 @@ import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.TextFields
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.material.icons.filled.Slideshow
+import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.Android
 import com.example.clipboardman.util.formatFileSize
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -335,6 +347,7 @@ fun HomeScreen(
                         key = { _, message -> message.safeId }
                     ) { _, message ->
                         SwipeableMessageItem(
+                            modifier = Modifier.animateItem(),
                             message = message,
                             baseUrl = baseUrl,
                             isSelectionMode = isSelectionMode,
@@ -375,6 +388,7 @@ fun HomeScreen(
 fun SwipeableMessageItem(
     message: PushMessage,
     baseUrl: String,
+    modifier: Modifier = Modifier,
     isSelectionMode: Boolean = false,
     isSelected: Boolean = false,
     isFailed: Boolean = false,
@@ -387,6 +401,7 @@ fun SwipeableMessageItem(
         MessageItem(
             message = message,
             baseUrl = baseUrl,
+            modifier = modifier,
             isSelectionMode = isSelectionMode,
             isSelected = isSelected,
             isFailed = isFailed,
@@ -413,7 +428,7 @@ fun SwipeableMessageItem(
     val scope = rememberCoroutineScope()
 
     Box(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         contentAlignment = Alignment.CenterEnd
     ) {
         // 删除按钮背景
@@ -513,6 +528,7 @@ fun SwipeableMessageItem(
 fun MessageItem(
     message: PushMessage,
     baseUrl: String,
+    modifier: Modifier = Modifier,
     isSelectionMode: Boolean = false,
     isSelected: Boolean = false,
     isFailed: Boolean = false,
@@ -523,7 +539,7 @@ fun MessageItem(
     val isImage = message.type == PushMessage.TYPE_IMAGE
 
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .combinedClickable(
                 onClick = onClick,
@@ -566,11 +582,11 @@ fun MessageItem(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = "✓",
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(16.dp)
                             )
                         }
                     }
@@ -581,40 +597,59 @@ fun MessageItem(
             Column(
                 modifier = Modifier.weight(1f)
             ) {
+            // 类型标签属性提升到 Column 作用域，供下方文件图标区复用
+            val typeLabel = when (message.type) {
+                PushMessage.TYPE_TEXT -> "文本"
+                PushMessage.TYPE_IMAGE -> "图片"
+                PushMessage.TYPE_VIDEO -> "视频"
+                PushMessage.TYPE_AUDIO -> "音频"
+                PushMessage.TYPE_FILE -> "文件"
+                else -> "消息"
+            }
+            val typeColor = when (message.type) {
+                PushMessage.TYPE_TEXT -> MaterialTheme.colorScheme.primary
+                PushMessage.TYPE_IMAGE -> Green500
+                PushMessage.TYPE_VIDEO -> Orange500
+                PushMessage.TYPE_AUDIO -> Purple500
+                else -> Grey500
+            }
+            val typeIcon = when (message.type) {
+                PushMessage.TYPE_TEXT -> Icons.Default.TextFields
+                PushMessage.TYPE_IMAGE -> Icons.Default.Image
+                PushMessage.TYPE_VIDEO -> Icons.Default.Videocam
+                PushMessage.TYPE_AUDIO -> Icons.Default.MusicNote
+                PushMessage.TYPE_FILE -> fileTypeIcon(message.mimeType, message.fileName)
+                else -> Icons.Default.InsertDriveFile
+            }
+
             // 消息类型和时间
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 类型标签
-                val typeLabel = when (message.type) {
-                    PushMessage.TYPE_TEXT -> "文本"
-                    PushMessage.TYPE_IMAGE -> "图片"
-                    PushMessage.TYPE_VIDEO -> "视频"
-                    PushMessage.TYPE_AUDIO -> "音频"
-                    PushMessage.TYPE_FILE -> "文件"
-                    else -> "消息"
-                }
-                val typeColor = when (message.type) {
-                    PushMessage.TYPE_TEXT -> MaterialTheme.colorScheme.primary
-                    PushMessage.TYPE_IMAGE -> Green500
-                    PushMessage.TYPE_VIDEO -> Orange500
-                    PushMessage.TYPE_AUDIO -> Purple500
-                    else -> Grey500
-                }
-
                 Surface(
                     shape = RoundedCornerShape(4.dp),
                     color = typeColor.copy(alpha = 0.1f)
                 ) {
-                    Text(
-                        text = typeLabel,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                        fontSize = 12.sp,
-                        color = typeColor,
-                        fontWeight = FontWeight.Medium
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Icon(
+                            imageVector = typeIcon,
+                            contentDescription = null,
+                            modifier = Modifier.size(11.dp),
+                            tint = typeColor
+                        )
+                        Text(
+                            text = typeLabel,
+                            fontSize = 12.sp,
+                            color = typeColor,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
 
                 // 时间
@@ -711,8 +746,47 @@ fun MessageItem(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+            } else if (message.isFileType) {
+                // 文件/音频/视频：左侧文件名+大小，右侧类型图标
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = message.fileName ?: message.content ?: "",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (message.fileSize != null && message.fileSize > 0) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = formatFileSize(message.fileSize),
+                                fontSize = 12.sp,
+                                color = TextSecondary
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(typeColor.copy(alpha = 0.1f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = typeIcon,
+                            contentDescription = null,
+                            modifier = Modifier.size(32.dp),
+                            tint = typeColor
+                        )
+                    }
+                }
             } else {
-                // 文本或其他类型的消息内容
+                // 纯文本内容
                 Text(
                     text = message.content ?: message.fileName ?: message.fileUrl ?: "",
                     fontSize = 14.sp,
@@ -721,28 +795,47 @@ fun MessageItem(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-
-            // 文件大小信息
-            if (message.isFileType && message.fileSize != null && message.fileSize > 0) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = formatFileSize(message.fileSize),
-                    fontSize = 12.sp,
-                    color = TextSecondary
-                )
-            }
             }
         }
+    }
+}
+
+private fun fileTypeIcon(mimeType: String?, fileName: String?): androidx.compose.ui.graphics.vector.ImageVector {
+    val mime = mimeType?.lowercase().orEmpty()
+    val ext  = fileName?.substringAfterLast('.')?.lowercase().orEmpty()
+    return when {
+        mime.contains("pdf") || ext == "pdf" ->
+            Icons.Default.PictureAsPdf
+        mime.contains("wordprocessing") || mime.contains("msword") || ext in setOf("doc", "docx") ->
+            Icons.Default.Description
+        mime.contains("spreadsheet") || mime.contains("excel") || ext in setOf("xls", "xlsx", "csv") ->
+            Icons.Default.TableChart
+        mime.contains("presentation") || mime.contains("powerpoint") || ext in setOf("ppt", "pptx") ->
+            Icons.Default.Slideshow
+        mime.contains("zip") || mime.contains("rar") || mime.contains("archive") ||
+                ext in setOf("zip", "rar", "7z", "tar", "gz", "bz2") ->
+            Icons.Default.Archive
+        mime == "application/vnd.android.package-archive" || ext == "apk" ->
+            Icons.Default.Android
+        else -> Icons.Default.InsertDriveFile
     }
 }
 
 private fun formatTimestamp(timestamp: String?): String {
     if (timestamp.isNullOrEmpty()) return ""
     return try {
-        val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
-        val date = inputFormat.parse(timestamp) ?: return ""
-        val outputFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
-        outputFormat.format(date)
+        val date = timestamp.toLongOrNull()?.let { java.util.Date(it) }
+            ?: SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault()).parse(timestamp)
+            ?: return ""
+        val now = java.util.Calendar.getInstance()
+        val msgCal = java.util.Calendar.getInstance().apply { time = date }
+        val isToday = now.get(java.util.Calendar.DAY_OF_YEAR) == msgCal.get(java.util.Calendar.DAY_OF_YEAR)
+                && now.get(java.util.Calendar.YEAR) == msgCal.get(java.util.Calendar.YEAR)
+        if (isToday) {
+            SimpleDateFormat("HH:mm", Locale.getDefault()).format(date)
+        } else {
+            SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(date)
+        }
     } catch (e: Exception) {
         ""
     }
