@@ -228,7 +228,7 @@ fun SettingsScreen(
                         if (index > 0) Spacer(modifier = Modifier.height(8.dp))
                         RadioButtonOption(
                             text = mode.label,
-                            description = "",
+                            description = mode.description,
                             selected = fileHandleMode == mode.value,
                             onClick = { onFileHandleModeChange(mode.value) }
                         )

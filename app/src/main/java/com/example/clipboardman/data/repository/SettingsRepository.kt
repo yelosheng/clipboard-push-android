@@ -48,11 +48,11 @@ class SettingsRepository(private val context: Context) {
         private const val DEFAULT_MAX_HISTORY_COUNT = 100
     }
 
-    enum class FileHandleMode(val value: Int, val label: String) {
-        SAVE_LOCAL(FILE_MODE_SAVE_LOCAL, "保存到下载文件夹"),
-        COPY_REFERENCE(FILE_MODE_COPY_REFERENCE, "复制文件引用"),
-        SAVE_AND_COPY_IMAGE(FILE_MODE_SAVE_AND_COPY_IMAGE, "保存并复制图片"),
-        CLIPBOARD_ONLY(FILE_MODE_CLIPBOARD_ONLY, "仅复制到剪贴板");
+    enum class FileHandleMode(val value: Int, val label: String, val description: String) {
+        SAVE_LOCAL(FILE_MODE_SAVE_LOCAL, "保存到下载文件夹", "下载的文件将保存到公共 Downloads 目录"),
+        COPY_REFERENCE(FILE_MODE_COPY_REFERENCE, "复制文件引用", "文件不保存到本地，仅复制路径引用到剪贴板"),
+        SAVE_AND_COPY_IMAGE(FILE_MODE_SAVE_AND_COPY_IMAGE, "保存并复制图片", "图片文件同时保存到本地并复制到剪贴板"),
+        CLIPBOARD_ONLY(FILE_MODE_CLIPBOARD_ONLY, "仅复制到剪贴板", "文件不保存到本地，直接复制内容到剪贴板");
 
         companion object {
             fun fromValue(value: Int) =
