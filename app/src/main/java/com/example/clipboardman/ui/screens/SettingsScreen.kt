@@ -636,11 +636,6 @@ private fun RecentPeerRow(
                         }
                     }
                     Text(
-                        text = entry.server,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
                         text = "上次: ${formatRelativeTime(entry.lastConnectedAt)}",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant

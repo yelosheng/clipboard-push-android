@@ -489,15 +489,21 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handlePeerSelected(entry: PeerEntry) {
+        Toast.makeText(this, "正在切换到 ${entry.displayName}...", Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
             val settingsRepo = com.example.clipboardman.data.repository.SettingsRepository(applicationContext)
             settingsRepo.savePairingInfo(entry.server, entry.room, entry.key, entry.localIp, entry.localPort)
             mainViewModel.addOrUpdateRecentPeer(entry.copy(lastConnectedAt = System.currentTimeMillis()))
             com.example.clipboardman.util.DebugLogger.log("MainActivity", "Switching to peer: ${entry.displayName}")
+            // 如果服务已绑定，直接调用 reconnect()：服务会读取新设置并重新连接，
+            // 不经过 stopForeground()/stopSelf()，避免切换后后台断连问题。
+            // 否则走正常 start 流程（DataStore 已更新，服务启动时会读到新 room）。
+            if (clipboardService != null) {
+                clipboardService!!.reconnect()
+            } else {
+                startClipboardService()
+            }
         }
-        stopClipboardService()
-        startClipboardService()
-        Toast.makeText(this, "正在切换到 ${entry.displayName}...", Toast.LENGTH_SHORT).show()
     }
 }
 

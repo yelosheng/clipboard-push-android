@@ -222,5 +222,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         // 启动时加载本地存储的消息
         loadMessagesFromStorage()
+
+        // 如果已有配对信息但 recent_peers 里没有该条目，自动补录（兼容旧版 APK 升级场景）
+        viewModelScope.launch {
+            try {
+                val roomId = settingsRepository.roomIdFlow.first() ?: return@launch
+                val key = settingsRepository.roomKeyFlow.first() ?: return@launch
+                if (roomId.isBlank() || key.isBlank()) return@launch
+                val existing = settingsRepository.recentPeersFlow.first()
+                if (existing.none { it.room == roomId }) {
+                    val server = settingsRepository.serverAddressFlow.first()
+                    val localIp = settingsRepository.peerLocalIpFlow.first()
+                    val localPort = settingsRepository.peerLocalPortFlow.first()
+                    settingsRepository.addOrUpdateRecentPeer(
+                        com.example.clipboardman.data.model.PeerEntry(
+                            room = roomId,
+                            server = server,
+                            key = key,
+                            localIp = localIp,
+                            localPort = localPort,
+                            displayName = "PC (${roomId.takeLast(8)})",
+                            lastConnectedAt = System.currentTimeMillis()
+                        )
+                    )
+                    com.example.clipboardman.util.DebugLogger.log("ViewModel", "Auto-populated recentPeers from existing settings: $roomId")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MainViewModel", "Error in recent-peers migration", e)
+            }
+        }
     }
 }
