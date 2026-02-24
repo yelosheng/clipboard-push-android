@@ -37,6 +37,15 @@ class ClipboardService : Service() {
         private const val TAG = "ClipboardService"
         const val ACTION_START = "com.example.clipboardman.action.START"
         const val ACTION_STOP = "com.example.clipboardman.action.STOP"
+
+        /**
+         * 实时对等节点数量，由服务更新。
+         * 供无绑定的轻量 Activity（QuickPushActivity、ShareReceiverActivity）直接读取，
+         * 避免依赖 SharedFlow.replayCache 的过期数据。
+         */
+        @Volatile
+        var latestPeerCount: Int = 0
+            private set
     }
 
     private val binder = LocalBinder()
@@ -99,15 +108,18 @@ class ClipboardService : Service() {
                              relayRepository.sendClipboardSync(id, encryptedBase64, clientId, true)
                              Log.d(TAG, "Sent encrypted text")
                          } else {
-                             Log.e(TAG, "Encryption failed, sending plain text")
-                             relayRepository.sendClipboardSync(id, text, clientId, false)
+                             Log.e(TAG, "Encryption failed (returned null), aborting send")
+                             NotificationHelper.showEncryptionErrorNotification(this@ClipboardService)
+                             return@launch
                          }
                      } catch (e: Exception) {
-                         Log.e(TAG, "Encryption error", e)
-                         relayRepository.sendClipboardSync(id, text, clientId, false)
+                         Log.e(TAG, "Encryption error, aborting send", e)
+                         NotificationHelper.showEncryptionErrorNotification(this@ClipboardService)
+                         return@launch
                      }
                  } else {
-                     Log.w(TAG, "CryptoManager not ready, sending plain text")
+                     // 未配置密钥（未扫码配对）时允许发送明文
+                     Log.w(TAG, "CryptoManager not ready, sending plain text (no key configured)")
                      relayRepository.sendClipboardSync(id, text, clientId, false)
                  }
              }
@@ -143,6 +155,7 @@ class ClipboardService : Service() {
     var onPeerCountChanged: ((Int) -> Unit)? = null
     var onPeersChanged: ((List<String>) -> Unit)? = null
     var onMessageReceived: ((PushMessage) -> Unit)? = null
+    var onMessageDownloadFailed: ((messageId: String) -> Unit)? = null
 
     private val processedMessageIds = Collections.synchronizedSet(HashSet<String>())
 
@@ -241,6 +254,7 @@ class ClipboardService : Service() {
             try {
                 relayRepository.peerCount.collect { count ->
                     currentPeerCount = count
+                    latestPeerCount = count
                     onPeerCountChanged?.invoke(count)
                     // Update notification to reflect peer count change (Yellow -> Green)
                     if (currentState == ConnectionState.CONNECTED) {
@@ -329,6 +343,7 @@ class ClipboardService : Service() {
     }
 
     private var startJob: Job? = null
+    private var connectionTimeoutJob: Job? = null
 
     private fun startService() {
         
@@ -427,6 +442,16 @@ class ClipboardService : Service() {
             Log.d(TAG, "Connecting Relay: $wsUrl Room: $id Client: $clientId")
             relayRepository.networkEpoch = networkEpoch
             relayRepository.connect(this, wsUrl, id, clientId)
+
+            // 15 秒内未连接成功则自动切换为 ERROR
+            connectionTimeoutJob?.cancel()
+            connectionTimeoutJob = serviceScope.launch {
+                delay(15_000)
+                if (currentState == ConnectionState.CONNECTING) {
+                    Log.w(TAG, "Connection timed out after 15s")
+                    updateState(ConnectionState.ERROR)
+                }
+            }
         }
     }
 
@@ -555,8 +580,25 @@ class ClipboardService : Service() {
             val workRequest = OneTimeWorkRequestBuilder<DownloadWorker>()
                 .setInputData(workData)
                 .build()
-                
+
             WorkManager.getInstance(applicationContext).enqueue(workRequest)
+
+            // 观察云端下载结果，失败时通知 UI
+            val capturedMessageId = messageId
+            val workId = workRequest.id
+            serviceScope.launch {
+                WorkManager.getInstance(applicationContext)
+                    .getWorkInfoByIdFlow(workId)
+                    .collect { workInfo ->
+                        if (workInfo?.state == androidx.work.WorkInfo.State.FAILED) {
+                            Log.w(TAG, "Cloud download failed for message $capturedMessageId")
+                            onMessageDownloadFailed?.invoke(capturedMessageId)
+                            this.cancel()
+                        } else if (workInfo?.state?.isFinished == true) {
+                            this.cancel()
+                        }
+                    }
+            }
         }
     }
 
@@ -637,6 +679,7 @@ class ClipboardService : Service() {
                         }
                         androidx.work.WorkInfo.State.FAILED, androidx.work.WorkInfo.State.CANCELLED -> {
                             relayRepository.sendFileNeedRelay(roomId ?: "", fileId, transferId, "worker_failed")
+                            onMessageDownloadFailed?.invoke(messageId)
                             this.cancel()
                         }
                         else -> {
@@ -660,9 +703,48 @@ class ClipboardService : Service() {
         onMessageReceived?.invoke(message)
     }
 
+    fun retryFileDownload(message: PushMessage) {
+        val fileUrl = message.fileUrl ?: return
+        val fileName = message.fileName ?: "file"
+        val mimeType = if (message.type == PushMessage.TYPE_IMAGE) "image/*" else "application/octet-stream"
+        val messageId = message.safeId
+
+        val workData = workDataOf(
+            DownloadWorker.KEY_FILE_URL to fileUrl,
+            DownloadWorker.KEY_FILE_NAME to fileName,
+            DownloadWorker.KEY_MIME_TYPE to mimeType,
+            DownloadWorker.KEY_IS_ENCRYPTED to true,
+            DownloadWorker.KEY_MESSAGE_ID to messageId
+        )
+        val workRequest = OneTimeWorkRequestBuilder<DownloadWorker>()
+            .setInputData(workData)
+            .build()
+        WorkManager.getInstance(applicationContext).enqueue(workRequest)
+
+        val workId = workRequest.id
+        serviceScope.launch {
+            WorkManager.getInstance(applicationContext)
+                .getWorkInfoByIdFlow(workId)
+                .collect { workInfo ->
+                    if (workInfo?.state == androidx.work.WorkInfo.State.FAILED) {
+                        Log.w(TAG, "Retry download failed for message $messageId")
+                        onMessageDownloadFailed?.invoke(messageId)
+                        this.cancel()
+                    } else if (workInfo?.state?.isFinished == true) {
+                        this.cancel()
+                    }
+                }
+        }
+    }
+
     private fun updateState(state: ConnectionState) {
         Log.d(TAG, "State: $state")
         currentState = state
+        // 一旦离开 CONNECTING 状态，取消超时计时器
+        if (state != ConnectionState.CONNECTING) {
+            connectionTimeoutJob?.cancel()
+            connectionTimeoutJob = null
+        }
         NotificationHelper.updateServiceNotification(this, state, serverAddress, currentPeerCount, currentPeers)
         onStateChanged?.invoke(state)
     }

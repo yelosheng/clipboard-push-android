@@ -65,7 +65,7 @@ class QuickPushActivity : ComponentActivity() {
 
             try {
                 // Peer guard: check if any peers are online before pushing
-                val currentPeerCount = com.example.clipboardman.data.repository.RelayRepository.peerCount.replayCache.firstOrNull() ?: 0
+                val currentPeerCount = com.example.clipboardman.service.ClipboardService.latestPeerCount
                 if (currentPeerCount <= 0) {
                     Toast.makeText(this@QuickPushActivity, "推送失败：没有在线设备", Toast.LENGTH_SHORT).show()
                     finish()
@@ -115,11 +115,17 @@ class QuickPushActivity : ComponentActivity() {
                         if (encryptedBytes != null) {
                             contentToSend = android.util.Base64.encodeToString(encryptedBytes, android.util.Base64.NO_WRAP)
                             isEncrypted = true
+                        } else {
+                            Log.e(TAG, "Encryption returned null, aborting send")
+                            Toast.makeText(this@QuickPushActivity, "加密失败，请重新扫码配对", Toast.LENGTH_SHORT).show()
+                            finish()
+                            return@launch
                         }
                     } catch (e: Exception) {
                         Log.e(TAG, "Encryption failed", e)
-                        // Fallback to plain text? Or fail?
-                        // Let's fallback but log it
+                        Toast.makeText(this@QuickPushActivity, "加密失败，请重新扫码配对", Toast.LENGTH_SHORT).show()
+                        finish()
+                        return@launch
                     }
                 }
                 

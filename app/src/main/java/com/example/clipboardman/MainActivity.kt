@@ -88,6 +88,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            // 设置下载失败回调
+            clipboardService?.onMessageDownloadFailed = { messageId ->
+                mainViewModel.markDownloadFailed(messageId)
+            }
+
             // 同步当前状态
             val currentState = clipboardService?.getConnectionState() ?: ConnectionState.DISCONNECTED
             mainViewModel.updateConnectionState(currentState)
@@ -107,6 +112,7 @@ class MainActivity : ComponentActivity() {
             clipboardService?.onStateChanged = null
             clipboardService?.onMessageReceived = null
             clipboardService?.onPeerCountChanged = null
+            clipboardService?.onMessageDownloadFailed = null
             clipboardService = null
             isBound = false
         }
@@ -250,7 +256,11 @@ class MainActivity : ComponentActivity() {
                         onPushClipboard = { handlePushClipboard() },
                         onScanClick = { launchQRScanner() },
                         onPeerSelected = { entry -> handlePeerSelected(entry) },
-                        onPeerRemoved = { entry -> mainViewModel.removeRecentPeer(entry.room) }
+                        onPeerRemoved = { entry -> mainViewModel.removeRecentPeer(entry.room) },
+                        onRetryDownload = { message ->
+                            mainViewModel.markDownloadRetrying(message.safeId)
+                            clipboardService?.retryFileDownload(message)
+                        }
                     )
                 }
             }
@@ -506,7 +516,8 @@ fun MainNavigation(
     onPushClipboard: () -> Unit,
     onScanClick: () -> Unit,
     onPeerSelected: (PeerEntry) -> Unit,
-    onPeerRemoved: (PeerEntry) -> Unit
+    onPeerRemoved: (PeerEntry) -> Unit,
+    onRetryDownload: (PushMessage) -> Unit = {}
 ) {
     val navController = rememberNavController()
 
@@ -521,6 +532,7 @@ fun MainNavigation(
     val peers by viewModel.peers.collectAsState()
     val recentPeers by viewModel.recentPeers.collectAsState()
     val activeRoomId by viewModel.activeRoomId.collectAsState()
+    val failedDownloadIds by viewModel.failedDownloadIds.collectAsState()
 
     // 自动连接 (仅当设置改变时触发，或者首次进入时)
     LaunchedEffect(autoConnect, serverAddress) {
@@ -553,7 +565,9 @@ fun MainNavigation(
                 onDeleteMessages = { messageIds -> viewModel.deleteMessages(messageIds) },
                 onPushClipboard = onPushClipboard,
                 onReconnectClick = onStartService,
-                peers = peers
+                peers = peers,
+                failedDownloadIds = failedDownloadIds,
+                onRetryDownload = onRetryDownload
             )
         }
 

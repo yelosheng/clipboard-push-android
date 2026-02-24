@@ -12,6 +12,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Warning
 
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -167,11 +169,22 @@ fun SettingsScreen(
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
-                            Text(
-                                text = "👋 首次使用指南",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "首次使用指南",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
                             Spacer(modifier = Modifier.height(4.dp))
                             
                             val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
@@ -334,7 +347,7 @@ fun SettingsScreen(
                                 style = MaterialTheme.typography.bodyLarge
                             )
                             Text(
-                                text = if (isIgnoringBattery) "✓ 已忽略（后台正常运行）" else "⚠ 未忽略（可能被系统杀死）",
+                                text = if (isIgnoringBattery) "已忽略（后台正常运行）" else "未忽略（可能被系统杀死）",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (isIgnoringBattery) Green500 else Orange500
                             )
@@ -350,23 +363,34 @@ fun SettingsScreen(
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
-                            containerColor = Orange500.copy(alpha = 0.1f)
+                            containerColor = MaterialTheme.colorScheme.errorContainer
                         ),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
-                            Text(
-                                text = "📱 国产手机用户注意",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = Orange500
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "国产手机用户注意",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = "小米/华为/OPPO/vivo 等手机可能还需要：\n" +
                                     "• 在系统设置中搜索「自启动管理」，允许本 APP 自启动\n" +
                                     "• 在「电池」设置中将 APP 设为「无限制」或允许后台运行",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onErrorContainer
                             )
                         }
                     }

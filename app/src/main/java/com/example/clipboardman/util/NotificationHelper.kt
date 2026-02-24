@@ -190,6 +190,20 @@ object NotificationHelper {
     }
 
     /**
+     * 显示加密出错通知，提示用户重新扫码配对
+     */
+    fun showEncryptionErrorNotification(context: Context) {
+        showPushNotification(
+            context = context,
+            title = "发送失败",
+            content = "加密出错，请重新扫码配对",
+            notificationId = ENCRYPTION_ERROR_NOTIFICATION_ID
+        )
+    }
+
+    private const val ENCRYPTION_ERROR_NOTIFICATION_ID = 1003
+
+    /**
      * 获取服务通知 ID
      */
     fun getServiceNotificationId(): Int = SERVICE_NOTIFICATION_ID

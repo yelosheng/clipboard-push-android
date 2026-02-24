@@ -37,6 +37,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _messages = MutableStateFlow<List<PushMessage>>(emptyList())
     val messages: StateFlow<List<PushMessage>> = _messages.asStateFlow()
 
+    // 下载失败的消息 ID 集合（用于在消息卡片显示错误态和重试按钮）
+    private val _failedDownloadIds = MutableStateFlow<Set<String>>(emptySet())
+    val failedDownloadIds: StateFlow<Set<String>> = _failedDownloadIds.asStateFlow()
+
+    fun markDownloadFailed(messageId: String) {
+        _failedDownloadIds.update { it + messageId }
+    }
+
+    fun markDownloadRetrying(messageId: String) {
+        _failedDownloadIds.update { it - messageId }
+    }
+
 
 
     private fun loadMessagesFromStorage() {
