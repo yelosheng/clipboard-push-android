@@ -41,17 +41,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun loadMessagesFromStorage() {
         viewModelScope.launch {
-            // 使用 retry 机制防止读取错误导致 Flow 终止
             messageRepository.messagesFlow
-                .retry { e ->
-                    kotlinx.coroutines.delay(1000) // 延迟1秒重试
-                    true // 始终重试
+                .retry(3) { _ ->
+                    kotlinx.coroutines.delay(1_000)
+                    true
+                }
+                .catch { e ->
+                    android.util.Log.e("MainViewModel", "messagesFlow failed after retries, clearing", e)
+                    viewModelScope.launch { messageRepository.clearMessages() }
+                    emit(emptyList())
                 }
                 .collect { storedMessages ->
                     val maxCount = maxHistoryCount.value
-                    
-                    val result = storedMessages.take(maxCount)
-                    _messages.value = result
+                    _messages.value = storedMessages.take(maxCount)
                 }
         }
     }
