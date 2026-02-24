@@ -16,8 +16,16 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 /**
  * 设置存储仓库
  * 使用 DataStore 持久化用户设置
+ *
+ * @param context Application context.
+ * @param dataStore Optional override for the DataStore instance; defaults to the
+ *   process-singleton created by [preferencesDataStore]. Pass a custom instance in
+ *   unit tests to avoid the "multiple DataStore instances" IOException.
  */
-class SettingsRepository(private val context: Context) {
+class SettingsRepository(
+    private val context: Context,
+    private val dataStore: DataStore<Preferences> = context.dataStore
+) {
 
     companion object {
         // 设置键
@@ -73,35 +81,35 @@ class SettingsRepository(private val context: Context) {
     /**
      * 服务器地址 Flow
      */
-    val serverAddressFlow: Flow<String> = context.dataStore.data.map { preferences ->
+    val serverAddressFlow: Flow<String> = dataStore.data.map { preferences ->
         preferences[KEY_SERVER_ADDRESS] ?: DEFAULT_SERVER_ADDRESS
     }
 
     /**
      * 是否使用 HTTPS Flow
      */
-    val useHttpsFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+    val useHttpsFlow: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[KEY_USE_HTTPS] ?: DEFAULT_USE_HTTPS
     }
 
     /**
      * 文件处理模式 Flow
      */
-    val fileHandleModeFlow: Flow<Int> = context.dataStore.data.map { preferences ->
+    val fileHandleModeFlow: Flow<Int> = dataStore.data.map { preferences ->
         preferences[KEY_FILE_HANDLE_MODE] ?: DEFAULT_FILE_HANDLE_MODE
     }
 
     /**
      * 自动连接 Flow
      */
-    val autoConnectFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+    val autoConnectFlow: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[KEY_AUTO_CONNECT] ?: DEFAULT_AUTO_CONNECT
     }
 
     /**
      * 最大历史消息数量 Flow
      */
-    val maxHistoryCountFlow: Flow<Int> = context.dataStore.data.map { preferences ->
+    val maxHistoryCountFlow: Flow<Int> = dataStore.data.map { preferences ->
         preferences[KEY_MAX_HISTORY_COUNT] ?: DEFAULT_MAX_HISTORY_COUNT
     }
 
@@ -109,7 +117,7 @@ class SettingsRepository(private val context: Context) {
      * 保存服务器地址
      */
     suspend fun saveServerAddress(address: String) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[KEY_SERVER_ADDRESS] = address
         }
     }
@@ -118,7 +126,7 @@ class SettingsRepository(private val context: Context) {
      * 保存是否使用 HTTPS
      */
     suspend fun saveUseHttps(useHttps: Boolean) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[KEY_USE_HTTPS] = useHttps
         }
     }
@@ -127,7 +135,7 @@ class SettingsRepository(private val context: Context) {
      * 保存文件处理模式
      */
     suspend fun saveFileHandleMode(mode: Int) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[KEY_FILE_HANDLE_MODE] = mode
         }
     }
@@ -136,7 +144,7 @@ class SettingsRepository(private val context: Context) {
      * 保存自动连接设置
      */
     suspend fun saveAutoConnect(autoConnect: Boolean) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[KEY_AUTO_CONNECT] = autoConnect
         }
     }
@@ -145,7 +153,7 @@ class SettingsRepository(private val context: Context) {
      * 保存最大历史消息数量
      */
     suspend fun saveMaxHistoryCount(count: Int) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[KEY_MAX_HISTORY_COUNT] = count
         }
     }
@@ -175,39 +183,39 @@ class SettingsRepository(private val context: Context) {
 
     // --- Pairing Info ---
 
-    val roomIdFlow: Flow<String?> = context.dataStore.data.map { preferences ->
+    val roomIdFlow: Flow<String?> = dataStore.data.map { preferences ->
         preferences[KEY_ROOM_ID]
     }
 
-    val roomKeyFlow: Flow<String?> = context.dataStore.data.map { preferences ->
+    val roomKeyFlow: Flow<String?> = dataStore.data.map { preferences ->
         preferences[KEY_ROOM_KEY]
     }
 
-    val peerLocalIpFlow: Flow<String?> = context.dataStore.data.map { preferences ->
+    val peerLocalIpFlow: Flow<String?> = dataStore.data.map { preferences ->
         preferences[KEY_PEER_LOCAL_IP]
     }
 
-    val peerLocalPortFlow: Flow<Int?> = context.dataStore.data.map { preferences ->
+    val peerLocalPortFlow: Flow<Int?> = dataStore.data.map { preferences ->
         preferences[KEY_PEER_LOCAL_PORT]
     }
 
     suspend fun savePairingInfo(server: String, room: String, key: String, localIp: String? = null, localPort: Int? = null) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[KEY_SERVER_ADDRESS] = server
             preferences[KEY_ROOM_ID] = room
             preferences[KEY_ROOM_KEY] = key
             preferences[KEY_USE_HTTPS] = false // Default to HTTP for local relay
-            
+
             if (localIp != null) preferences[KEY_PEER_LOCAL_IP] = localIp
             else preferences.remove(KEY_PEER_LOCAL_IP)
-            
+
             if (localPort != null) preferences[KEY_PEER_LOCAL_PORT] = localPort
             else preferences.remove(KEY_PEER_LOCAL_PORT)
         }
     }
 
     suspend fun clearPairingInfo() {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences.remove(KEY_ROOM_ID)
             preferences.remove(KEY_ROOM_KEY)
             preferences.remove(KEY_PEER_LOCAL_IP)
@@ -217,12 +225,12 @@ class SettingsRepository(private val context: Context) {
 
     // --- Recent Peers History ---
 
-    val recentPeersFlow: Flow<List<PeerEntry>> = context.dataStore.data.map { preferences ->
+    val recentPeersFlow: Flow<List<PeerEntry>> = dataStore.data.map { preferences ->
         deserializePeers(preferences[KEY_RECENT_PEERS])
     }
 
     suspend fun addOrUpdateRecentPeer(peer: PeerEntry) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             val current = deserializePeers(preferences[KEY_RECENT_PEERS])
             val updated = PeerEntry.upsert(current, peer)
             preferences[KEY_RECENT_PEERS] = Gson().toJson(updated)
@@ -230,14 +238,14 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun removeRecentPeer(room: String) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             val current = deserializePeers(preferences[KEY_RECENT_PEERS])
             preferences[KEY_RECENT_PEERS] = Gson().toJson(current.filter { it.room != room })
         }
     }
 
     suspend fun updateRecentPeerDisplayName(room: String, name: String) {
-        context.dataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             val current = deserializePeers(preferences[KEY_RECENT_PEERS])
             val updated = current.map { if (it.room == room) it.copy(displayName = name) else it }
             preferences[KEY_RECENT_PEERS] = Gson().toJson(updated)
