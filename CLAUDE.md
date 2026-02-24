@@ -4,8 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build & Development Commands
 
+> **Workflow note:** Compilation and installation are handled by the **user via Android Studio**. Claude's role is writing code only — do not attempt to run `assembleDebug`, `installDebug`, or any build/install commands unless explicitly asked.
+
 ```bash
-# Build debug APK
+# Build debug APK (user runs this, not Claude)
 ./gradlew assembleDebug
 
 # Build release APK
@@ -14,11 +16,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Install debug APK to connected device
 ./gradlew installDebug
 
-# Run unit tests
+# Run unit tests (Claude may run these)
 ./gradlew test
-
-# Run instrumented tests (requires connected device/emulator)
-./gradlew connectedAndroidTest
 
 # Run a single test class (Robolectric — no device needed)
 ./gradlew test --tests "com.example.clipboardman.util.CryptoManagerTest"
