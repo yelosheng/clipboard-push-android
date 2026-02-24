@@ -79,10 +79,6 @@ object RelayRepository {
                         if (model.startsWith(manufacturer, ignoreCase = true)) model else "$manufacturer $model"
                     }
                     joinData.put("device_name", friendlyName)
-                    // FCM token (optional — null when GMS unavailable)
-                    com.example.clipboardman.service.FcmTokenHolder.token?.let {
-                        joinData.put("fcm_token", it)
-                    }
                     joinData.put("joined_at_ms", System.currentTimeMillis())
                     
                     val netObj = JSONObject()

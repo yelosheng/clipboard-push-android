@@ -91,15 +91,6 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <!-- FCM Service -->
-        <service
-            android:name=".service.FcmService"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.google.firebase.MESSAGING_EVENT" />
-            </intent-filter>
-        </service>
-
         <!-- WorkManager 前台服务 (Android 14+ 需要声明 foregroundServiceType) -->
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"

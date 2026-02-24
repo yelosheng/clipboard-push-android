@@ -26,19 +26,6 @@ class ClipboardManApp : Application() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannels()
-        // Fetch FCM token (GMS graceful degradation — failure is silent)
-        try {
-            com.google.firebase.messaging.FirebaseMessaging.getInstance().token
-                .addOnSuccessListener { token ->
-                    com.example.clipboardman.service.FcmTokenHolder.token = token
-                    android.util.Log.d("ClipboardManApp", "FCM token ready")
-                }
-                .addOnFailureListener { e ->
-                    android.util.Log.w("ClipboardManApp", "FCM token unavailable: ${e.message}")
-                }
-        } catch (e: Exception) {
-            android.util.Log.w("ClipboardManApp", "FCM not available on this device: ${e.message}")
-        }
     }
 
     private fun createNotificationChannels() {
