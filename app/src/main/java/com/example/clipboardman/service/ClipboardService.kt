@@ -23,7 +23,6 @@ import com.example.clipboardman.data.repository.RelayRepository
 import com.example.clipboardman.data.repository.SettingsRepository
 import com.example.clipboardman.util.FileUtil
 import com.example.clipboardman.util.NotificationHelper
-import com.example.clipboardman.util.DebugLogger
 import com.example.clipboardman.worker.DownloadWorker
 import com.example.clipboardman.worker.UploadWorker
 import kotlinx.coroutines.*
@@ -73,10 +72,8 @@ class ClipboardService : Service() {
         serviceScope.launch {
              // Peer guard: skip if no peers online (auto-sync protection)
              if (currentPeerCount <= 0) {
-                 DebugLogger.log(TAG, "Skipped send: no peers online (activePeerCount=0)")
                  return@launch
              }
-             DebugLogger.log(TAG, "Requesting send clipboard text: '${text.take(50)}...' len=${text.length}")
              roomId?.let { id ->
                  val manager = cryptoManager
                  if (manager != null) {
@@ -86,20 +83,16 @@ class ClipboardService : Service() {
                              val encryptedBase64 = android.util.Base64.encodeToString(encryptedBytes, android.util.Base64.NO_WRAP)
                              relayRepository.sendClipboardSync(id, encryptedBase64, clientId, true)
                              Log.d(TAG, "Sent encrypted text")
-                             DebugLogger.log(TAG, "Sent encrypted text to room $id")
                          } else {
                              Log.e(TAG, "Encryption failed, sending plain text")
-                             DebugLogger.log(TAG, "Encryption failed!")
                              relayRepository.sendClipboardSync(id, text, clientId, false)
                          }
                      } catch (e: Exception) {
                          Log.e(TAG, "Encryption error", e)
-                         DebugLogger.log(TAG, "Encryption error: ${e.message}")
                          relayRepository.sendClipboardSync(id, text, clientId, false)
                      }
                  } else {
                      Log.w(TAG, "CryptoManager not ready, sending plain text")
-                     DebugLogger.log(TAG, "CryptoManager null, sending plain text")
                      relayRepository.sendClipboardSync(id, text, clientId, false)
                  }
              }
@@ -118,7 +111,6 @@ class ClipboardService : Service() {
     // 异常处理器：捕获协程中的未处理异常，防止崩溃
     private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
         Log.e(TAG, "Coroutine exception caught", throwable)
-        DebugLogger.log(TAG, "Coroutine exception: ${throwable.message}")
         // 不崩溃，只记录日志
     }
 
@@ -142,7 +134,6 @@ class ClipboardService : Service() {
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "Service created")
-        DebugLogger.log(TAG, "Service created")
         
         settingsRepository = SettingsRepository(this)
         messageRepository = MessageRepository(this)
@@ -199,7 +190,6 @@ class ClipboardService : Service() {
              val ip = info?.ip ?: "0.0.0.0"
              val cidr = info?.cidr ?: "0.0.0.0/0"
              
-             DebugLogger.log(TAG, "Network Change (Epoch $networkEpoch): $ip ($cidr)")
              relayRepository.sendPeerNetworkUpdate(roomId, ip, cidr, networkEpoch)
         }
     }
@@ -295,7 +285,6 @@ class ClipboardService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        DebugLogger.log(TAG, "onStartCommand action=${intent?.action}")
         when (intent?.action) {
             ACTION_START -> startService()
             ACTION_STOP -> stopService()
@@ -308,12 +297,10 @@ class ClipboardService : Service() {
 
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        DebugLogger.log(TAG, "onTrimMemory level=$level")
     }
 
     override fun onDestroy() {
         Log.d(TAG, "Service destroyed")
-        DebugLogger.log(TAG, "Service onDestroy")
         releaseWakeLocks()
         stopService()
         serviceScope.cancel()
@@ -329,13 +316,11 @@ class ClipboardService : Service() {
     private var startJob: Job? = null
 
     private fun startService() {
-        DebugLogger.log(TAG, "startService() called")
         
         // Cancel previous start attempt if running
         startJob?.cancel()
         
         startJob = serviceScope.launch {
-            DebugLogger.log(TAG, "Reading settings...")
             val newServerAddress = settingsRepository.serverAddressFlow.first()
             val newUseHttps = settingsRepository.useHttpsFlow.first()
             val newRoomId = settingsRepository.roomIdFlow.first()
@@ -349,7 +334,6 @@ class ClipboardService : Service() {
                 newRoomId == roomId && 
                 newUseHttps == useHttps &&
                 (currentState == ConnectionState.CONNECTED || currentState == ConnectionState.CONNECTING)) {
-                DebugLogger.log(TAG, "Service already running with same config. Ignoring start request.")
                 return@launch
             }
             
@@ -358,11 +342,9 @@ class ClipboardService : Service() {
             useHttps = newUseHttps
             roomId = newRoomId
             
-            DebugLogger.log(TAG, "Config loaded: $serverAddress / $roomId")
 
             if (serverAddress.isBlank() || roomId.isNullOrBlank()) {
                 Log.e(TAG, "Missing config")
-                DebugLogger.log(TAG, "Missing config - Addr: $serverAddress Room: $roomId")
                 updateState(ConnectionState.ERROR)
                 return@launch
             }
@@ -380,7 +362,6 @@ class ClipboardService : Service() {
                 cryptoManager = null
             }
             
-            DebugLogger.log(TAG, "Starting service with Addr: $serverAddress")
 
             val baseUrl = settingsRepository.getHttpBaseUrl(serverAddress, useHttps)
             apiService = ApiService(baseUrl)
@@ -429,7 +410,6 @@ class ClipboardService : Service() {
             }
             
             Log.d(TAG, "Connecting Relay: $wsUrl Room: $id Client: $clientId")
-            DebugLogger.log(TAG, "Connecting to Relay: $wsUrl ($clientId)")
             relayRepository.connect(this, wsUrl, id, clientId)
         }
     }
@@ -442,7 +422,6 @@ class ClipboardService : Service() {
         val source = data.optString("source")
         val isEncrypted = data.optBoolean("encrypted", false)
 
-        DebugLogger.log(TAG, "Received Clipboard Sync len=${content.length} encrypted=$isEncrypted")
 
         if (isEncrypted) {
             val manager = cryptoManager
@@ -506,7 +485,6 @@ class ClipboardService : Service() {
         val fileName = data.optString("filename")
         val mimeType = data.optString("type") // "image" or "file"
         
-        DebugLogger.log(TAG, "Received File Sync: $fileName")
         
         if (downloadUrl.isNotEmpty()) {
             val messageId: String
@@ -514,7 +492,6 @@ class ClipboardService : Service() {
             // Check if we are already handling this file (e.g. via file_available fallback)
             val existingId = pendingFiles[fileName]
             if (existingId != null) {
-                DebugLogger.log(TAG, "Reusing existing message ID for fallback: $existingId")
                 messageId = existingId
                 // No need to create new message or notify, just start worker to update it
                 
@@ -578,7 +555,6 @@ class ClipboardService : Service() {
         val localUrl = dataObj.optString("local_url")
         val mimeType = dataObj.optString("type")
         
-        DebugLogger.log(TAG, "Received File Invite (v2): $fileName ($localUrl) ID=$fileId TR=$transferId")
         
         if (fileId.isEmpty() || localUrl.isEmpty()) {
              Log.e(TAG, "Invalid file_available payload (missing ID or URL): $dataObj")
@@ -587,7 +563,6 @@ class ClipboardService : Service() {
         
         // Deduplication: Check if we are already handling this file
         if (pendingFiles.containsKey(fileName)) {
-            DebugLogger.log(TAG, "Ignoring duplicate file announcement: $fileName")
             return
         }
         
@@ -636,7 +611,6 @@ class ClipboardService : Service() {
                 if (workInfo != null) {
                     when (workInfo.state) {
                         androidx.work.WorkInfo.State.SUCCEEDED -> {
-                            DebugLogger.log(TAG, "v2 Download Sucesss! Sending Ack.")
                             val outTransferId = workInfo.outputData.getString(DownloadWorker.KEY_TRANSFER_ID) ?: transferId
                             relayRepository.sendFileSyncCompleted(roomId ?: "", fileId, outTransferId)
                             // Remove from pendingFiles eventually? 
@@ -646,7 +620,6 @@ class ClipboardService : Service() {
                             this.cancel() 
                         }
                         androidx.work.WorkInfo.State.FAILED, androidx.work.WorkInfo.State.CANCELLED -> {
-                            DebugLogger.log(TAG, "v2 Download Failed. Requesting Relay.")
                             relayRepository.sendFileNeedRelay(roomId ?: "", fileId, transferId, "worker_failed")
                             this.cancel()
                         }
@@ -666,7 +639,6 @@ class ClipboardService : Service() {
                 messageRepository.addMessageAtomic(message)
             } catch (e: Exception) {
                 Log.e(TAG, "Error saving message", e)
-                DebugLogger.log(TAG, "Save error: ${e.message}")
             }
         }
         onMessageReceived?.invoke(message)
@@ -674,7 +646,6 @@ class ClipboardService : Service() {
 
     private fun updateState(state: ConnectionState) {
         Log.d(TAG, "State: $state")
-        DebugLogger.log(TAG, "State changed: $state")
         currentState = state
         NotificationHelper.updateServiceNotification(this, state, serverAddress, currentPeerCount, currentPeers)
         onStateChanged?.invoke(state)
@@ -686,7 +657,6 @@ class ClipboardService : Service() {
         val probeUrl = data.optString("probe_url")
         val probeId = data.optString("probe_id")
         
-        DebugLogger.log(TAG, "Received Probe Request: $probeUrl (ID: $probeId)")
         
         if (probeUrl.isEmpty() || probeId.isEmpty()) {
             Log.e(TAG, "Invalid probe request")
@@ -720,16 +690,13 @@ class ClipboardService : Service() {
                 
                 if (response.isSuccessful) {
                     status = "ok"
-                    DebugLogger.log(TAG, "Probe Success: ${latency}ms")
                 } else {
                     status = "fail"
                     reason = "http_$httpStatus"
-                    DebugLogger.log(TAG, "Probe Failed: HTTP $httpStatus")
                 }
             } catch (e: Exception) {
                 status = "fail" // or timeout
                 reason = e.message ?: "unknown"
-                DebugLogger.log(TAG, "Probe Error: ${e.message}")
             }
             
             relayRepository.sendProbeResult(roomId ?: "", probeId, status, latency, httpStatus, reason)
@@ -738,14 +705,12 @@ class ClipboardService : Service() {
     
     private fun handlePeerEvicted(data: JSONObject) {
         val reason = data.optString("reason", "unknown")
-        DebugLogger.log(TAG, "PEER EVICTED! Reason: $reason. Disconnecting...")
         Log.w(TAG, "Peer Evicted: $reason")
         
         // 0. Clear Pairing Info (Suspend)
         serviceScope.launch {
             try {
                 settingsRepository.clearPairingInfo()
-                DebugLogger.log(TAG, "Pairing info cleared.")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to clear pairing info", e)
             }
@@ -763,7 +728,7 @@ class ClipboardService : Service() {
             "已从房间移除",
             "您已被移出房间 (原因: $reason)。请重新连接。"
         )
-        
+
         // 4. Toast (Main Thread)
         serviceScope.launch(Dispatchers.Main) {
             android.widget.Toast.makeText(applicationContext, "您已被移出房间! ($reason)", android.widget.Toast.LENGTH_LONG).show()
@@ -773,7 +738,6 @@ class ClipboardService : Service() {
     private fun handleRoomStateChanged(data: JSONObject) {
         val state = data.optString("state")
         val lanConf = data.optString("lan_confidence")
-        DebugLogger.log(TAG, "Room State: $state (Lan: $lanConf) Peers: $currentPeerCount")
         
         // Peer count and list are updated via RelayRepository flows in observeRelayEvents()
         // Notification is updated automatically when peerCount/peers flows emit
@@ -788,7 +752,6 @@ class ClipboardService : Service() {
                     setReferenceCounted(false)
                     acquire() 
                 }
-                DebugLogger.log(TAG, "WakeLock acquired")
             }
             if (wifiLock == null) {
                 val wm = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
@@ -796,11 +759,9 @@ class ClipboardService : Service() {
                     setReferenceCounted(false)
                     acquire() 
                 }
-                DebugLogger.log(TAG, "WiFiLock acquired")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error acquiring locks", e)
-            DebugLogger.log(TAG, "Error acquiring locks: ${e.message}")
         }
     }
 
@@ -808,13 +769,11 @@ class ClipboardService : Service() {
         try {
             if (wakeLock?.isHeld == true) {
                 wakeLock?.release()
-                DebugLogger.log(TAG, "WakeLock released")
             }
             wakeLock = null
             
             if (wifiLock?.isHeld == true) {
                 wifiLock?.release()
-                DebugLogger.log(TAG, "WiFiLock released")
             }
             wifiLock = null
         } catch (e: Exception) {

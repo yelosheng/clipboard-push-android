@@ -1,7 +1,6 @@
 package com.example.clipboardman.service
 
 import android.util.Log
-import com.example.clipboardman.util.DebugLogger
 import fi.iki.elonen.NanoHTTPD
 import java.io.File
 import java.io.FileInputStream
@@ -22,10 +21,8 @@ object LocalFileServer : NanoHTTPD(0) { // 0 = Random Port
             try {
                 start(NanoHTTPD.SOCKET_READ_TIMEOUT, false)
                 Log.d(TAG, "Local File Server started on port $listeningPort")
-                DebugLogger.log(TAG, "Server started: :$listeningPort")
             } catch (e: IOException) {
                 Log.e(TAG, "Failed to start server", e)
-                DebugLogger.log(TAG, "Server failed start: ${e.message}")
             }
         }
     }
@@ -34,7 +31,6 @@ object LocalFileServer : NanoHTTPD(0) { // 0 = Random Port
         if (isAlive) {
             stop()
             Log.d(TAG, "Local File Server stopped")
-            DebugLogger.log(TAG, "Server stopped")
         }
     }
     
@@ -43,13 +39,11 @@ object LocalFileServer : NanoHTTPD(0) { // 0 = Random Port
     fun serveFile(transferId: String, file: File, mimeType: String) {
         servingFiles[transferId] = file
         servingMimeTypes[transferId] = mimeType
-        DebugLogger.log(TAG, "Serving: $transferId -> ${file.name}")
     }
 
     fun stopServing(transferId: String) {
         servingFiles.remove(transferId)
         servingMimeTypes.remove(transferId)
-        DebugLogger.log(TAG, "Stopped Serving: $transferId")
     }
 
     override fun serve(session: IHTTPSession): Response {

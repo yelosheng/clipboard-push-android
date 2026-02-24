@@ -59,7 +59,6 @@ class MainActivity : ComponentActivity() {
             val binder = service as ClipboardService.LocalBinder
             clipboardService = binder.getService()
             isBound = true
-            com.example.clipboardman.util.DebugLogger.log("MainActivity", "onServiceConnected: Service bound, ViewModel ready=${::mainViewModel.isInitialized}")
 
 
             // 设置状态回调
@@ -151,7 +150,6 @@ class MainActivity : ComponentActivity() {
             val localPort = if (obj.has("local_port")) obj.getInt("local_port") else null
             
             lifecycleScope.launch {
-                com.example.clipboardman.util.DebugLogger.log("QR_SCAN", "Saving pairing info... LocalIP=$localIp")
                 val settingsRepo = com.example.clipboardman.data.repository.SettingsRepository(applicationContext)
                 settingsRepo.savePairingInfo(server, room, key, localIp, localPort)
 
@@ -170,14 +168,12 @@ class MainActivity : ComponentActivity() {
                     )
                 )
 
-                com.example.clipboardman.util.DebugLogger.log("QR_SCAN", "Restarting Service...")
                 
                 // --- Immediate Local Connection Test ---
                 if (!localIp.isNullOrBlank() && localPort != null && localPort > 0) {
                     launch(Dispatchers.IO) {
                         try {
                             val testUrl = "http://$localIp:$localPort/ping"
-                            com.example.clipboardman.util.DebugLogger.log("QR_SCAN", "Testing Local Connection: $testUrl")
                             
                             val client = okhttp3.OkHttpClient.Builder()
                                 .connectTimeout(2, java.util.concurrent.TimeUnit.SECONDS)
@@ -191,19 +187,16 @@ class MainActivity : ComponentActivity() {
                             client.newCall(request).execute().use { response ->
                                 if (response.isSuccessful) {
                                     val body = response.body?.string() ?: ""
-                                    com.example.clipboardman.util.DebugLogger.log("QR_SCAN", "Local Test Success: $body")
                                     withContext(Dispatchers.Main) {
                                         Toast.makeText(this@MainActivity, "Local Connection: OK", Toast.LENGTH_SHORT).show()
                                     }
                                 } else {
-                                    com.example.clipboardman.util.DebugLogger.log("QR_SCAN", "Local Test Failed: ${response.code}")
                                      withContext(Dispatchers.Main) {
                                         Toast.makeText(this@MainActivity, "Local Connection: Failed (${response.code})", Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             }
                         } catch (e: Exception) {
-                            com.example.clipboardman.util.DebugLogger.log("QR_SCAN", "Local Test Error: ${e.message}")
                             withContext(Dispatchers.Main) {
                                 Toast.makeText(this@MainActivity, "Local Connection: Unreachable", Toast.LENGTH_SHORT).show()
                             }
@@ -225,7 +218,6 @@ class MainActivity : ComponentActivity() {
                 
                 Toast.makeText(this@MainActivity, "Settings Saved. Connecting...", Toast.LENGTH_LONG).show()
                 // Update Log UI
-                com.example.clipboardman.util.DebugLogger.log("MainActivity", "Service restart requested")
             }
         } catch (e: Exception) {
             Toast.makeText(this, "Invalid Code: ${e.message}", Toast.LENGTH_LONG).show()
@@ -237,7 +229,6 @@ class MainActivity : ComponentActivity() {
 
         // Initialize ViewModel synchronously to ensure it's ready for Service callbacks
         mainViewModel = androidx.lifecycle.ViewModelProvider(this)[MainViewModel::class.java]
-        com.example.clipboardman.util.DebugLogger.log("MainActivity", "ViewModel initialized synchronously in onCreate")
         
         // 请求通知权限 (Android 13+)
         requestNotificationPermission()
@@ -494,7 +485,6 @@ class MainActivity : ComponentActivity() {
             val settingsRepo = com.example.clipboardman.data.repository.SettingsRepository(applicationContext)
             settingsRepo.savePairingInfo(entry.server, entry.room, entry.key, entry.localIp, entry.localPort)
             mainViewModel.addOrUpdateRecentPeer(entry.copy(lastConnectedAt = System.currentTimeMillis()))
-            com.example.clipboardman.util.DebugLogger.log("MainActivity", "Switching to peer: ${entry.displayName}")
             // 如果服务已绑定，直接调用 reconnect()：服务会读取新设置并重新连接，
             // 不经过 stopForeground()/stopSelf()，避免切换后后台断连问题。
             // 否则走正常 start 流程（DataStore 已更新，服务启动时会读到新 room）。

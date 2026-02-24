@@ -15,7 +15,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
-import com.example.clipboardman.util.DebugLogger
 
 /**
  * 通知助手
@@ -134,10 +133,8 @@ object NotificationHelper {
             val canvas = Canvas(bitmap)
             drawable.setBounds(0, 0, canvas.width, canvas.height)
             drawable.draw(canvas)
-            DebugLogger.log("NotificationHelper", "Bitmap generated successfully for $vectorResId")
             bitmap
         } catch (e: Exception) {
-            DebugLogger.log("NotificationHelper", "Bitmap generation failed: ${e.message}")
             e.printStackTrace()
             null
         }

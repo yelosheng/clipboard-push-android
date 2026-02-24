@@ -44,17 +44,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             // 使用 retry 机制防止读取错误导致 Flow 终止
             messageRepository.messagesFlow
                 .retry { e ->
-                    com.example.clipboardman.util.DebugLogger.log("MainViewModel", "CRITICAL: Error collecting messages, retrying... ${e.message}")
                     kotlinx.coroutines.delay(1000) // 延迟1秒重试
                     true // 始终重试
                 }
                 .collect { storedMessages ->
                     val maxCount = maxHistoryCount.value
-                    
-                    com.example.clipboardman.util.DebugLogger.log(
-                        "ViewModel", 
-                        "Flow emit: received ${storedMessages.size} msgs, limit=$maxCount. First ID: ${storedMessages.firstOrNull()?.id}"
-                    )
                     
                     val result = storedMessages.take(maxCount)
                     _messages.value = result
@@ -206,14 +200,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     init {
-        com.example.clipboardman.util.DebugLogger.log("ViewModel", "INIT - ViewModel Created! (Moved to bottom)")
         
         // Auto-Migration for legacy defaults
         viewModelScope.launch {
             try {
                 val currentAddress = settingsRepository.serverAddressFlow.first()
                 if (currentAddress.contains("localhost") || currentAddress.contains("5000")) {
-                    com.example.clipboardman.util.DebugLogger.log("ViewModel", "Auto-Migrating config: $currentAddress -> kxkl.tk:5055")
                     settingsRepository.saveServerAddress("kxkl.tk:5055")
                 }
             } catch (e: Exception) {
@@ -245,7 +237,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             lastConnectedAt = System.currentTimeMillis()
                         )
                     )
-                    com.example.clipboardman.util.DebugLogger.log("ViewModel", "Auto-populated recentPeers from existing settings: $roomId")
                 }
             } catch (e: Exception) {
                 android.util.Log.e("MainViewModel", "Error in recent-peers migration", e)

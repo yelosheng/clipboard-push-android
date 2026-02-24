@@ -180,7 +180,6 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun savePairingInfo(server: String, room: String, key: String, localIp: String? = null, localPort: Int? = null) {
-        com.example.clipboardman.util.DebugLogger.log("SettingsRepo", "Saving - Server: $server Room: $room LocalIP: $localIp")
         context.dataStore.edit { preferences ->
             preferences[KEY_SERVER_ADDRESS] = server
             preferences[KEY_ROOM_ID] = room

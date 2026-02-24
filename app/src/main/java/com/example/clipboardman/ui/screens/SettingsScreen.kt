@@ -12,8 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
+
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,15 +21,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+
 import androidx.compose.foundation.background
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import com.example.clipboardman.data.model.ConnectionState
 import com.example.clipboardman.data.model.PeerEntry
 import com.example.clipboardman.data.repository.SettingsRepository
 import com.example.clipboardman.ui.theme.*
-import com.example.clipboardman.util.DebugLogger
 import androidx.compose.ui.text.withStyle
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -383,125 +379,6 @@ fun SettingsScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                        }
-                    }
-                }
-            }
-
-            SettingsSection(title = "开发日志 (Development Logs)") {
-                val logs by DebugLogger.logs.collectAsState()
-                
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(300.dp)
-                        .background(Color.Black.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
-                        .padding(8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Logs", style = MaterialTheme.typography.labelSmall)
-                        
-                        Row {
-                            val context = androidx.compose.ui.platform.LocalContext.current
-                            Button(
-                                onClick = {
-                                    val logText = logs.joinToString("\n")
-                                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                    val clip = android.content.ClipData.newPlainText("Debug Logs", logText)
-                                    clipboard.setPrimaryClip(clip)
-                                    android.widget.Toast.makeText(context, "Logs Copied!", android.widget.Toast.LENGTH_SHORT).show()
-                                },
-                                modifier = Modifier.height(30.dp),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                            ) {
-                                Text("Copy", style = MaterialTheme.typography.labelSmall)
-                            }
-                            
-                            Spacer(modifier = Modifier.width(8.dp))
-                            
-                            Button(
-                                onClick = { DebugLogger.clear() },
-                                modifier = Modifier.height(30.dp),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                            ) {
-                                Text("Clear", style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
-                    }
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        items(logs) { log ->
-                            Text(
-                                text = log,
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
-                                modifier = Modifier.padding(vertical = 1.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
-            SettingsSection(title = "Developer") {
-                var showLogs by remember { mutableStateOf(false) }
-                
-                Column {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showLogs = !showLogs }
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Debug Logs",
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Icon(
-                            imageVector = if (showLogs) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                            contentDescription = if (showLogs) "Collapse" else "Expand"
-                        )
-                    }
-
-                    if (showLogs) {
-                        val logs by com.example.clipboardman.util.DebugLogger.logs.collectAsState()
-                        
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(300.dp)
-                                .padding(top = 8.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                        ) {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(8.dp),
-                                reverseLayout = true 
-                            ) {
-                                items(logs) { log ->
-                                    androidx.compose.foundation.text.selection.SelectionContainer {
-                                        Text(
-                                            text = log,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                            modifier = Modifier.padding(vertical = 2.dp)
-                                        )
-                                    }
-                                    Divider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
-                                }
-                            }
-                        }
-                        
-                        // Clear Button
-                         Button(
-                            onClick = { com.example.clipboardman.util.DebugLogger.clear() },
-                            modifier = Modifier.align(Alignment.End).padding(top = 8.dp)
-                        ) {
-                            Text("Clear Logs")
                         }
                     }
                 }
