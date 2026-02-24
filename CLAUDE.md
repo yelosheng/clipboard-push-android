@@ -46,18 +46,11 @@ The app supports three sync modes:
 
 2. **LAN Direct Transfer ("Announce & Pull")**: For files, the PC announces availability via `file_available` signal (see `LAN_SIGNAL_PROTOCOL.md`). Android attempts a direct LAN HTTP download; if it fails, it sends `file_need_relay` to trigger a cloud upload fallback. See `LAN_SYNC_DEV_PLAN.md` for the full state machine.
 
-3. **FCM Dual-Channel (optional)**: When GMS is available, the relay server additionally sends an FCM data message for every `clipboard_push` / `file_push` event. This allows the Android app to receive content even when killed (no foreground service needed). `FcmService` handles background delivery; deduplication is guaranteed by `addMessageAtomic()`. FCM gracefully degrades on devices without GMS — Socket.IO remains the primary channel.
-
-### FCM Setup Requirements
-
-- Firebase project + `google-services.json` placed in `app/` (obtained from Firebase Console)
-- Relay server needs `FIREBASE_CREDENTIALS_PATH` env var pointing to a service-account JSON
-- `firebase-admin` Python package added to relay server `requirements.txt`
-- Android: `com.google.firebase:firebase-messaging-ktx` dependency + `google-services` Gradle plugin
+3. **FCM Dual-Channel (dormant)**: Infrastructure exists but is intentionally disabled. The room-based Socket.IO routing model is clean and sufficient; FCM introduces complexity around offline token routing that has not been fully resolved. See "FCM Dormant State" section below for re-enablement steps.
 
 ### Socket.IO Protocol
 
-- Join event sends `room`, `client_id`, `client_type`, `device_name`, `network info`, `protocol_version: "4.0"`, `fcm_token` (optional, only when GMS available)
+- Join event sends `room`, `client_id`, `client_type`, `device_name`, `network info`, `protocol_version: "4.0"`
 - Canonical LAN file events: `file_available` → `file_sync_completed` or `file_need_relay`
 - Legacy aliases exist (`file_announcement`, `file_ack`, `file_request_relay`) — **receive-only** during transition
 - V4 additions: `lan_probe_request` / `peer_evicted` / `room_state_changed` / `transfer_command` / `peer_network_update`
@@ -92,7 +85,7 @@ ClipboardService (foreground service — owns the connection lifecycle)
 | `ui/viewmodel/MainViewModel.kt` | UI state (connection, peers, messages) as `StateFlow` |
 | `util/CryptoManager.kt` | AES-GCM encrypt/decrypt (AES-256, 12-byte IV, 128-bit tag); `encryptFile`/`decryptFile` for streams |
 | `service/LocalFileServer.kt` | NanoHTTPD server for LAN file serving |
-| `service/FcmService.kt` | Firebase Cloud Messaging receiver; handles background clipboard/file delivery when Socket.IO is disconnected |
+| `service/FcmService.kt` | FCM receiver — **dormant** (not registered in manifest); kept for future re-enablement |
 | `share/ShareReceiverActivity.kt` | Handles incoming `ACTION_SEND` intents (text, image, file) |
 
 ### RelayEvent Sealed Class
@@ -142,6 +135,22 @@ Defined in `ClipboardManApp.kt`:
 
 `ClipboardService` uses `CoroutineScope(Dispatchers.IO + SupervisorJob() + exceptionHandler)` with a `CoroutineExceptionHandler` to prevent uncaught exceptions from crashing the service. Network callbacks use a 1-second debounce delay before reconnecting.
 
-### FCM Token Lifecycle
+### FCM Dormant State
 
-`FcmTokenHolder` (singleton object in `FcmService.kt`) holds the current FCM token in memory. `ClipboardManApp.onCreate()` fetches the token from Firebase asynchronously and stores it there. `RelayRepository` reads `FcmTokenHolder.token` at join time and includes it in the join payload as `fcm_token` (omitted when null). The relay server stores the token in `CLIENT_FCM_TOKENS[client_id]` and uses it to send parallel FCM messages alongside Socket.IO broadcasts.
+FCM infrastructure is fully coded but intentionally disabled. The core issue: once Android is offline (killed), the PC client's peer guard (`activePeerCount == 0`) suppresses all sends, so FCM is never triggered. Additionally, routing FCM tokens to the correct room after disconnect requires careful stale-token management that conflicts with the clean room-based architecture.
+
+**What exists (do not delete):**
+- `service/FcmService.kt` — FCM receiver + `FcmTokenHolder` singleton
+- `app/google-services.json` — Firebase Android config
+- Firebase Gradle deps in `app/build.gradle.kts`
+- Server-side: `ROOM_FCM_TOKENS`, `CLIENT_FCM_TOKENS`, FCM send logic in `socket_events.py`
+
+**To re-enable, add back three wiring points:**
+1. `AndroidManifest.xml` — register `FcmService` with `com.google.firebase.MESSAGING_EVENT`
+2. `ClipboardManApp.onCreate()` — fetch token into `FcmTokenHolder`
+3. `RelayRepository` join payload — include `fcm_token`
+
+**Also needs design work before re-enabling:**
+- PC client peer guard must be relaxed when FCM devices are registered in the room
+- Server should include `fcm_device_count` in `room_stats` so PC knows to send even with 0 online peers
+- Stale token cleanup when Android switches rooms
