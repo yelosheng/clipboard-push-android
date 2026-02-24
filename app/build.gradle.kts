@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.clipboardman"
+    namespace = "com.clipboardpush.plus"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.clipboardpush.plus"
+        applicationId = "com.clipboardpush.plus"
         minSdk = 26
         targetSdk = 34
         versionCode = 1

@@ -1,0 +1,585 @@
+package com.clipboardpush.plus.ui.screens
+
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Warning
+
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+
+import androidx.compose.foundation.background
+import com.clipboardpush.plus.data.model.ConnectionState
+import com.clipboardpush.plus.data.model.PeerEntry
+import com.clipboardpush.plus.data.repository.SettingsRepository
+import com.clipboardpush.plus.ui.theme.*
+import androidx.compose.ui.text.withStyle
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsScreen(
+    serverAddress: String,
+    useHttps: Boolean,
+    fileHandleMode: Int,
+    autoConnect: Boolean,
+    maxHistoryCount: Int,
+    connectionState: ConnectionState,
+    onConnectClick: () -> Unit,
+    onDisconnectClick: () -> Unit,
+    onServerAddressChange: (String) -> Unit,
+    onUseHttpsChange: (Boolean) -> Unit,
+    onFileHandleModeChange: (Int) -> Unit,
+    onAutoConnectChange: (Boolean) -> Unit,
+    onMaxHistoryCountChange: (Int) -> Unit,
+    onScanClick: () -> Unit,
+    onBackClick: () -> Unit,
+    peers: List<String> = emptyList(),
+    recentPeers: List<PeerEntry> = emptyList(),
+    activeRoomId: String? = null,
+    onPeerSelected: (PeerEntry) -> Unit = {},
+    onPeerRemoved: (PeerEntry) -> Unit = {}
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("设置") },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            // 连接与配对
+            SettingsSection(title = "连接与配对") {
+                Column {
+                    // 1. 连接状态和控制
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val statusText = when (connectionState) {
+                            ConnectionState.CONNECTED -> {
+                                if (peers.isNotEmpty()) "已连接 (可传输)" else "已连接 (等待 PC 端...)"
+                            }
+                            ConnectionState.CONNECTING -> "连接中..."
+                            ConnectionState.DISCONNECTED -> "未连接"
+                            ConnectionState.ERROR -> "连接错误"
+                        }
+                        val statusColor = when (connectionState) {
+                            ConnectionState.CONNECTED -> {
+                                if (peers.isNotEmpty()) Green500 else androidx.compose.ui.graphics.Color(0xFFFFC107)
+                            }
+                            ConnectionState.CONNECTING -> Orange500
+                            ConnectionState.ERROR -> Red500
+                            ConnectionState.DISCONNECTED -> Grey500
+                        }
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "当前状态: $statusText",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = statusColor
+                            )
+
+                            // Display Connected PC Name or waiting hint
+                            if (connectionState == ConnectionState.CONNECTED) {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                if (peers.isNotEmpty()) {
+                                    Text(
+                                        text = "目标设备: ${peers.joinToString(", ")}",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                } else {
+                                    Text(
+                                        text = "等待 PC 端连接后即可传输...",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = androidx.compose.ui.graphics.Color(0xFFFFC107)
+                                    )
+                                }
+                            }
+                        }
+
+                        Button(
+                            onClick = {
+                                when (connectionState) {
+                                    ConnectionState.CONNECTED, ConnectionState.CONNECTING -> onDisconnectClick()
+                                    else -> onConnectClick()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (connectionState == ConnectionState.CONNECTED || connectionState == ConnectionState.CONNECTING) Red500 else MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            Text(if (connectionState == ConnectionState.CONNECTED || connectionState == ConnectionState.CONNECTING) "断开" else "连接")
+                        }
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+                    // 2. 配对按钮
+                    Button(
+                        onClick = onScanClick,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("扫描二维码配对 (Scan to Pair)")
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // 3. 首次使用指南
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "首次使用指南",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            
+                            val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+                            val annotatedString = androidx.compose.ui.text.buildAnnotatedString {
+                                append("1. 访问 ")
+                                pushStringAnnotation(tag = "URL", annotation = "https://www.clipboardpush.com/")
+                                withStyle(style = androidx.compose.ui.text.SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline)) {
+                                    append("https://www.clipboardpush.com/")
+                                }
+                                pop()
+                                append(" 下载桌面客户端 (Clipboard Push)\n")
+                                append("2. 打开客户端设置页面\n")
+                                append("3. 点击上方按钮扫描屏幕上的二维码")
+                            }
+
+                            androidx.compose.foundation.text.ClickableText(
+                                text = annotatedString,
+                                style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSecondaryContainer),
+                                onClick = { offset ->
+                                    annotatedString.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                                        .firstOrNull()?.let { annotation ->
+                                            uriHandler.openUri(annotation.item)
+                                        }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 最近连接
+            if (recentPeers.isNotEmpty()) {
+                SettingsSection(title = "最近连接") {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        recentPeers.forEach { entry ->
+                            RecentPeerRow(
+                                entry = entry,
+                                isActive = entry.room == activeRoomId,
+                                onSelect = { onPeerSelected(entry) },
+                                onRemove = { onPeerRemoved(entry) }
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            // 文件处理方式
+            SettingsSection(title = "文件处理方式") {
+                Column {
+                    SettingsRepository.FileHandleMode.entries.forEachIndexed { index, mode ->
+                        if (index > 0) Spacer(modifier = Modifier.height(8.dp))
+                        RadioButtonOption(
+                            text = mode.label,
+                            description = mode.description,
+                            selected = fileHandleMode == mode.value,
+                            onClick = { onFileHandleModeChange(mode.value) }
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 历史记录设置
+            SettingsSection(title = "历史记录") {
+                Column {
+                    Text(
+                        text = "最大保存消息数量",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Text(
+                        text = "设置列表中保存的历史消息条数",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(50, 100, 200, 500).forEach { count ->
+                            FilterChip(
+                                selected = maxHistoryCount == count,
+                                onClick = { onMaxHistoryCountChange(count) },
+                                label = { Text("$count") }
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 其他设置
+            SettingsSection(title = "其他设置") {
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onAutoConnectChange(!autoConnect) }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "启动时自动连接",
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Text(
+                                text = "App 启动后自动连接到服务器",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = autoConnect,
+                            onCheckedChange = onAutoConnectChange
+                        )
+                    }
+                    
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    
+                    // 电池优化白名单
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    val powerManager = context.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+                    val isIgnoringBattery = powerManager.isIgnoringBatteryOptimizations(context.packageName)
+                    
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                try {
+                                    val intent = android.content.Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                        data = android.net.Uri.parse("package:${context.packageName}")
+                                    }
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    // 某些手机可能不支持，尝试打开电池设置页面
+                                    try {
+                                        val intent = android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                        context.startActivity(intent)
+                                    } catch (e2: Exception) {
+                                        android.widget.Toast.makeText(context, "无法打开电池设置", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "忽略电池优化",
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Text(
+                                text = if (isIgnoringBattery) "已忽略（后台正常运行）" else "未忽略（可能被系统杀死）",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isIgnoringBattery) Green500 else Orange500
+                            )
+                        }
+                        Text(
+                            text = "设置 →",
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    
+                    // 国产手机额外提示
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "国产手机用户注意",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "小米/华为/OPPO/vivo 等手机可能还需要：\n" +
+                                    "• 在系统设置中搜索「自启动管理」，允许本 APP 自启动\n" +
+                                    "• 在「电池」设置中将 APP 设为「无限制」或允许后台运行",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+fun SettingsSection(
+    title: String,
+    content: @Composable () -> Unit
+) {
+    Column {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        ) {
+            Box(modifier = Modifier.padding(16.dp)) {
+                content()
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+private fun RecentPeerRow(
+    entry: PeerEntry,
+    isActive: Boolean,
+    onSelect: () -> Unit,
+    onRemove: () -> Unit
+) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("删除记录") },
+            text = { Text("确认从历史中删除「${entry.displayName}」？") },
+            confirmButton = {
+                TextButton(onClick = { onRemove(); showDeleteDialog = false }) {
+                    Text("删除", color = Red500)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (value == SwipeToDismissBoxValue.EndToStart) { onRemove(); true } else false
+        }
+    )
+
+    SwipeToDismissBox(
+        state = dismissState,
+        enableDismissFromStartToEnd = false,
+        backgroundContent = {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Red500, RoundedCornerShape(8.dp))
+                    .padding(end = 16.dp),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "删除",
+                    tint = Color.White
+                )
+            }
+        }
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = onSelect,
+                    onLongClick = { showDeleteDialog = true }
+                ),
+            shape = RoundedCornerShape(8.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (isActive)
+                    MaterialTheme.colorScheme.primaryContainer
+                else
+                    MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = entry.displayName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        if (isActive) {
+                            Surface(
+                                color = Green500,
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Text(
+                                    text = "当前",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        text = "上次: ${formatRelativeTime(entry.lastConnectedAt)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+private fun formatRelativeTime(epochMs: Long): String {
+    val diff = System.currentTimeMillis() - epochMs
+    return when {
+        diff < 60_000L -> "刚刚"
+        diff < 3_600_000L -> "${diff / 60_000} 分钟前"
+        diff < 86_400_000L -> "${diff / 3_600_000} 小时前"
+        else -> "${diff / 86_400_000} 天前"
+    }
+}
+
+@Composable
+fun RadioButtonOption(
+    text: String,
+    description: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(
+            selected = selected,
+            onClick = onClick
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Column {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyLarge
+            )
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
