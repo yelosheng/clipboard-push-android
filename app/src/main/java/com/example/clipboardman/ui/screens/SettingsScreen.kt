@@ -224,26 +224,15 @@ fun SettingsScreen(
             // 文件处理方式
             SettingsSection(title = "文件处理方式") {
                 Column {
-                    RadioButtonOption(
-                        text = "自动保存到本地",
-                        description = "仅下载文件到本地，不修改剪贴板",
-                        selected = fileHandleMode == SettingsRepository.FILE_MODE_SAVE_LOCAL || fileHandleMode == SettingsRepository.FILE_MODE_COPY_REFERENCE, // Fallback for legacy setting
-                        onClick = { onFileHandleModeChange(SettingsRepository.FILE_MODE_SAVE_LOCAL) }
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    RadioButtonOption(
-                        text = "自动保存并复制到剪贴板",
-                        description = "下载图片到本地，并复制图片到剪贴板可直接粘贴",
-                        selected = fileHandleMode == SettingsRepository.FILE_MODE_SAVE_AND_COPY_IMAGE,
-                        onClick = { onFileHandleModeChange(SettingsRepository.FILE_MODE_SAVE_AND_COPY_IMAGE) }
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    RadioButtonOption(
-                        text = "仅复制到剪贴板",
-                        description = "图片/文件仅复制到剪贴板，不保存到本地",
-                        selected = fileHandleMode == SettingsRepository.FILE_MODE_CLIPBOARD_ONLY,
-                        onClick = { onFileHandleModeChange(SettingsRepository.FILE_MODE_CLIPBOARD_ONLY) }
-                    )
+                    SettingsRepository.FileHandleMode.entries.forEachIndexed { index, mode ->
+                        if (index > 0) Spacer(modifier = Modifier.height(8.dp))
+                        RadioButtonOption(
+                            text = mode.label,
+                            description = "",
+                            selected = fileHandleMode == mode.value,
+                            onClick = { onFileHandleModeChange(mode.value) }
+                        )
+                    }
                 }
             }
 

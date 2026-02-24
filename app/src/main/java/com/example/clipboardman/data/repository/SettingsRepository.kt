@@ -48,6 +48,18 @@ class SettingsRepository(private val context: Context) {
         private const val DEFAULT_MAX_HISTORY_COUNT = 100
     }
 
+    enum class FileHandleMode(val value: Int, val label: String) {
+        SAVE_LOCAL(FILE_MODE_SAVE_LOCAL, "保存到下载文件夹"),
+        COPY_REFERENCE(FILE_MODE_COPY_REFERENCE, "复制文件引用"),
+        SAVE_AND_COPY_IMAGE(FILE_MODE_SAVE_AND_COPY_IMAGE, "保存并复制图片"),
+        CLIPBOARD_ONLY(FILE_MODE_CLIPBOARD_ONLY, "仅复制到剪贴板");
+
+        companion object {
+            fun fromValue(value: Int) =
+                entries.firstOrNull { it.value == value } ?: SAVE_LOCAL
+        }
+    }
+
     private fun deserializePeers(json: String?): List<PeerEntry> {
         if (json.isNullOrBlank()) return emptyList()
         return try {
