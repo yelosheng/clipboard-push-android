@@ -29,6 +29,7 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.example.clipboardman.data.model.ConnectionState
+import com.example.clipboardman.data.model.PeerEntry
 import com.example.clipboardman.data.model.PushMessage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -58,7 +59,6 @@ class MainActivity : ComponentActivity() {
             val binder = service as ClipboardService.LocalBinder
             clipboardService = binder.getService()
             isBound = true
-            com.example.clipboardman.util.DebugLogger.log("MainActivity", "onServiceConnected: Service bound, ViewModel ready=${::mainViewModel.isInitialized}")
 
 
             // 设置状态回调
@@ -79,6 +79,18 @@ class MainActivity : ComponentActivity() {
             // 设置 Peers 回调
             clipboardService?.onPeersChanged = { peers ->
                 mainViewModel.updatePeers(peers)
+                // Update display name for active room once PC reports its identity
+                if (peers.isNotEmpty()) {
+                    val currentRoom = mainViewModel.activeRoomId.value
+                    if (!currentRoom.isNullOrBlank()) {
+                        mainViewModel.updateRecentPeerDisplayName(currentRoom, peers.first())
+                    }
+                }
+            }
+
+            // 设置下载失败回调
+            clipboardService?.onMessageDownloadFailed = { messageId ->
+                mainViewModel.markDownloadFailed(messageId)
             }
 
             // 同步当前状态
@@ -100,6 +112,7 @@ class MainActivity : ComponentActivity() {
             clipboardService?.onStateChanged = null
             clipboardService?.onMessageReceived = null
             clipboardService?.onPeerCountChanged = null
+            clipboardService?.onMessageDownloadFailed = null
             clipboardService = null
             isBound = false
         }
@@ -143,18 +156,30 @@ class MainActivity : ComponentActivity() {
             val localPort = if (obj.has("local_port")) obj.getInt("local_port") else null
             
             lifecycleScope.launch {
-                com.example.clipboardman.util.DebugLogger.log("QR_SCAN", "Saving pairing info... LocalIP=$localIp")
                 val settingsRepo = com.example.clipboardman.data.repository.SettingsRepository(applicationContext)
                 settingsRepo.savePairingInfo(server, room, key, localIp, localPort)
-                
-                com.example.clipboardman.util.DebugLogger.log("QR_SCAN", "Restarting Service...")
+
+                // Write to recent peers history (placeholder name until PC connects)
+                val displayName = if (!localIp.isNullOrBlank()) "PC @ $localIp"
+                                  else "PC (${room.takeLast(8)})"
+                mainViewModel.addOrUpdateRecentPeer(
+                    PeerEntry(
+                        room = room,
+                        server = server,
+                        key = key,
+                        localIp = localIp,
+                        localPort = localPort,
+                        displayName = displayName,
+                        lastConnectedAt = System.currentTimeMillis()
+                    )
+                )
+
                 
                 // --- Immediate Local Connection Test ---
                 if (!localIp.isNullOrBlank() && localPort != null && localPort > 0) {
                     launch(Dispatchers.IO) {
                         try {
                             val testUrl = "http://$localIp:$localPort/ping"
-                            com.example.clipboardman.util.DebugLogger.log("QR_SCAN", "Testing Local Connection: $testUrl")
                             
                             val client = okhttp3.OkHttpClient.Builder()
                                 .connectTimeout(2, java.util.concurrent.TimeUnit.SECONDS)
@@ -168,19 +193,16 @@ class MainActivity : ComponentActivity() {
                             client.newCall(request).execute().use { response ->
                                 if (response.isSuccessful) {
                                     val body = response.body?.string() ?: ""
-                                    com.example.clipboardman.util.DebugLogger.log("QR_SCAN", "Local Test Success: $body")
                                     withContext(Dispatchers.Main) {
                                         Toast.makeText(this@MainActivity, "Local Connection: OK", Toast.LENGTH_SHORT).show()
                                     }
                                 } else {
-                                    com.example.clipboardman.util.DebugLogger.log("QR_SCAN", "Local Test Failed: ${response.code}")
                                      withContext(Dispatchers.Main) {
                                         Toast.makeText(this@MainActivity, "Local Connection: Failed (${response.code})", Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             }
                         } catch (e: Exception) {
-                            com.example.clipboardman.util.DebugLogger.log("QR_SCAN", "Local Test Error: ${e.message}")
                             withContext(Dispatchers.Main) {
                                 Toast.makeText(this@MainActivity, "Local Connection: Unreachable", Toast.LENGTH_SHORT).show()
                             }
@@ -202,7 +224,6 @@ class MainActivity : ComponentActivity() {
                 
                 Toast.makeText(this@MainActivity, "Settings Saved. Connecting...", Toast.LENGTH_LONG).show()
                 // Update Log UI
-                com.example.clipboardman.util.DebugLogger.log("MainActivity", "Service restart requested")
             }
         } catch (e: Exception) {
             Toast.makeText(this, "Invalid Code: ${e.message}", Toast.LENGTH_LONG).show()
@@ -214,7 +235,6 @@ class MainActivity : ComponentActivity() {
 
         // Initialize ViewModel synchronously to ensure it's ready for Service callbacks
         mainViewModel = androidx.lifecycle.ViewModelProvider(this)[MainViewModel::class.java]
-        com.example.clipboardman.util.DebugLogger.log("MainActivity", "ViewModel initialized synchronously in onCreate")
         
         // 请求通知权限 (Android 13+)
         requestNotificationPermission()
@@ -234,7 +254,13 @@ class MainActivity : ComponentActivity() {
                         onStopService = { stopClipboardService() },
                         onMessageClick = { message, serverAddr, useHttps -> handleMessageClick(message, serverAddr, useHttps) },
                         onPushClipboard = { handlePushClipboard() },
-                        onScanClick = { launchQRScanner() }
+                        onScanClick = { launchQRScanner() },
+                        onPeerSelected = { entry -> handlePeerSelected(entry) },
+                        onPeerRemoved = { entry -> mainViewModel.removeRecentPeer(entry.room) },
+                        onRetryDownload = { message ->
+                            mainViewModel.markDownloadRetrying(message.safeId)
+                            clipboardService?.retryFileDownload(message)
+                        }
                     )
                 }
             }
@@ -462,6 +488,23 @@ class MainActivity : ComponentActivity() {
         clipboardService?.sendClipboardText(text)
         Toast.makeText(this, "推送成功", Toast.LENGTH_SHORT).show()
     }
+
+    private fun handlePeerSelected(entry: PeerEntry) {
+        Toast.makeText(this, "正在切换到 ${entry.displayName}...", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            val settingsRepo = com.example.clipboardman.data.repository.SettingsRepository(applicationContext)
+            settingsRepo.savePairingInfo(entry.server, entry.room, entry.key, entry.localIp, entry.localPort)
+            mainViewModel.addOrUpdateRecentPeer(entry.copy(lastConnectedAt = System.currentTimeMillis()))
+            // 如果服务已绑定，直接调用 reconnect()：服务会读取新设置并重新连接，
+            // 不经过 stopForeground()/stopSelf()，避免切换后后台断连问题。
+            // 否则走正常 start 流程（DataStore 已更新，服务启动时会读到新 room）。
+            if (clipboardService != null) {
+                clipboardService!!.reconnect()
+            } else {
+                startClipboardService()
+            }
+        }
+    }
 }
 
 @Composable
@@ -470,9 +513,11 @@ fun MainNavigation(
     onStartService: () -> Unit,
     onStopService: () -> Unit,
     onMessageClick: (PushMessage, String, Boolean) -> Unit,
-
     onPushClipboard: () -> Unit,
-    onScanClick: () -> Unit
+    onScanClick: () -> Unit,
+    onPeerSelected: (PeerEntry) -> Unit,
+    onPeerRemoved: (PeerEntry) -> Unit,
+    onRetryDownload: (PushMessage) -> Unit = {}
 ) {
     val navController = rememberNavController()
 
@@ -485,6 +530,9 @@ fun MainNavigation(
     val autoConnect by viewModel.autoConnect.collectAsState()
     val maxHistoryCount by viewModel.maxHistoryCount.collectAsState()
     val peers by viewModel.peers.collectAsState()
+    val recentPeers by viewModel.recentPeers.collectAsState()
+    val activeRoomId by viewModel.activeRoomId.collectAsState()
+    val failedDownloadIds by viewModel.failedDownloadIds.collectAsState()
 
     // 自动连接 (仅当设置改变时触发，或者首次进入时)
     LaunchedEffect(autoConnect, serverAddress) {
@@ -517,7 +565,9 @@ fun MainNavigation(
                 onDeleteMessages = { messageIds -> viewModel.deleteMessages(messageIds) },
                 onPushClipboard = onPushClipboard,
                 onReconnectClick = onStartService,
-                peers = peers
+                peers = peers,
+                failedDownloadIds = failedDownloadIds,
+                onRetryDownload = onRetryDownload
             )
         }
 
@@ -544,7 +594,11 @@ fun MainNavigation(
                 onAutoConnectChange = { viewModel.saveAutoConnect(it) },
                 onMaxHistoryCountChange = { viewModel.saveMaxHistoryCount(it) },
                 onScanClick = onScanClick,
-                onBackClick = { navController.popBackStack() }
+                onBackClick = { navController.popBackStack() },
+                recentPeers = recentPeers,
+                activeRoomId = activeRoomId,
+                onPeerSelected = onPeerSelected,
+                onPeerRemoved = onPeerRemoved
             )
         }
     }

@@ -100,7 +100,7 @@ class ShareReceiverActivity : ComponentActivity() {
      */
     private suspend fun handleTextShare(intent: Intent) {
         // Peer guard: check if any peers are online before sharing
-        val currentPeerCount = com.example.clipboardman.data.repository.RelayRepository.peerCount.replayCache.firstOrNull() ?: 0
+        val currentPeerCount = com.example.clipboardman.service.ClipboardService.latestPeerCount
         if (currentPeerCount <= 0) {
             showError("推送失败：房间内没有其他在线设备")
             return
@@ -197,38 +197,53 @@ class ShareReceiverActivity : ComponentActivity() {
             return
         }
 
-        val total = uris.size
-        contentDescription.value = if (total == 1) {
-            getFileName(uris[0]) ?: "准备上传..."
+        // 预先收集所有文件名，用于进度和错误提示
+        val fileNames = uris.map { getFileName(it) ?: "未知文件" }
+
+        contentDescription.value = if (fileNames.size == 1) {
+            fileNames[0]
         } else {
-            "上传 $total 个文件..."
+            fileNames.joinToString("、")
         }
         uploadState.value = UploadState.Uploading("正在加入上传队列...")
 
         // 使用 WorkManager 后台上传
         var queuedCount = 0
-        for (uri in uris) {
+        val failedNames = mutableListOf<String>()
+        for ((index, uri) in uris.withIndex()) {
             val mimeType = contentResolver.getType(uri) ?: intent.type ?: "application/octet-stream"
-            
-            val workRequest = androidx.work.OneTimeWorkRequestBuilder<com.example.clipboardman.worker.UploadWorker>()
-                .setInputData(
-                    androidx.work.workDataOf(
-                        com.example.clipboardman.worker.UploadWorker.KEY_URI_STRING to uri.toString(),
-                        com.example.clipboardman.worker.UploadWorker.KEY_MIME_TYPE to mimeType
+            try {
+                val workRequest = androidx.work.OneTimeWorkRequestBuilder<com.example.clipboardman.worker.UploadWorker>()
+                    .setInputData(
+                        androidx.work.workDataOf(
+                            com.example.clipboardman.worker.UploadWorker.KEY_URI_STRING to uri.toString(),
+                            com.example.clipboardman.worker.UploadWorker.KEY_MIME_TYPE to mimeType
+                        )
                     )
-                )
-                .setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-                .build()
-            
-            androidx.work.WorkManager.getInstance(this).enqueue(workRequest)
-            queuedCount++
-            Log.d(TAG, "Queued upload: $uri")
+                    .setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                    .build()
+                androidx.work.WorkManager.getInstance(this).enqueue(workRequest)
+                queuedCount++
+                Log.d(TAG, "Queued upload: ${fileNames[index]}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to queue ${fileNames[index]}", e)
+                failedNames.add(fileNames[index])
+            }
+        }
+
+        if (failedNames.isNotEmpty()) {
+            showError("加入队列失败：${failedNames.joinToString("、")}")
+            return
         }
 
         // 显示成功并立即关闭
         uploadState.value = UploadState.Success
-        val msg = if (queuedCount == 1) "已加入上传队列" else "$queuedCount 个文件已加入上传队列"
-        Toast.makeText(this, "$msg\n详情请查看通知栏", Toast.LENGTH_SHORT).show()
+        val successMsg = if (queuedCount == 1) {
+            "${fileNames[0]} 已加入上传队列"
+        } else {
+            "$queuedCount 个文件已加入上传队列"
+        }
+        Toast.makeText(this, "$successMsg\n详情请查看通知栏", Toast.LENGTH_SHORT).show()
         delay(800)
         finish()
     }

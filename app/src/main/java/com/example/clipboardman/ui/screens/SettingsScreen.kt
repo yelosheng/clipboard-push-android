@@ -1,6 +1,8 @@
 package com.example.clipboardman.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -8,23 +10,23 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Warning
+
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.example.clipboardman.data.model.ConnectionState
-import com.example.clipboardman.util.DebugLogger
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
+
 import androidx.compose.foundation.background
-import androidx.compose.ui.graphics.Color
-import androidx.compose.foundation.layout.fillMaxHeight
+import com.example.clipboardman.data.model.ConnectionState
+import com.example.clipboardman.data.model.PeerEntry
 import com.example.clipboardman.data.repository.SettingsRepository
 import com.example.clipboardman.ui.theme.*
 import androidx.compose.ui.text.withStyle
@@ -36,7 +38,6 @@ fun SettingsScreen(
     useHttps: Boolean,
     fileHandleMode: Int,
     autoConnect: Boolean,
-
     maxHistoryCount: Int,
     connectionState: ConnectionState,
     onConnectClick: () -> Unit,
@@ -48,7 +49,11 @@ fun SettingsScreen(
     onMaxHistoryCountChange: (Int) -> Unit,
     onScanClick: () -> Unit,
     onBackClick: () -> Unit,
-    peers: List<String> = emptyList()
+    peers: List<String> = emptyList(),
+    recentPeers: List<PeerEntry> = emptyList(),
+    activeRoomId: String? = null,
+    onPeerSelected: (PeerEntry) -> Unit = {},
+    onPeerRemoved: (PeerEntry) -> Unit = {}
 ) {
     Scaffold(
         topBar = {
@@ -164,11 +169,22 @@ fun SettingsScreen(
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
-                            Text(
-                                text = "👋 首次使用指南",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "首次使用指南",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
                             Spacer(modifier = Modifier.height(4.dp))
                             
                             val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
@@ -201,22 +217,35 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            // 最近连接
+            if (recentPeers.isNotEmpty()) {
+                SettingsSection(title = "最近连接") {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        recentPeers.forEach { entry ->
+                            RecentPeerRow(
+                                entry = entry,
+                                isActive = entry.room == activeRoomId,
+                                onSelect = { onPeerSelected(entry) },
+                                onRemove = { onPeerRemoved(entry) }
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
             // 文件处理方式
             SettingsSection(title = "文件处理方式") {
                 Column {
-                    RadioButtonOption(
-                        text = "自动保存到本地",
-                        description = "仅下载文件到本地，不修改剪贴板",
-                        selected = fileHandleMode == SettingsRepository.FILE_MODE_SAVE_LOCAL || fileHandleMode == SettingsRepository.FILE_MODE_COPY_REFERENCE, // Fallback for legacy setting
-                        onClick = { onFileHandleModeChange(SettingsRepository.FILE_MODE_SAVE_LOCAL) }
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    RadioButtonOption(
-                        text = "自动保存并复制到剪贴板",
-                        description = "下载图片到本地，并复制图片到剪贴板可直接粘贴",
-                        selected = fileHandleMode == SettingsRepository.FILE_MODE_SAVE_AND_COPY_IMAGE,
-                        onClick = { onFileHandleModeChange(SettingsRepository.FILE_MODE_SAVE_AND_COPY_IMAGE) }
-                    )
+                    SettingsRepository.FileHandleMode.entries.forEachIndexed { index, mode ->
+                        if (index > 0) Spacer(modifier = Modifier.height(8.dp))
+                        RadioButtonOption(
+                            text = mode.label,
+                            description = mode.description,
+                            selected = fileHandleMode == mode.value,
+                            onClick = { onFileHandleModeChange(mode.value) }
+                        )
+                    }
                 }
             }
 
@@ -318,7 +347,7 @@ fun SettingsScreen(
                                 style = MaterialTheme.typography.bodyLarge
                             )
                             Text(
-                                text = if (isIgnoringBattery) "✓ 已忽略（后台正常运行）" else "⚠ 未忽略（可能被系统杀死）",
+                                text = if (isIgnoringBattery) "已忽略（后台正常运行）" else "未忽略（可能被系统杀死）",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (isIgnoringBattery) Green500 else Orange500
                             )
@@ -334,143 +363,35 @@ fun SettingsScreen(
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
-                            containerColor = Orange500.copy(alpha = 0.1f)
+                            containerColor = MaterialTheme.colorScheme.errorContainer
                         ),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
-                            Text(
-                                text = "📱 国产手机用户注意",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = Orange500
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "国产手机用户注意",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = "小米/华为/OPPO/vivo 等手机可能还需要：\n" +
                                     "• 在系统设置中搜索「自启动管理」，允许本 APP 自启动\n" +
                                     "• 在「电池」设置中将 APP 设为「无限制」或允许后台运行",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onErrorContainer
                             )
-                        }
-                    }
-                }
-            }
-
-            SettingsSection(title = "开发日志 (Development Logs)") {
-                val logs by DebugLogger.logs.collectAsState()
-                
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(300.dp)
-                        .background(Color.Black.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
-                        .padding(8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Logs", style = MaterialTheme.typography.labelSmall)
-                        
-                        Row {
-                            val context = androidx.compose.ui.platform.LocalContext.current
-                            Button(
-                                onClick = {
-                                    val logText = logs.joinToString("\n")
-                                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                    val clip = android.content.ClipData.newPlainText("Debug Logs", logText)
-                                    clipboard.setPrimaryClip(clip)
-                                    android.widget.Toast.makeText(context, "Logs Copied!", android.widget.Toast.LENGTH_SHORT).show()
-                                },
-                                modifier = Modifier.height(30.dp),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                            ) {
-                                Text("Copy", style = MaterialTheme.typography.labelSmall)
-                            }
-                            
-                            Spacer(modifier = Modifier.width(8.dp))
-                            
-                            Button(
-                                onClick = { DebugLogger.clear() },
-                                modifier = Modifier.height(30.dp),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                            ) {
-                                Text("Clear", style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
-                    }
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        items(logs) { log ->
-                            Text(
-                                text = log,
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
-                                modifier = Modifier.padding(vertical = 1.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
-            SettingsSection(title = "Developer") {
-                var showLogs by remember { mutableStateOf(false) }
-                
-                Column {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showLogs = !showLogs }
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Debug Logs",
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Icon(
-                            imageVector = if (showLogs) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                            contentDescription = if (showLogs) "Collapse" else "Expand"
-                        )
-                    }
-
-                    if (showLogs) {
-                        val logs by com.example.clipboardman.util.DebugLogger.logs.collectAsState()
-                        
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(300.dp)
-                                .padding(top = 8.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                        ) {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(8.dp),
-                                reverseLayout = true 
-                            ) {
-                                items(logs) { log ->
-                                    androidx.compose.foundation.text.selection.SelectionContainer {
-                                        Text(
-                                            text = log,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                            modifier = Modifier.padding(vertical = 2.dp)
-                                        )
-                                    }
-                                    Divider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
-                                }
-                            }
-                        }
-                        
-                        // Clear Button
-                         Button(
-                            onClick = { com.example.clipboardman.util.DebugLogger.clear() },
-                            modifier = Modifier.align(Alignment.End).padding(top = 8.dp)
-                        ) {
-                            Text("Clear Logs")
                         }
                     }
                 }
@@ -505,6 +426,128 @@ fun SettingsSection(
                 content()
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+private fun RecentPeerRow(
+    entry: PeerEntry,
+    isActive: Boolean,
+    onSelect: () -> Unit,
+    onRemove: () -> Unit
+) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("删除记录") },
+            text = { Text("确认从历史中删除「${entry.displayName}」？") },
+            confirmButton = {
+                TextButton(onClick = { onRemove(); showDeleteDialog = false }) {
+                    Text("删除", color = Red500)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) { Text("取消") }
+            }
+        )
+    }
+
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (value == SwipeToDismissBoxValue.EndToStart) { onRemove(); true } else false
+        }
+    )
+
+    SwipeToDismissBox(
+        state = dismissState,
+        enableDismissFromStartToEnd = false,
+        backgroundContent = {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Red500, RoundedCornerShape(8.dp))
+                    .padding(end = 16.dp),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "删除",
+                    tint = Color.White
+                )
+            }
+        }
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = onSelect,
+                    onLongClick = { showDeleteDialog = true }
+                ),
+            shape = RoundedCornerShape(8.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (isActive)
+                    MaterialTheme.colorScheme.primaryContainer
+                else
+                    MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = entry.displayName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        if (isActive) {
+                            Surface(
+                                color = Green500,
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Text(
+                                    text = "当前",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        text = "上次: ${formatRelativeTime(entry.lastConnectedAt)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+private fun formatRelativeTime(epochMs: Long): String {
+    val diff = System.currentTimeMillis() - epochMs
+    return when {
+        diff < 60_000L -> "刚刚"
+        diff < 3_600_000L -> "${diff / 60_000} 分钟前"
+        diff < 86_400_000L -> "${diff / 3_600_000} 小时前"
+        else -> "${diff / 86_400_000} 天前"
     }
 }
 

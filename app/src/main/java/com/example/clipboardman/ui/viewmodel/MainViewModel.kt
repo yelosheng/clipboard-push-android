@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.clipboardman.data.model.ConnectionState
+import com.example.clipboardman.data.model.PeerEntry
 import com.example.clipboardman.data.model.PushMessage
 import com.example.clipboardman.data.repository.MessageRepository
 import com.example.clipboardman.data.repository.SettingsRepository
@@ -36,27 +37,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _messages = MutableStateFlow<List<PushMessage>>(emptyList())
     val messages: StateFlow<List<PushMessage>> = _messages.asStateFlow()
 
+    // 下载失败的消息 ID 集合（用于在消息卡片显示错误态和重试按钮）
+    private val _failedDownloadIds = MutableStateFlow<Set<String>>(emptySet())
+    val failedDownloadIds: StateFlow<Set<String>> = _failedDownloadIds.asStateFlow()
+
+    fun markDownloadFailed(messageId: String) {
+        _failedDownloadIds.update { it + messageId }
+    }
+
+    fun markDownloadRetrying(messageId: String) {
+        _failedDownloadIds.update { it - messageId }
+    }
+
 
 
     private fun loadMessagesFromStorage() {
         viewModelScope.launch {
-            // 使用 retry 机制防止读取错误导致 Flow 终止
             messageRepository.messagesFlow
-                .retry { e ->
-                    com.example.clipboardman.util.DebugLogger.log("MainViewModel", "CRITICAL: Error collecting messages, retrying... ${e.message}")
-                    kotlinx.coroutines.delay(1000) // 延迟1秒重试
-                    true // 始终重试
+                .retry(3) { _ ->
+                    kotlinx.coroutines.delay(1_000)
+                    true
+                }
+                .catch { e ->
+                    android.util.Log.e("MainViewModel", "messagesFlow failed after retries, clearing", e)
+                    viewModelScope.launch { messageRepository.clearMessages() }
+                    emit(emptyList())
                 }
                 .collect { storedMessages ->
                     val maxCount = maxHistoryCount.value
-                    
-                    com.example.clipboardman.util.DebugLogger.log(
-                        "ViewModel", 
-                        "Flow emit: received ${storedMessages.size} msgs, limit=$maxCount. First ID: ${storedMessages.firstOrNull()?.id}"
-                    )
-                    
-                    val result = storedMessages.take(maxCount)
-                    _messages.value = result
+                    _messages.value = storedMessages.take(maxCount)
                 }
         }
     }
@@ -76,6 +85,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val maxHistoryCount: StateFlow<Int> = settingsRepository.maxHistoryCountFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, 100)
+
+    val recentPeers: StateFlow<List<PeerEntry>> = settingsRepository.recentPeersFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val activeRoomId: StateFlow<String?> = settingsRepository.roomIdFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /**
      * 更新连接状态 (由 Service 调用)
@@ -180,15 +195,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun addOrUpdateRecentPeer(peer: PeerEntry) {
+        viewModelScope.launch {
+            settingsRepository.addOrUpdateRecentPeer(peer)
+        }
+    }
+
+    fun removeRecentPeer(room: String) {
+        viewModelScope.launch {
+            settingsRepository.removeRecentPeer(room)
+        }
+    }
+
+    fun updateRecentPeerDisplayName(room: String, name: String) {
+        viewModelScope.launch {
+            settingsRepository.updateRecentPeerDisplayName(room, name)
+        }
+    }
+
     init {
-        com.example.clipboardman.util.DebugLogger.log("ViewModel", "INIT - ViewModel Created! (Moved to bottom)")
         
         // Auto-Migration for legacy defaults
         viewModelScope.launch {
             try {
                 val currentAddress = settingsRepository.serverAddressFlow.first()
                 if (currentAddress.contains("localhost") || currentAddress.contains("5000")) {
-                    com.example.clipboardman.util.DebugLogger.log("ViewModel", "Auto-Migrating config: $currentAddress -> kxkl.tk:5055")
                     settingsRepository.saveServerAddress("kxkl.tk:5055")
                 }
             } catch (e: Exception) {
@@ -197,5 +228,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         // 启动时加载本地存储的消息
         loadMessagesFromStorage()
+
+        // 如果已有配对信息但 recent_peers 里没有该条目，自动补录（兼容旧版 APK 升级场景）
+        viewModelScope.launch {
+            try {
+                val roomId = settingsRepository.roomIdFlow.first() ?: return@launch
+                val key = settingsRepository.roomKeyFlow.first() ?: return@launch
+                if (roomId.isBlank() || key.isBlank()) return@launch
+                val existing = settingsRepository.recentPeersFlow.first()
+                if (existing.none { it.room == roomId }) {
+                    val server = settingsRepository.serverAddressFlow.first()
+                    val localIp = settingsRepository.peerLocalIpFlow.first()
+                    val localPort = settingsRepository.peerLocalPortFlow.first()
+                    settingsRepository.addOrUpdateRecentPeer(
+                        com.example.clipboardman.data.model.PeerEntry(
+                            room = roomId,
+                            server = server,
+                            key = key,
+                            localIp = localIp,
+                            localPort = localPort,
+                            displayName = "PC (${roomId.takeLast(8)})",
+                            lastConnectedAt = System.currentTimeMillis()
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MainViewModel", "Error in recent-peers migration", e)
+            }
+        }
     }
 }

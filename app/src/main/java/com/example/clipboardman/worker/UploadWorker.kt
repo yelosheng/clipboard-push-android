@@ -14,7 +14,6 @@ import com.example.clipboardman.data.repository.SettingsRepository
 import com.example.clipboardman.util.CryptoManager
 import com.example.clipboardman.util.FileUtil
 import com.example.clipboardman.util.NotificationHelper
-import com.example.clipboardman.util.DebugLogger
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.TimeoutCancellationException
@@ -30,6 +29,7 @@ class UploadWorker(
         const val KEY_URI_STRING = "key_uri_string"
         const val KEY_MIME_TYPE = "key_mime_type"
         private const val TAG = "UploadWorker"
+        private const val LAN_ACK_TIMEOUT_MS = 8_000L
     }
 
     private val settingsRepository = SettingsRepository(context)
@@ -86,7 +86,6 @@ class UploadWorker(
             // Check if we have network info (implies LAN capability)
             val localNetwork = com.example.clipboardman.util.NetworkUtil.getLocalNetworkInfo(applicationContext)
             
-            DebugLogger.log(TAG, "Checking LAN capability. LocalNetwork: ${localNetwork?.ip}")
             
             if (localNetwork != null) {
                  setForeground(createForegroundInfo(notificationId, "Uploading...", "Announcing to LAN..."))
@@ -104,12 +103,10 @@ class UploadWorker(
                  // Start Serving (Encrypted File)
                  var myPort = com.example.clipboardman.service.LocalFileServer.getPort()
                  if (myPort <= 0) {
-                     DebugLogger.log(TAG, "LocalFileServer not running (port=$myPort). Attempting to start...")
                      com.example.clipboardman.service.LocalFileServer.startServer()
                      myPort = com.example.clipboardman.service.LocalFileServer.getPort()
                  }
                  
-                 DebugLogger.log(TAG, "LocalFileServer Port: $myPort")
 
                  if (myPort > 0) {
                      com.example.clipboardman.service.LocalFileServer.serveFile(transferId, tempEncryptedFile!!, "application/octet-stream")
@@ -124,12 +121,11 @@ class UploadWorker(
                          encryptedSize, senderId
                      )
                      
-                     DebugLogger.log(TAG, "Announced V4: $localUrl (TR=$transferId)")
                      
                      // Wait for ACK
                      var lanSuccess = false
                      try {
-                         withTimeout(15000) { // 15s Timeout
+                         withTimeout(LAN_ACK_TIMEOUT_MS) { // LAN ACK timeout
                              com.example.clipboardman.data.repository.RelayRepository.events.collect { event ->
                                  if (event is com.example.clipboardman.data.repository.RelayEvent.FileSyncCompleted) {
                                       // Check if it matches our transfer
@@ -137,14 +133,12 @@ class UploadWorker(
                                       val reason = event.data.optString("method", "lan")
                                       if (receivedTransferId == transferId) {
                                           lanSuccess = true
-                                          DebugLogger.log(TAG, "RX file_sync_completed: TR=$transferId method=$reason")
                                           throw java.util.concurrent.CancellationException("Completed") // Break collect
                                       }
                                  } else if (event is com.example.clipboardman.data.repository.RelayEvent.FileNeedRelay) {
                                       val receivedTransferId = event.data.optString("transfer_id")
                                       val reason = event.data.optString("reason")
                                       if (receivedTransferId == transferId) {
-                                          DebugLogger.log(TAG, "RX file_need_relay: TR=$transferId Reason: $reason. Fallback.")
                                           lanSuccess = false
                                           throw java.util.concurrent.CancellationException("NeedRelay") // Break collect
                                       }
@@ -154,7 +148,6 @@ class UploadWorker(
                                       val reason = event.data.optString("reason", "")
                                       
                                       if (cmdTransferId == transferId) {
-                                          DebugLogger.log(TAG, "RX transfer_command: action=$action reason=$reason TR=$transferId")
                                           if (action == "finish") {
                                               lanSuccess = true
                                               throw java.util.concurrent.CancellationException("Completed")
@@ -167,7 +160,6 @@ class UploadWorker(
                              }
                          }
                      } catch (e: TimeoutCancellationException) {
-                         DebugLogger.log(TAG, "LAN ACK Timeout, falling back...")
                      } catch (e: java.util.concurrent.CancellationException) {
                          // Expected flow for success
                      }
@@ -183,10 +175,8 @@ class UploadWorker(
                         return Result.success()
                      }
                  } else {
-                     DebugLogger.log(TAG, "Failed to start LocalFileServer or Port 0.")
                  }
             } else {
-                DebugLogger.log(TAG, "No Local Network found. Skipping LAN.")
             }
             
             // If we are here, LAN failed or skipped. Fallback to Cloud.
@@ -217,7 +207,6 @@ class UploadWorker(
             val encryptedSize = tempEncryptedFile!!.length()
 
             // 3. Get Auth
-            DebugLogger.log(TAG, "Fallback Upload Start: TR=$transferId")
             setForeground(createForegroundInfo(notificationId, "Uploading...", "Requesting Auth..."))
             val authResult = apiService.getUploadAuth(fileName, encryptedSize, "application/octet-stream")
             val auth = authResult.getOrThrow()
@@ -226,7 +215,6 @@ class UploadWorker(
             setForeground(createForegroundInfo(notificationId, "Uploading...", "Sending to Cloud..."))
             apiService.uploadToR2(auth.upload_url, tempEncryptedFile, "application/octet-stream")
             
-            DebugLogger.log(TAG, "Fallback Upload End: TR=$transferId URL=${auth.download_url}")
 
             // 5. Notify Relay
             setForeground(createForegroundInfo(notificationId, "Uploading...", "Finalizing..."))

@@ -13,7 +13,6 @@ import com.example.clipboardman.ClipboardManApp
 import com.example.clipboardman.data.repository.MessageRepository
 import com.example.clipboardman.data.repository.SettingsRepository
 import com.example.clipboardman.util.CryptoManager
-import com.example.clipboardman.util.DebugLogger
 import com.example.clipboardman.util.FileUtil
 import com.example.clipboardman.util.NotificationHelper
 import kotlinx.coroutines.Dispatchers
@@ -54,7 +53,6 @@ class DownloadWorker(
         val isAnnounce = inputData.getBoolean(KEY_IS_ANNOUNCE, false)
         val transferId = inputData.getString(KEY_TRANSFER_ID)
         
-        DebugLogger.log("DL", "Start: $fileName msgId=$messageId announce=$isAnnounce transferId=$transferId")
         
         // --- ANNOUNCE MODE (v2) ---
         if (isAnnounce) {
@@ -67,19 +65,15 @@ class DownloadWorker(
                 val roomId = settingsRepository.roomIdFlow.first()
                 val tempLocal = File.createTempFile("loc_v2_", ".tmp", applicationContext.cacheDir)
                 
-                DebugLogger.log("DL", "v2 Attempt: $fileUrl")
                 downloadToFile(fileUrl, tempLocal, roomId)
                 
                 if (tempLocal.length() > 0) {
-                     DebugLogger.log("DL", "v2 Local Success")
                      processDownloadedFile(tempLocal, fileName, mimeType, messageId, transferId)
                 } else {
                      tempLocal.delete()
-                     DebugLogger.log("DL", "v2 Local Empty")
                      Result.failure()
                 }
             } catch (e: Exception) {
-                DebugLogger.log("DL", "v2 Local Failed: ${e.message}")
                 Result.failure()
             }
         }
@@ -111,7 +105,6 @@ class DownloadWorker(
             // 1. Try Local Download (Plaintext)
             if (!peerIp.isNullOrBlank() && peerPort != null && peerPort > 0) {
                 val localUrl = "http://$peerIp:$peerPort/files/$fileName"
-                DebugLogger.log("DL", "Trying Local: $localUrl")
                 try {
                     val tempLocal = File.createTempFile("loc_", ".tmp", applicationContext.cacheDir)
                     // Short timeout for local check? OkHttpClient defaults are 10s.
@@ -120,27 +113,22 @@ class DownloadWorker(
                     if (tempLocal.length() > 0) {
                         sourceFile = tempLocal
                         isLocalTransfer = true
-                        DebugLogger.log("DL", "Local Download Success: ${tempLocal.length()} bytes")
                     } else {
                          tempLocal.delete()
                     }
                 } catch (e: Exception) {
-                    DebugLogger.log("DL", "Local Download Failed: ${e.message}")
                     Log.w(TAG, "Local download failed, falling back to cloud", e)
                 }
             }
 
             // 2. Fallback to Cloud Download (Encrypted)
             if (sourceFile == null) {
-                DebugLogger.log("DL", "Using Cloud Download: $fullUrl")
                 val tempEncryptedFile = File.createTempFile("enc_", ".tmp", applicationContext.cacheDir)
                 downloadToFile(fullUrl, tempEncryptedFile)
-                DebugLogger.log("DL", "Cloud Downloaded ${tempEncryptedFile.length()} bytes")
 
                 // Decrypt
                 val roomKey = settingsRepository.roomKeyFlow.first()
                 if (roomKey.isNullOrEmpty()) {
-                    DebugLogger.log("DL", "ERROR: No room key!")
                     return Result.failure()
                 }
 
@@ -159,14 +147,12 @@ class DownloadWorker(
 
             // 3. Save to Public Directory
             if (sourceFile == null || !sourceFile.exists()) {
-                 DebugLogger.log("DL", "Critical Error: Source file missing")
                  return Result.failure()
             }
             
             processDownloadedFile(sourceFile, fileName, mimeType, messageId, transferId)
 
         } catch (e: Exception) {
-            DebugLogger.log("DL", "ERROR: ${e.message}")
             Log.e(TAG, "Download failed", e)
             NotificationHelper.showPushNotification(
                 applicationContext,
@@ -179,6 +165,53 @@ class DownloadWorker(
 
     private suspend fun processDownloadedFile(sourceFile: File, fileName: String, mimeType: String, messageId: String?, transferId: String?): Result {
             Log.d(TAG, "Saving to public directory...")
+            
+            val fileHandleMode = settingsRepository.fileHandleModeFlow.first()
+            Log.d(TAG, "File handle mode: $fileHandleMode")
+
+            // --- Clipboard-Only Mode: do NOT save to public Downloads ---
+            if (fileHandleMode == SettingsRepository.FILE_MODE_CLIPBOARD_ONLY) {
+                val clipboardHelper = com.example.clipboardman.service.ClipboardHelper(applicationContext)
+                try {
+                    if (mimeType.startsWith("image")) {
+                        // Save to a content-accessible temp location so ClipboardHelper can read it
+                        val uniqueName = FileUtil.generateUniqueFileName(fileName)
+                        val savedUri = FileUtil.saveToPublicDownloads(applicationContext, sourceFile, uniqueName, mimeType)
+                        sourceFile.delete()
+                        if (savedUri != null) {
+                            clipboardHelper.copyImageUri(savedUri, mimeType)
+                            Log.d(TAG, "Clipboard-only: copied image URI to clipboard")
+                            // Update message record if needed
+                            if (messageId != null) {
+                                messageRepository.updateMessageLocalPath(messageId, savedUri.toString())
+                            }
+                            NotificationHelper.showPushNotification(
+                                applicationContext, "已复制到剪贴板", fileName
+                            )
+                            return Result.success(workDataOf("uri" to savedUri.toString(), KEY_TRANSFER_ID to (transferId ?: "")))
+                        } else {
+                            return Result.failure()
+                        }
+                    } else {
+                        // 非图片: 复制文件路径到剪贴板，不保存到 Downloads
+                        val clipboard = applicationContext.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        val clip = android.content.ClipData.newPlainText("File", sourceFile.absolutePath)
+                        clipboard.setPrimaryClip(clip)
+                        Log.d(TAG, "Clipboard-only: copied file path to clipboard")
+                        sourceFile.delete()
+                        NotificationHelper.showPushNotification(
+                            applicationContext, "已复制到剪贴板", fileName
+                        )
+                        return Result.success(workDataOf(KEY_TRANSFER_ID to (transferId ?: "")))
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Clipboard-only mode failed", e)
+                    sourceFile.delete()
+                    return Result.failure()
+                }
+            }
+
+            // --- Normal Modes: save to public Downloads first ---
             val uniqueName = FileUtil.generateUniqueFileName(fileName)
             val savedUri = FileUtil.saveToPublicDownloads(
                 applicationContext, 
@@ -191,10 +224,7 @@ class DownloadWorker(
             sourceFile.delete()
 
             if (savedUri != null) {
-                // 4. Check file handling mode and copy to clipboard if needed
-                val fileHandleMode = settingsRepository.fileHandleModeFlow.first()
-                Log.d(TAG, "File handle mode: $fileHandleMode")
-                
+                // Check file handling mode and copy to clipboard if needed
                 val clipboardHelper = com.example.clipboardman.service.ClipboardHelper(applicationContext)
                 
                 // Construct absolute path for clipboard
@@ -237,12 +267,9 @@ class DownloadWorker(
                 
                 // Update message with local path
                 if (messageId != null) {
-                    DebugLogger.log("DL", "Updating localPath for $messageId")
                     messageRepository.updateMessageLocalPath(messageId, savedUri.toString())
-                    DebugLogger.log("DL", "✓ Done updating localPath")
                     Log.d(TAG, "Updated message $messageId with local path: $savedUri")
                 } else {
-                    DebugLogger.log("DL", "WARN: No messageId to update!")
                 }
                 
                 // Success notification
@@ -251,7 +278,6 @@ class DownloadWorker(
                     "Download Complete",
                     "Saved to Downloads: $uniqueName"
                 )
-                DebugLogger.log("DL", "✓ Success: $uniqueName")
                 return Result.success(
                     workDataOf(
                         "uri" to savedUri.toString(),
@@ -259,7 +285,6 @@ class DownloadWorker(
                     )
                 )
             } else {
-                DebugLogger.log("DL", "ERROR: saveToPublicDownloads returned null")
                 Log.e(TAG, "Failed to save to public downloads")
                 return Result.failure()
             }

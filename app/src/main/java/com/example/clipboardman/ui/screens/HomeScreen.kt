@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Refresh
+import com.example.clipboardman.util.formatFileSize
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -47,6 +48,14 @@ import androidx.compose.foundation.gestures.Orientation
 import kotlin.math.roundToInt
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import com.example.clipboardman.data.model.ConnectionState
 import com.example.clipboardman.data.model.PushMessage
 import com.example.clipboardman.ui.theme.*
@@ -66,7 +75,9 @@ fun HomeScreen(
     onDeleteMessages: (Set<String>) -> Unit = {},
     onPushClipboard: () -> Unit,
     onReconnectClick: () -> Unit = {},
-    peers: List<String> = emptyList()
+    peers: List<String> = emptyList(),
+    failedDownloadIds: Set<String> = emptySet(),
+    onRetryDownload: (PushMessage) -> Unit = {}
 ) {
     // 构建基础URL
     val baseUrl = remember(serverAddress, useHttps) {
@@ -328,6 +339,7 @@ fun HomeScreen(
                             baseUrl = baseUrl,
                             isSelectionMode = isSelectionMode,
                             isSelected = selectedMessageIds.contains(message.safeId),
+                            isFailed = message.safeId in failedDownloadIds,
                             onClick = {
                                 if (isSelectionMode) {
                                     // 选择模式下切换选中状态
@@ -348,7 +360,8 @@ fun HomeScreen(
                             },
                             onDelete = {
                                 onDeleteMessages(setOf(message.safeId))
-                            }
+                            },
+                            onRetryDownload = onRetryDownload
                         )
                     }
                 }
@@ -364,9 +377,11 @@ fun SwipeableMessageItem(
     baseUrl: String,
     isSelectionMode: Boolean = false,
     isSelected: Boolean = false,
+    isFailed: Boolean = false,
     onClick: () -> Unit,
     onLongClick: () -> Unit = {},
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onRetryDownload: (PushMessage) -> Unit = {}
 ) {
     if (isSelectionMode) {
         MessageItem(
@@ -374,8 +389,10 @@ fun SwipeableMessageItem(
             baseUrl = baseUrl,
             isSelectionMode = isSelectionMode,
             isSelected = isSelected,
+            isFailed = isFailed,
             onClick = onClick,
-            onLongClick = onLongClick
+            onLongClick = onLongClick,
+            onRetryDownload = onRetryDownload
         )
         return
     }
@@ -472,6 +489,7 @@ fun SwipeableMessageItem(
                 baseUrl = baseUrl,
                 isSelectionMode = isSelectionMode,
                 isSelected = isSelected,
+                isFailed = isFailed,
                 onClick = {
                     if (displayOffset < -10f) {
                         // 如果已展开，点击则收回
@@ -483,7 +501,8 @@ fun SwipeableMessageItem(
                         onClick()
                     }
                 },
-                onLongClick = onLongClick
+                onLongClick = onLongClick,
+                onRetryDownload = onRetryDownload
             )
         }
     }
@@ -496,8 +515,10 @@ fun MessageItem(
     baseUrl: String,
     isSelectionMode: Boolean = false,
     isSelected: Boolean = false,
+    isFailed: Boolean = false,
     onClick: () -> Unit,
-    onLongClick: () -> Unit = {}
+    onLongClick: () -> Unit = {},
+    onRetryDownload: (PushMessage) -> Unit = {}
 ) {
     val isImage = message.type == PushMessage.TYPE_IMAGE
 
@@ -620,26 +641,64 @@ fun MessageItem(
                             .build(),
                         contentDescription = message.fileName,
                         modifier = Modifier
-                            .heightIn(max = 120.dp)
+                            .fillMaxWidth()
+                            .height(120.dp)
                             .clip(RoundedCornerShape(8.dp)),
-                        contentScale = ContentScale.Fit
+                        contentScale = ContentScale.Crop
                     )
-                } else {
-                    // 尚未下载，显示占位符
+                } else if (isFailed) {
+                    // 下载失败：显示错误态 + 重试按钮
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(80.dp)
+                            .height(120.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                            .background(MaterialTheme.colorScheme.errorContainer),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "图片下载中...",
-                            color = TextSecondary,
-                            fontSize = 12.sp
-                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            TextButton(onClick = { onRetryDownload(message) }) {
+                                Text(
+                                    text = "下载失败 · 点击重试",
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                        }
                     }
+                } else {
+                    // 下载中：Shimmer 骨架屏（Compose 内置实现，无需外部库）
+                    val infiniteTransition = rememberInfiniteTransition(label = "shimmer")
+                    val shimmerOffset by infiniteTransition.animateFloat(
+                        initialValue = 0f,
+                        targetValue = 1000f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
+                            repeatMode = RepeatMode.Restart
+                        ),
+                        label = "shimmerOffset"
+                    )
+                    val shimmerBrush = Brush.linearGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.surfaceVariant,
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                            MaterialTheme.colorScheme.surfaceVariant,
+                        ),
+                        start = Offset(shimmerOffset - 300f, 0f),
+                        end = Offset(shimmerOffset, 0f)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(shimmerBrush)
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -689,11 +748,3 @@ private fun formatTimestamp(timestamp: String?): String {
     }
 }
 
-private fun formatFileSize(size: Long?): String {
-    if (size == null || size <= 0) return ""
-    return when {
-        size < 1024 -> "${size} B"
-        size < 1024 * 1024 -> "${size / 1024} KB"
-        else -> "${size / (1024 * 1024)} MB"
-    }
-}

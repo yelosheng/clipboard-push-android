@@ -1,7 +1,6 @@
 package com.example.clipboardman.data.repository
 
 import android.util.Log
-import com.example.clipboardman.util.DebugLogger
 import io.socket.client.IO
 import io.socket.client.Socket
 import kotlinx.coroutines.channels.BufferOverflow
@@ -16,6 +15,7 @@ object RelayRepository {
     
     private var socket: Socket? = null
     private var currentClientId: String = ""
+    var networkEpoch: Int = 0
     
     // Events exposed to Service / UI
     private val _events = MutableSharedFlow<RelayEvent>(
@@ -49,13 +49,11 @@ object RelayRepository {
             opts.timeout = 10000 // Reduce timeout to fail fast
             
             Log.d("RelayRepository", "Socket Connecting: $serverUrl")
-            DebugLogger.log("RelayRepository", "Socket Connecting to: $serverUrl")
             
             socket = IO.socket(serverUrl, opts)
             
             socket?.on(Socket.EVENT_CONNECT) {
                 Log.d("RelayRepository", "Connected to Relay")
-                DebugLogger.log("RelayRepository", "Socket Connected (Ref: ${socket?.id()})")
                 _connectionStatus.tryEmit(true)
                 // Join Room with V4 PeerMeta
                 try {
@@ -81,38 +79,31 @@ object RelayRepository {
                         if (model.startsWith(manufacturer, ignoreCase = true)) model else "$manufacturer $model"
                     }
                     joinData.put("device_name", friendlyName)
-                    DebugLogger.log(TAG, "Device name: '$friendlyName' (raw: '$userDeviceName', model: '${android.os.Build.MODEL}')")
                     joinData.put("joined_at_ms", System.currentTimeMillis())
                     
                     val netObj = JSONObject()
                     netObj.put("private_ip", networkInfo?.ip ?: "0.0.0.0")
                     netObj.put("cidr", networkInfo?.cidr ?: "0.0.0.0/0")
-                    netObj.put("network_epoch", 0) // TODO: track changes
+                    netObj.put("network_epoch", networkEpoch)
                     joinData.put("network", netObj)
                     
                     // App does not have 'probe' section
                     
                     socket?.emit("join", joinData)
-                    DebugLogger.log(TAG, "V4 Join payload: $joinData")
                 } catch (e: Exception) {
                     Log.e("RelayRepository", "Failed to join room", e)
-                    DebugLogger.log("RelayRepository", "Failed to join room: ${e.message}")
                 }
             }?.on(Socket.EVENT_DISCONNECT) { args ->
                 val reason = if (args.isNotEmpty()) args[0].toString() else "Unknown"
                 Log.d("RelayRepository", "Disconnected from Relay: $reason")
-                DebugLogger.log("RelayRepository", "Socket Disconnected: $reason")
                 _connectionStatus.tryEmit(false)
             }?.on(Socket.EVENT_CONNECT_ERROR) { args ->
                 val error = if (args.isNotEmpty()) args[0].toString() else "Unknown"
                 Log.e("RelayRepository", "Connection Error: $error")
-                DebugLogger.log("RelayRepository", "Socket Error: $error")
                 _connectionStatus.tryEmit(false)
             }?.on("reconnect_attempt") { args ->
                  val attempt = if (args.isNotEmpty()) args[0].toString() else "?"
-                 DebugLogger.log("RelayRepository", "Reconnecting... (Attempt $attempt)")
             }?.on("reconnect") {
-                 DebugLogger.log("RelayRepository", "Reconnected!")
             }
             
             socket?.on("clipboard_sync") { args ->
@@ -250,7 +241,6 @@ object RelayRepository {
                              }
                          }
                          
-                         DebugLogger.log(TAG, "Room state changed: ${peerNames.size} active peers: $peerNames")
                          _peerCount.tryEmit(peerNames.size)
                          _peers.tryEmit(peerNames)
                          
@@ -266,7 +256,6 @@ object RelayRepository {
                  try {
                      val data = if (args.isNotEmpty() && args[0] is JSONObject) args[0] as JSONObject else JSONObject()
                      Log.w("Relay", "Received peer_evicted event")
-                     DebugLogger.log("Relay", "Received peer_evicted! You have been removed from the room.")
                      isEvicted = true
                      _events.tryEmit(RelayEvent.PeerEvicted(data))
                  } catch (e: Exception) {
@@ -291,7 +280,6 @@ object RelayRepository {
                                 }
                             }
                         }
-                        DebugLogger.log(TAG, "room_stats: filtered peers=$clientList (self=$currentClientId)")
                         _peerCount.tryEmit(clientList.size)
                         _peers.tryEmit(clientList)
                     }
