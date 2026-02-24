@@ -62,8 +62,23 @@ class ClipboardService : Service() {
     fun getPeers(): List<String> = currentPeers
 
     fun reconnect() {
-        // Force reload config and reconnect
-        startService()
+        startJob?.cancel()
+        startJob = serviceScope.launch {
+            serverAddress = settingsRepository.serverAddressFlow.first()
+            useHttps = settingsRepository.useHttpsFlow.first()
+            roomId = settingsRepository.roomIdFlow.first()
+            val key = settingsRepository.roomKeyFlow.first()
+            cryptoManager = if (!key.isNullOrBlank()) {
+                try { com.example.clipboardman.util.CryptoManager(key) }
+                catch (e: Exception) { Log.e(TAG, "CryptoManager init failed", e); null }
+            } else {
+                Log.w(TAG, "Room key missing after peer switch, encryption disabled")
+                null
+            }
+            val baseUrl = settingsRepository.getHttpBaseUrl(serverAddress, useHttps)
+            apiService = ApiService(baseUrl)
+            connectRelay()
+        }
     }
 
     private var cryptoManager: com.example.clipboardman.util.CryptoManager? = null
