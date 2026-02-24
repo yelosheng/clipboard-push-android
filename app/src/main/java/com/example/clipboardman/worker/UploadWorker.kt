@@ -29,6 +29,7 @@ class UploadWorker(
         const val KEY_URI_STRING = "key_uri_string"
         const val KEY_MIME_TYPE = "key_mime_type"
         private const val TAG = "UploadWorker"
+        private const val LAN_ACK_TIMEOUT_MS = 8_000L
     }
 
     private val settingsRepository = SettingsRepository(context)
@@ -124,7 +125,7 @@ class UploadWorker(
                      // Wait for ACK
                      var lanSuccess = false
                      try {
-                         withTimeout(15000) { // 15s Timeout
+                         withTimeout(LAN_ACK_TIMEOUT_MS) { // LAN ACK timeout
                              com.example.clipboardman.data.repository.RelayRepository.events.collect { event ->
                                  if (event is com.example.clipboardman.data.repository.RelayEvent.FileSyncCompleted) {
                                       // Check if it matches our transfer
