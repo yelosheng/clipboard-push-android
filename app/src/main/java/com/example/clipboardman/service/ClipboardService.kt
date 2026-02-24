@@ -410,6 +410,7 @@ class ClipboardService : Service() {
             }
             
             Log.d(TAG, "Connecting Relay: $wsUrl Room: $id Client: $clientId")
+            relayRepository.networkEpoch = networkEpoch
             relayRepository.connect(this, wsUrl, id, clientId)
         }
     }

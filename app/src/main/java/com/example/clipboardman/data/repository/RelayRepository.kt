@@ -15,6 +15,7 @@ object RelayRepository {
     
     private var socket: Socket? = null
     private var currentClientId: String = ""
+    var networkEpoch: Int = 0
     
     // Events exposed to Service / UI
     private val _events = MutableSharedFlow<RelayEvent>(
@@ -83,7 +84,7 @@ object RelayRepository {
                     val netObj = JSONObject()
                     netObj.put("private_ip", networkInfo?.ip ?: "0.0.0.0")
                     netObj.put("cidr", networkInfo?.cidr ?: "0.0.0.0/0")
-                    netObj.put("network_epoch", 0) // TODO: track changes
+                    netObj.put("network_epoch", networkEpoch)
                     joinData.put("network", netObj)
                     
                     // App does not have 'probe' section
