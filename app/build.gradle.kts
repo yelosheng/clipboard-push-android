@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -83,6 +84,10 @@ dependencies {
 
     // Socket.IO
     implementation("io.socket:socket.io-client:2.1.0")
+
+    // Firebase (FCM dual-channel push)
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-messaging-ktx")
 
     // QR Code Scanning (ZXing)
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")

@@ -40,15 +40,24 @@ This is an **Android clipboard synchronization app** (Kotlin + Jetpack Compose, 
 
 ### Communication Architecture
 
-The app supports two sync modes:
+The app supports three sync modes:
 
 1. **Relay Server (Socket.IO)**: Clipboard text/files are exchanged through a Python relay server. The Android client connects via Socket.IO using `RelayRepository`. Text is AES-GCM encrypted before sending.
 
 2. **LAN Direct Transfer ("Announce & Pull")**: For files, the PC announces availability via `file_available` signal (see `LAN_SIGNAL_PROTOCOL.md`). Android attempts a direct LAN HTTP download; if it fails, it sends `file_need_relay` to trigger a cloud upload fallback. See `LAN_SYNC_DEV_PLAN.md` for the full state machine.
 
+3. **FCM Dual-Channel (optional)**: When GMS is available, the relay server additionally sends an FCM data message for every `clipboard_push` / `file_push` event. This allows the Android app to receive content even when killed (no foreground service needed). `FcmService` handles background delivery; deduplication is guaranteed by `addMessageAtomic()`. FCM gracefully degrades on devices without GMS — Socket.IO remains the primary channel.
+
+### FCM Setup Requirements
+
+- Firebase project + `google-services.json` placed in `app/` (obtained from Firebase Console)
+- Relay server needs `FIREBASE_CREDENTIALS_PATH` env var pointing to a service-account JSON
+- `firebase-admin` Python package added to relay server `requirements.txt`
+- Android: `com.google.firebase:firebase-messaging-ktx` dependency + `google-services` Gradle plugin
+
 ### Socket.IO Protocol
 
-- Join event sends `room`, `client_id`, `client_type`, `device_name`, `network info`, `protocol_version: "4.0"`
+- Join event sends `room`, `client_id`, `client_type`, `device_name`, `network info`, `protocol_version: "4.0"`, `fcm_token` (optional, only when GMS available)
 - Canonical LAN file events: `file_available` → `file_sync_completed` or `file_need_relay`
 - Legacy aliases exist (`file_announcement`, `file_ack`, `file_request_relay`) — **receive-only** during transition
 - V4 additions: `lan_probe_request` / `peer_evicted` / `room_state_changed` / `transfer_command` / `peer_network_update`
@@ -83,6 +92,7 @@ ClipboardService (foreground service — owns the connection lifecycle)
 | `ui/viewmodel/MainViewModel.kt` | UI state (connection, peers, messages) as `StateFlow` |
 | `util/CryptoManager.kt` | AES-GCM encrypt/decrypt (AES-256, 12-byte IV, 128-bit tag); `encryptFile`/`decryptFile` for streams |
 | `service/LocalFileServer.kt` | NanoHTTPD server for LAN file serving |
+| `service/FcmService.kt` | Firebase Cloud Messaging receiver; handles background clipboard/file delivery when Socket.IO is disconnected |
 | `share/ShareReceiverActivity.kt` | Handles incoming `ACTION_SEND` intents (text, image, file) |
 
 ### RelayEvent Sealed Class
@@ -131,3 +141,7 @@ Defined in `ClipboardManApp.kt`:
 ### Service Coroutine Scope
 
 `ClipboardService` uses `CoroutineScope(Dispatchers.IO + SupervisorJob() + exceptionHandler)` with a `CoroutineExceptionHandler` to prevent uncaught exceptions from crashing the service. Network callbacks use a 1-second debounce delay before reconnecting.
+
+### FCM Token Lifecycle
+
+`FcmTokenHolder` (singleton object in `FcmService.kt`) holds the current FCM token in memory. `ClipboardManApp.onCreate()` fetches the token from Firebase asynchronously and stores it there. `RelayRepository` reads `FcmTokenHolder.token` at join time and includes it in the join payload as `fcm_token` (omitted when null). The relay server stores the token in `CLIENT_FCM_TOKENS[client_id]` and uses it to send parallel FCM messages alongside Socket.IO broadcasts.
