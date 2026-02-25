@@ -7,6 +7,7 @@ local.properties
 *.aab
 *.ap_
 *.dex
+app/google-services.json
 
 # Build outputs
 build/
@@ -70,4 +71,3 @@ cpp_client/logs/
 lib/catch
 lib/rapidjson
 lib/websocketpp
->>>>>>> feature/productization-mvp
