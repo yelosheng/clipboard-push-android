@@ -587,6 +587,7 @@ class ClipboardService : Service() {
 
             // 观察云端下载结果，失败时通知 UI
             val capturedMessageId = messageId
+            val capturedFileName = fileName
             val workId = workRequest.id
             serviceScope.launch {
                 WorkManager.getInstance(applicationContext)
@@ -594,9 +595,11 @@ class ClipboardService : Service() {
                     .collect { workInfo ->
                         if (workInfo?.state == androidx.work.WorkInfo.State.FAILED) {
                             Log.w(TAG, "Cloud download failed for message $capturedMessageId")
+                            pendingFiles.remove(capturedFileName)
                             onMessageDownloadFailed?.invoke(capturedMessageId)
                             this.cancel()
                         } else if (workInfo?.state?.isFinished == true) {
+                            pendingFiles.remove(capturedFileName)
                             this.cancel()
                         }
                     }
@@ -674,14 +677,12 @@ class ClipboardService : Service() {
                         androidx.work.WorkInfo.State.SUCCEEDED -> {
                             val outTransferId = workInfo.outputData.getString(DownloadWorker.KEY_TRANSFER_ID) ?: transferId
                             relayRepository.sendFileSyncCompleted(roomId ?: "", fileId, outTransferId)
-                            // Remove from pendingFiles eventually? 
-                            // Keep it for a bit in case PC still sends fallback?
-                            // For simplicity, we can leave it or remove it delayed. 
-                            // Let's leave it for this session to prevent dupes.
-                            this.cancel() 
+                            pendingFiles.remove(fileName)
+                            this.cancel()
                         }
                         androidx.work.WorkInfo.State.FAILED, androidx.work.WorkInfo.State.CANCELLED -> {
                             relayRepository.sendFileNeedRelay(roomId ?: "", fileId, transferId, "worker_failed")
+                            pendingFiles.remove(fileName)
                             onMessageDownloadFailed?.invoke(messageId)
                             this.cancel()
                         }

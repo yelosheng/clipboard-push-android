@@ -229,7 +229,7 @@ class DownloadWorker(
                 
                 // Construct absolute path for clipboard
                 val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-                val appDir = File(downloadsDir, "ClipboardMan")
+                val appDir = File(downloadsDir, "ClipboardPush")
                 val savedFile = File(appDir, uniqueName)
                 val absolutePath = savedFile.absolutePath
 

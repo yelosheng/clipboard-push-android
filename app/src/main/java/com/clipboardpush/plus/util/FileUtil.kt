@@ -18,7 +18,7 @@ import java.util.*
 object FileUtil {
 
     private const val TAG = "FileUtil"
-    private const val APP_FOLDER = "ClipboardMan"
+    private const val APP_FOLDER = "ClipboardPush"
 
     /**
      * 获取下载目录
