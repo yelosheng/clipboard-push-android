@@ -12,15 +12,12 @@ class ClipboardManApp : Application() {
     companion object {
         // 前台服务通知渠道（静默，低优先级）
         const val NOTIFICATION_CHANNEL_SERVICE = "clipboard_service"
-        const val NOTIFICATION_CHANNEL_SERVICE_NAME = "剪贴板服务"
 
         // 推送消息通知渠道（有声音，高优先级）
         const val NOTIFICATION_CHANNEL_PUSH = "clipboard_push"
-        const val NOTIFICATION_CHANNEL_PUSH_NAME = "消息推送"
 
         // 兼容旧代码
         const val NOTIFICATION_CHANNEL_ID = NOTIFICATION_CHANNEL_SERVICE
-        const val NOTIFICATION_CHANNEL_NAME = NOTIFICATION_CHANNEL_SERVICE_NAME
     }
 
     override fun onCreate() {
@@ -35,10 +32,10 @@ class ClipboardManApp : Application() {
             // 前台服务通知渠道（静默）
             val serviceChannel = NotificationChannel(
                 NOTIFICATION_CHANNEL_SERVICE,
-                NOTIFICATION_CHANNEL_SERVICE_NAME,
+                getString(R.string.notif_channel_service_name),
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "保持剪贴板推送服务运行"
+                description = getString(R.string.notif_channel_service_desc)
                 setShowBadge(false)
             }
             notificationManager.createNotificationChannel(serviceChannel)
@@ -46,10 +43,10 @@ class ClipboardManApp : Application() {
             // 推送消息通知渠道（有声音和弹出）
             val pushChannel = NotificationChannel(
                 NOTIFICATION_CHANNEL_PUSH,
-                NOTIFICATION_CHANNEL_PUSH_NAME,
+                getString(R.string.notif_channel_push_name),
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "接收剪贴板推送消息时的通知"
+                description = getString(R.string.notif_channel_push_desc)
                 enableLights(true)
                 enableVibration(true)
                 setShowBadge(true)

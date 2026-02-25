@@ -42,14 +42,14 @@ object NotificationHelper {
             ConnectionState.CONNECTED -> {
                 // peers list is already self-filtered by RelayRepository
                 if (peers.isNotEmpty()) {
-                    "已连接: ${peers.joinToString(", ")}"
+                    context.getString(R.string.notif_connected_peers, peers.joinToString(", "))
                 } else {
-                    "已连接 (无设备)"
+                    context.getString(R.string.notif_connected_no_peers)
                 }
             }
-            ConnectionState.CONNECTING -> "正在连接..."
-            ConnectionState.DISCONNECTED -> "未连接"
-            ConnectionState.ERROR -> "连接错误"
+            ConnectionState.CONNECTING -> context.getString(R.string.notif_connecting)
+            ConnectionState.DISCONNECTED -> context.getString(R.string.notif_disconnected)
+            ConnectionState.ERROR -> context.getString(R.string.notif_error)
         }
         
         val color = when (state) {
@@ -93,7 +93,7 @@ object NotificationHelper {
 
         // 创建自定义布局
         val remoteViews = android.widget.RemoteViews(context.packageName, R.layout.notification_service)
-        remoteViews.setTextViewText(R.id.notification_title, "Clipboard Push")
+        remoteViews.setTextViewText(R.id.notification_title, context.getString(R.string.app_name))
         remoteViews.setTextViewText(R.id.notification_text, contentText)
         if (largeIconBitmap != null) {
             remoteViews.setImageViewBitmap(R.id.notification_icon, largeIconBitmap)
@@ -195,8 +195,8 @@ object NotificationHelper {
     fun showEncryptionErrorNotification(context: Context) {
         showPushNotification(
             context = context,
-            title = "发送失败",
-            content = "加密出错，请重新扫码配对",
+            title = context.getString(R.string.notif_send_failed_title),
+            content = context.getString(R.string.notif_encryption_error),
             notificationId = ENCRYPTION_ERROR_NOTIFICATION_ID
         )
     }

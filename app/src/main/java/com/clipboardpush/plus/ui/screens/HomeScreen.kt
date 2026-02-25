@@ -68,6 +68,8 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.res.stringResource
+import com.clipboardpush.plus.R
 import com.clipboardpush.plus.data.model.ConnectionState
 import com.clipboardpush.plus.data.model.PushMessage
 import com.clipboardpush.plus.ui.theme.*
@@ -131,14 +133,14 @@ fun HomeScreen(
             if (isSelectionMode) {
                 // 选择模式的 TopAppBar
                 TopAppBar(
-                    title = { 
-                        Text("已选择 ${selectedMessageIds.size} 条") 
+                    title = {
+                        Text(stringResource(R.string.selection_count, selectedMessageIds.size))
                     },
                     navigationIcon = {
                         IconButton(onClick = { isSelectionMode = false }) {
                             Icon(
                                 imageVector = Icons.Default.Close,
-                                contentDescription = "退出选择模式"
+                                contentDescription = stringResource(R.string.cd_exit_selection)
                             )
                         }
                     },
@@ -154,7 +156,10 @@ fun HomeScreen(
                             }
                         ) {
                             Text(
-                                text = if (selectedMessageIds.size == messages.size) "取消全选" else "全选",
+                                text = if (selectedMessageIds.size == messages.size)
+                                    stringResource(R.string.action_deselect_all)
+                                else
+                                    stringResource(R.string.action_select_all),
                                 color = MaterialTheme.colorScheme.onPrimary
                             )
                         }
@@ -170,7 +175,7 @@ fun HomeScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Delete,
-                                contentDescription = "删除"
+                                contentDescription = stringResource(R.string.action_delete)
                             )
                         }
                     },
@@ -203,14 +208,14 @@ fun HomeScreen(
                         val (icon, tint, description) = when (connectionState) {
                             ConnectionState.CONNECTED -> {
                                 if (peerCount > 0) {
-                                    Triple(Icons.Default.Cloud, Green500, "已连接 (可传输)")
+                                    Triple(Icons.Default.Cloud, Green500, stringResource(R.string.state_connected_with_peer))
                                 } else {
-                                    Triple(Icons.Default.Cloud, androidx.compose.ui.graphics.Color(0xFFFFC107), "已连接 (无设备)") // Yellow for Alone
+                                    Triple(Icons.Default.Cloud, androidx.compose.ui.graphics.Color(0xFFFFC107), stringResource(R.string.state_connected_waiting)) // Yellow for Alone
                                 }
                             }
-                            ConnectionState.CONNECTING -> Triple(Icons.Default.Sync, Orange500, "连接中")
-                            ConnectionState.ERROR -> Triple(Icons.Default.Warning, Red500, "连接错误")
-                            ConnectionState.DISCONNECTED -> Triple(Icons.Default.CloudOff, Grey500, "未连接")
+                            ConnectionState.CONNECTING -> Triple(Icons.Default.Sync, Orange500, stringResource(R.string.state_connecting))
+                            ConnectionState.ERROR -> Triple(Icons.Default.Warning, Red500, stringResource(R.string.state_error))
+                            ConnectionState.DISCONNECTED -> Triple(Icons.Default.CloudOff, Grey500, stringResource(R.string.state_disconnected))
                         }
 
                         IconButton(
@@ -248,14 +253,17 @@ fun HomeScreen(
                             // 使用 Send 图标表示推送
                             Icon(
                                 imageVector = Icons.Default.Send,
-                                contentDescription = if (isPushEnabled) "推送剪贴板内容到服务器" else "等待 PC 端连接..."
+                                contentDescription = if (isPushEnabled)
+                                    stringResource(R.string.cd_push_clipboard)
+                                else
+                                    stringResource(R.string.cd_waiting_for_pc)
                             )
                         }
                         // 设置按钮
                         IconButton(onClick = onSettingsClick) {
                             Icon(
                                 imageVector = Icons.Default.Settings,
-                                contentDescription = "设置"
+                                contentDescription = stringResource(R.string.cd_settings)
                             )
                         }
                     },
@@ -297,7 +305,10 @@ fun HomeScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if(connectionState == ConnectionState.ERROR) "连接错误 - 点击重试" else "未连接 - 点击重连",
+                            text = if(connectionState == ConnectionState.ERROR)
+                                stringResource(R.string.banner_error)
+                            else
+                                stringResource(R.string.banner_disconnected),
                             color = androidx.compose.ui.graphics.Color.White,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
@@ -321,9 +332,10 @@ fun HomeScreen(
                     ) {
                         Text(
                             text = if (connectionState == ConnectionState.CONNECTED) {
-                                if (peerCount > 0) "等待接收消息..." else "等待 PC 端连接..."
+                                if (peerCount > 0) stringResource(R.string.empty_waiting_message)
+                                else stringResource(R.string.empty_waiting_pc)
                             } else {
-                                "连接服务器后可接收消息"
+                                stringResource(R.string.empty_no_server)
                             },
                             color = TextSecondary,
                             fontSize = 16.sp
@@ -331,7 +343,7 @@ fun HomeScreen(
                         
                         if (connectionState == ConnectionState.DISCONNECTED || connectionState == ConnectionState.ERROR) {
                             Spacer(modifier = Modifier.height(16.dp))
-                            Text("请前往设置页面进行配对", color = MaterialTheme.colorScheme.error)
+                            Text(stringResource(R.string.empty_go_to_settings), color = MaterialTheme.colorScheme.error)
                         }
                     }
                 }
@@ -449,12 +461,12 @@ fun SwipeableMessageItem(
             ) {
                 Icon(
                     imageVector = Icons.Default.Delete,
-                    contentDescription = "删除",
+                    contentDescription = stringResource(R.string.action_delete),
                     tint = MaterialTheme.colorScheme.onError
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "删除",
+                    text = stringResource(R.string.action_delete),
                     color = MaterialTheme.colorScheme.onError,
                     fontSize = 12.sp
                 )
@@ -599,12 +611,12 @@ fun MessageItem(
             ) {
             // 类型标签属性提升到 Column 作用域，供下方文件图标区复用
             val typeLabel = when (message.type) {
-                PushMessage.TYPE_TEXT -> "文本"
-                PushMessage.TYPE_IMAGE -> "图片"
-                PushMessage.TYPE_VIDEO -> "视频"
-                PushMessage.TYPE_AUDIO -> "音频"
-                PushMessage.TYPE_FILE -> "文件"
-                else -> "消息"
+                PushMessage.TYPE_TEXT -> stringResource(R.string.type_text)
+                PushMessage.TYPE_IMAGE -> stringResource(R.string.type_image)
+                PushMessage.TYPE_VIDEO -> stringResource(R.string.type_video)
+                PushMessage.TYPE_AUDIO -> stringResource(R.string.type_audio)
+                PushMessage.TYPE_FILE -> stringResource(R.string.type_file)
+                else -> stringResource(R.string.type_message)
             }
             val typeColor = when (message.type) {
                 PushMessage.TYPE_TEXT -> MaterialTheme.colorScheme.primary
@@ -700,7 +712,7 @@ fun MessageItem(
                             Spacer(modifier = Modifier.height(4.dp))
                             TextButton(onClick = { onRetryDownload(message) }) {
                                 Text(
-                                    text = "下载失败 · 点击重试",
+                                    text = stringResource(R.string.download_failed_retry),
                                     color = MaterialTheme.colorScheme.onErrorContainer
                                 )
                             }

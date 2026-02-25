@@ -25,6 +25,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.res.stringResource
+import com.clipboardpush.plus.R
 import com.clipboardpush.plus.data.model.ConnectionState
 import com.clipboardpush.plus.data.model.PeerEntry
 import com.clipboardpush.plus.data.repository.SettingsRepository
@@ -58,12 +60,12 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("设置") },
+                title = { Text(stringResource(R.string.settings_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回"
+                            contentDescription = stringResource(R.string.cd_back)
                         )
                     }
                 },
@@ -83,7 +85,7 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             // 连接与配对
-            SettingsSection(title = "连接与配对") {
+            SettingsSection(title = stringResource(R.string.section_connection)) {
                 Column {
                     // 1. 连接状态和控制
                     Row(
@@ -92,11 +94,12 @@ fun SettingsScreen(
                     ) {
                         val statusText = when (connectionState) {
                             ConnectionState.CONNECTED -> {
-                                if (peers.isNotEmpty()) "已连接 (可传输)" else "已连接 (等待 PC 端...)"
+                                if (peers.isNotEmpty()) stringResource(R.string.state_connected_with_peer)
+                                else stringResource(R.string.state_connected_waiting)
                             }
-                            ConnectionState.CONNECTING -> "连接中..."
-                            ConnectionState.DISCONNECTED -> "未连接"
-                            ConnectionState.ERROR -> "连接错误"
+                            ConnectionState.CONNECTING -> stringResource(R.string.state_connecting)
+                            ConnectionState.DISCONNECTED -> stringResource(R.string.state_disconnected)
+                            ConnectionState.ERROR -> stringResource(R.string.state_error)
                         }
                         val statusColor = when (connectionState) {
                             ConnectionState.CONNECTED -> {
@@ -109,7 +112,7 @@ fun SettingsScreen(
 
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "当前状态: $statusText",
+                                text = stringResource(R.string.status_label, statusText),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = statusColor
                             )
@@ -119,13 +122,13 @@ fun SettingsScreen(
                                 Spacer(modifier = Modifier.height(2.dp))
                                 if (peers.isNotEmpty()) {
                                     Text(
-                                        text = "目标设备: ${peers.joinToString(", ")}",
+                                        text = stringResource(R.string.target_device, peers.joinToString(", ")),
                                         style = MaterialTheme.typography.labelMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 } else {
                                     Text(
-                                        text = "等待 PC 端连接后即可传输...",
+                                        text = stringResource(R.string.waiting_for_pc_transfer),
                                         style = MaterialTheme.typography.labelMedium,
                                         color = androidx.compose.ui.graphics.Color(0xFFFFC107)
                                     )
@@ -144,7 +147,12 @@ fun SettingsScreen(
                                 containerColor = if (connectionState == ConnectionState.CONNECTED || connectionState == ConnectionState.CONNECTING) Red500 else MaterialTheme.colorScheme.primary
                             )
                         ) {
-                            Text(if (connectionState == ConnectionState.CONNECTED || connectionState == ConnectionState.CONNECTING) "断开" else "连接")
+                            Text(
+                                if (connectionState == ConnectionState.CONNECTED || connectionState == ConnectionState.CONNECTING)
+                                    stringResource(R.string.btn_disconnect)
+                                else
+                                    stringResource(R.string.btn_connect)
+                            )
                         }
                     }
 
@@ -155,7 +163,7 @@ fun SettingsScreen(
                         onClick = onScanClick,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("扫描二维码配对 (Scan to Pair)")
+                        Text(stringResource(R.string.btn_scan_pair))
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -180,24 +188,28 @@ fun SettingsScreen(
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Text(
-                                    text = "首次使用指南",
+                                    text = stringResource(R.string.guide_title),
                                     style = MaterialTheme.typography.labelLarge,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer
                                 )
                             }
                             Spacer(modifier = Modifier.height(4.dp))
-                            
+
                             val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+                            val guideStep1Prefix = stringResource(R.string.guide_step1_prefix)
+                            val guideStep1Suffix = stringResource(R.string.guide_step1_suffix)
+                            val guideStep2 = stringResource(R.string.guide_step2)
+                            val guideStep3 = stringResource(R.string.guide_step3)
                             val annotatedString = androidx.compose.ui.text.buildAnnotatedString {
-                                append("1. 访问 ")
+                                append(guideStep1Prefix)
                                 pushStringAnnotation(tag = "URL", annotation = "https://www.clipboardpush.com/")
                                 withStyle(style = androidx.compose.ui.text.SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline)) {
                                     append("https://www.clipboardpush.com/")
                                 }
                                 pop()
-                                append(" 下载桌面客户端 (Clipboard Push)\n")
-                                append("2. 打开客户端设置页面\n")
-                                append("3. 点击上方按钮扫描屏幕上的二维码")
+                                append("$guideStep1Suffix\n")
+                                append("$guideStep2\n")
+                                append(guideStep3)
                             }
 
                             androidx.compose.foundation.text.ClickableText(
@@ -219,7 +231,7 @@ fun SettingsScreen(
 
             // 最近连接
             if (recentPeers.isNotEmpty()) {
-                SettingsSection(title = "最近连接") {
+                SettingsSection(title = stringResource(R.string.section_recent)) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         recentPeers.forEach { entry ->
                             RecentPeerRow(
@@ -235,7 +247,7 @@ fun SettingsScreen(
             }
 
             // 文件处理方式
-            SettingsSection(title = "文件处理方式") {
+            SettingsSection(title = stringResource(R.string.section_file_handling)) {
                 Column {
                     SettingsRepository.FileHandleMode.entries.forEachIndexed { index, mode ->
                         if (index > 0) Spacer(modifier = Modifier.height(8.dp))
@@ -252,14 +264,14 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             // 历史记录设置
-            SettingsSection(title = "历史记录") {
+            SettingsSection(title = stringResource(R.string.section_history)) {
                 Column {
                     Text(
-                        text = "最大保存消息数量",
+                        text = stringResource(R.string.history_max_count),
                         style = MaterialTheme.typography.bodyLarge
                     )
                     Text(
-                        text = "设置列表中保存的历史消息条数",
+                        text = stringResource(R.string.history_max_count_desc),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -284,7 +296,7 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             // 其他设置
-            SettingsSection(title = "其他设置") {
+            SettingsSection(title = stringResource(R.string.section_other)) {
                 Column {
                     Row(
                         modifier = Modifier
@@ -296,11 +308,11 @@ fun SettingsScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "启动时自动连接",
+                                text = stringResource(R.string.auto_connect_title),
                                 style = MaterialTheme.typography.bodyLarge
                             )
                             Text(
-                                text = "App 启动后自动连接到服务器",
+                                text = stringResource(R.string.auto_connect_desc),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -333,7 +345,7 @@ fun SettingsScreen(
                                         val intent = android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
                                         context.startActivity(intent)
                                     } catch (e2: Exception) {
-                                        android.widget.Toast.makeText(context, "无法打开电池设置", android.widget.Toast.LENGTH_SHORT).show()
+                                        android.widget.Toast.makeText(context, context.getString(R.string.battery_opt_toast_error), android.widget.Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             }
@@ -343,21 +355,22 @@ fun SettingsScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "忽略电池优化",
+                                text = stringResource(R.string.battery_opt_title),
                                 style = MaterialTheme.typography.bodyLarge
                             )
                             Text(
-                                text = if (isIgnoringBattery) "已忽略（后台正常运行）" else "未忽略（可能被系统杀死）",
+                                text = if (isIgnoringBattery) stringResource(R.string.battery_opt_enabled)
+                                       else stringResource(R.string.battery_opt_disabled),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (isIgnoringBattery) Green500 else Orange500
                             )
                         }
                         Text(
-                            text = "设置 →",
+                            text = stringResource(R.string.battery_opt_action),
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
-                    
+
                     // 国产手机额外提示
                     Spacer(modifier = Modifier.height(12.dp))
                     Card(
@@ -379,16 +392,14 @@ fun SettingsScreen(
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Text(
-                                    text = "国产手机用户注意",
+                                    text = stringResource(R.string.battery_warning_title),
                                     style = MaterialTheme.typography.labelLarge,
                                     color = MaterialTheme.colorScheme.onErrorContainer
                                 )
                             }
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "小米/华为/OPPO/vivo 等手机可能还需要：\n" +
-                                    "• 在系统设置中搜索「自启动管理」，允许本 APP 自启动\n" +
-                                    "• 在「电池」设置中将 APP 设为「无限制」或允许后台运行",
+                                text = stringResource(R.string.battery_warning_body),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )
@@ -400,7 +411,7 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             // 关于
-            SettingsSection(title = "关于") {
+            SettingsSection(title = stringResource(R.string.section_about)) {
                 val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
                 Column {
                     Row(
@@ -411,7 +422,7 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "版本",
+                            text = stringResource(R.string.about_version),
                             style = MaterialTheme.typography.bodyLarge
                         )
                         Text(
@@ -432,7 +443,7 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "隐私政策",
+                            text = stringResource(R.string.about_privacy),
                             style = MaterialTheme.typography.bodyLarge
                         )
                         Text(
@@ -452,11 +463,11 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "官方网站",
+                            text = stringResource(R.string.about_website),
                             style = MaterialTheme.typography.bodyLarge
                         )
                         Text(
-                            text = "clipboardpush.com",
+                            text = stringResource(R.string.about_website_label),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -506,18 +517,20 @@ private fun RecentPeerRow(
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("删除记录") },
-            text = { Text("确认从历史中删除「${entry.displayName}」？") },
+            title = { Text(stringResource(R.string.peer_delete_title)) },
+            text = { Text(stringResource(R.string.peer_delete_confirm, entry.displayName)) },
             confirmButton = {
                 TextButton(onClick = { onRemove(); showDeleteDialog = false }) {
-                    Text("删除", color = Red500)
+                    Text(stringResource(R.string.peer_delete_confirm_btn), color = Red500)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) { Text("取消") }
+                TextButton(onClick = { showDeleteDialog = false }) { Text(stringResource(R.string.action_cancel)) }
             }
         )
     }
@@ -541,7 +554,7 @@ private fun RecentPeerRow(
             ) {
                 Icon(
                     imageVector = Icons.Default.Delete,
-                    contentDescription = "删除",
+                    contentDescription = stringResource(R.string.action_delete),
                     tint = Color.White
                 )
             }
@@ -584,7 +597,7 @@ private fun RecentPeerRow(
                                 shape = RoundedCornerShape(4.dp)
                             ) {
                                 Text(
-                                    text = "当前",
+                                    text = stringResource(R.string.peer_active_label),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = Color.White,
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -593,7 +606,7 @@ private fun RecentPeerRow(
                         }
                     }
                     Text(
-                        text = "上次: ${formatRelativeTime(entry.lastConnectedAt)}",
+                        text = stringResource(R.string.peer_last_connected, formatRelativeTime(entry.lastConnectedAt, context)),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -608,13 +621,13 @@ private fun RecentPeerRow(
     }
 }
 
-private fun formatRelativeTime(epochMs: Long): String {
+private fun formatRelativeTime(epochMs: Long, context: android.content.Context): String {
     val diff = System.currentTimeMillis() - epochMs
     return when {
-        diff < 60_000L -> "刚刚"
-        diff < 3_600_000L -> "${diff / 60_000} 分钟前"
-        diff < 86_400_000L -> "${diff / 3_600_000} 小时前"
-        else -> "${diff / 86_400_000} 天前"
+        diff < 60_000L -> context.getString(R.string.time_just_now)
+        diff < 3_600_000L -> context.getString(R.string.time_minutes_ago, diff / 60_000)
+        diff < 86_400_000L -> context.getString(R.string.time_hours_ago, diff / 3_600_000)
+        else -> context.getString(R.string.time_days_ago, diff / 86_400_000)
     }
 }
 

@@ -14,6 +14,7 @@ import android.util.Log
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import com.clipboardpush.plus.R
 import com.clipboardpush.plus.data.model.ConnectionState
 import com.clipboardpush.plus.data.model.PushMessage
 import com.clipboardpush.plus.data.remote.ApiService
@@ -831,7 +832,11 @@ class ClipboardService : Service() {
 
         // 4. Toast (Main Thread)
         serviceScope.launch(Dispatchers.Main) {
-            android.widget.Toast.makeText(applicationContext, "您已被移出房间! ($reason)", android.widget.Toast.LENGTH_LONG).show()
+            android.widget.Toast.makeText(
+                applicationContext,
+                applicationContext.getString(R.string.toast_evicted_from_room, reason),
+                android.widget.Toast.LENGTH_LONG
+            ).show()
         }
     }
 

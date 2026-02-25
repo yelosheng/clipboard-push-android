@@ -39,6 +39,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
+import com.clipboardpush.plus.R
 import com.clipboardpush.plus.service.ClipboardService
 import com.clipboardpush.plus.ui.screens.HomeScreen
 import com.clipboardpush.plus.ui.screens.SettingsScreen
@@ -126,7 +127,7 @@ class MainActivity : ComponentActivity() {
 
     private val scanLauncher = registerForActivityResult(com.journeyapps.barcodescanner.ScanContract()) { result ->
         if (result.contents == null) {
-            Toast.makeText(this, "Cancelled", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.toast_scan_cancelled), Toast.LENGTH_SHORT).show()
         } else {
             handleScanResult(result.contents)
         }
@@ -194,17 +195,17 @@ class MainActivity : ComponentActivity() {
                                 if (response.isSuccessful) {
                                     val body = response.body?.string() ?: ""
                                     withContext(Dispatchers.Main) {
-                                        Toast.makeText(this@MainActivity, "Local Connection: OK", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(this@MainActivity, getString(R.string.toast_lan_ok), Toast.LENGTH_SHORT).show()
                                     }
                                 } else {
                                      withContext(Dispatchers.Main) {
-                                        Toast.makeText(this@MainActivity, "Local Connection: Failed (${response.code})", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(this@MainActivity, getString(R.string.toast_lan_failed, response.code), Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             }
                         } catch (e: Exception) {
                             withContext(Dispatchers.Main) {
-                                Toast.makeText(this@MainActivity, "Local Connection: Unreachable", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(this@MainActivity, getString(R.string.toast_lan_unreachable), Toast.LENGTH_SHORT).show()
                             }
                         }
                     }
@@ -222,11 +223,11 @@ class MainActivity : ComponentActivity() {
                     startService(intent)
                 }
                 
-                Toast.makeText(this@MainActivity, "Settings Saved. Connecting...", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@MainActivity, getString(R.string.toast_settings_saved), Toast.LENGTH_LONG).show()
                 // Update Log UI
             }
         } catch (e: Exception) {
-            Toast.makeText(this, "Invalid Code: ${e.message}", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.toast_invalid_code, e.message), Toast.LENGTH_LONG).show()
         }
     }
 
@@ -341,7 +342,7 @@ class MainActivity : ComponentActivity() {
                 val text = message.content ?: return
                 val clip = ClipData.newPlainText("Clipboard Man", text)
                 clipboardManager.setPrimaryClip(clip)
-                Toast.makeText(this, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.toast_copied), Toast.LENGTH_SHORT).show()
             }
             // 图片/文件 - 优先使用本地路径
             message.isFileType && message.localPath != null -> {
@@ -379,10 +380,10 @@ class MainActivity : ComponentActivity() {
                 startActivity(intent)
             } else {
                 // 没有找到可以处理的应用，显示 chooser
-                startActivity(Intent.createChooser(intent, "选择应用打开"))
+                startActivity(Intent.createChooser(intent, getString(R.string.chooser_open_file)))
             }
         } catch (e: Exception) {
-            Toast.makeText(this, "打开失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.toast_open_failed, e.message), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -393,7 +394,7 @@ class MainActivity : ComponentActivity() {
         val fileName = message.fileName ?: "file"
         val mimeType = message.mimeType ?: "*/*"
 
-        Toast.makeText(this, "正在下载...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.toast_downloading), Toast.LENGTH_SHORT).show()
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
@@ -404,7 +405,7 @@ class MainActivity : ComponentActivity() {
 
                 if (!response.isSuccessful) {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(this@MainActivity, "下载失败", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, getString(R.string.toast_download_failed), Toast.LENGTH_SHORT).show()
                     }
                     return@launch
                 }
@@ -425,7 +426,7 @@ class MainActivity : ComponentActivity() {
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@MainActivity, "打开失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, getString(R.string.toast_open_failed, e.message), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -445,16 +446,16 @@ class MainActivity : ComponentActivity() {
             }
 
             val chooserTitle = when (messageType) {
-                PushMessage.TYPE_IMAGE -> "选择图片查看器"
-                PushMessage.TYPE_VIDEO -> "选择视频播放器"
-                PushMessage.TYPE_AUDIO -> "选择音频播放器"
-                else -> "选择打开方式"
+                PushMessage.TYPE_IMAGE -> getString(R.string.chooser_open_image)
+                PushMessage.TYPE_VIDEO -> getString(R.string.chooser_open_video)
+                PushMessage.TYPE_AUDIO -> getString(R.string.chooser_open_audio)
+                else -> getString(R.string.chooser_open_file)
             }
 
             val chooser = Intent.createChooser(intent, chooserTitle)
             startActivity(chooser)
         } catch (e: Exception) {
-            Toast.makeText(this, "无法打开文件: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.toast_open_file_failed, e.message), Toast.LENGTH_SHORT).show()
         }
 
     }
@@ -462,13 +463,13 @@ class MainActivity : ComponentActivity() {
     private fun handlePushClipboard() {
         // Peer guard: block push if no peers online
         if (mainViewModel.peerCount.value <= 0) {
-            Toast.makeText(this, "推送失败：房间内没有其他在线设备", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.toast_no_peers), Toast.LENGTH_SHORT).show()
             return
         }
 
         val clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         if (!clipboardManager.hasPrimaryClip() || clipboardManager.primaryClipDescription == null) {
-            Toast.makeText(this, "剪贴板为空", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.toast_clipboard_empty), Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -476,21 +477,21 @@ class MainActivity : ComponentActivity() {
         val text = item?.text?.toString()
 
         if (text.isNullOrBlank()) {
-            Toast.makeText(this, "剪贴板内容为空或非文本", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.toast_clipboard_not_text), Toast.LENGTH_SHORT).show()
             return
         }
 
         if (clipboardService == null) {
-            Toast.makeText(this, "服务未连接", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.toast_service_not_connected), Toast.LENGTH_SHORT).show()
             return
         }
 
         clipboardService?.sendClipboardText(text)
-        Toast.makeText(this, "推送成功", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.toast_push_success), Toast.LENGTH_SHORT).show()
     }
 
     private fun handlePeerSelected(entry: PeerEntry) {
-        Toast.makeText(this, "正在切换到 ${entry.displayName}...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.toast_switching_peer, entry.displayName), Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
             val settingsRepo = com.clipboardpush.plus.data.repository.SettingsRepository(applicationContext)
             settingsRepo.savePairingInfo(entry.server, entry.room, entry.key, entry.localIp, entry.localPort)
