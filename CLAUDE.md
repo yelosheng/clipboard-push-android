@@ -20,7 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./gradlew test
 
 # Run a single test class (Robolectric — no device needed)
-./gradlew test --tests "com.example.clipboardman.util.CryptoManagerTest"
+./gradlew test --tests "com.clipboardpush.plus.util.CryptoManagerTest"
 
 # Clean build
 ./gradlew clean
@@ -29,11 +29,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./gradlew lint
 ```
 
-Tests use **Robolectric 4.11.1** for Android unit tests (no emulator needed). Test classes live under `app/src/test/java/com/example/clipboardman/`.
+Tests use **Robolectric 4.11.1** for Android unit tests (no emulator needed). Test classes live under `app/src/test/java/com/clipboardpush/plus/`.
+
+> **Known pre-existing failure:** `PeerEntryTest > upsert trims to maxSize evicting oldest` — bug in `PeerEntry.upsert()` eviction logic, unrelated to other work.
 
 ## Project Overview
 
-This is an **Android clipboard synchronization app** (Kotlin + Jetpack Compose, app ID `com.example.clipboardpush.plus`) that syncs clipboard content between Android and a PC client over LAN or via a relay server. Targets Android 8.0+ (API 26+), compiled with Java 17.
+This is an **Android clipboard synchronization app** (Kotlin + Jetpack Compose, app ID `com.clipboardpush.plus`) that syncs clipboard content between Android and a PC client over LAN or via a relay server. Targets Android 8.0+ (API 26+), compiled with Java 17.
 
 ## Architecture
 
@@ -133,6 +135,20 @@ Defined in `ClipboardManApp.kt`:
 ### Service Coroutine Scope
 
 `ClipboardService` uses `CoroutineScope(Dispatchers.IO + SupervisorJob() + exceptionHandler)` with a `CoroutineExceptionHandler` to prevent uncaught exceptions from crashing the service. Network callbacks use a 1-second debounce delay before reconnecting.
+
+### i18n / String Resources
+
+All user-visible strings live in Android resource files — **never hardcode strings in Kotlin**.
+
+| File | Purpose |
+|------|---------|
+| `app/src/main/res/values/strings.xml` | English default (used for all non-Chinese locales) |
+| `app/src/main/res/values-zh/strings.xml` | Chinese override (auto-selected when device language is Chinese) |
+
+- **Compose files** → `stringResource(R.string.xxx)`
+- **Non-Compose files** (Activity, Service, Helper) → `context.getString(R.string.xxx)` or `getString(R.string.xxx)`
+- `formatRelativeTime()` in `SettingsScreen.kt` accepts a `Context` parameter for locale-aware time strings
+- Notification channel names/descriptions also come from string resources (set at first install; changing locale requires reinstall to take effect)
 
 ### FCM Dormant State
 
