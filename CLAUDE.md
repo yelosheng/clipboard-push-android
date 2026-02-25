@@ -4,8 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build & Development Commands
 
+> **Workflow note:** Compilation and installation are handled by the **user via Android Studio**. Claude's role is writing code only — do not attempt to run `assembleDebug`, `installDebug`, or any build/install commands unless explicitly asked.
+
 ```bash
-# Build debug APK
+# Build debug APK (user runs this, not Claude)
 ./gradlew assembleDebug
 
 # Build release APK
@@ -14,11 +16,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Install debug APK to connected device
 ./gradlew installDebug
 
-# Run unit tests
+# Run unit tests (Claude may run these)
 ./gradlew test
-
-# Run instrumented tests (requires connected device/emulator)
-./gradlew connectedAndroidTest
 
 # Run a single test class (Robolectric — no device needed)
 ./gradlew test --tests "com.example.clipboardman.util.CryptoManagerTest"
@@ -40,11 +39,13 @@ This is an **Android clipboard synchronization app** (Kotlin + Jetpack Compose, 
 
 ### Communication Architecture
 
-The app supports two sync modes:
+The app supports three sync modes:
 
 1. **Relay Server (Socket.IO)**: Clipboard text/files are exchanged through a Python relay server. The Android client connects via Socket.IO using `RelayRepository`. Text is AES-GCM encrypted before sending.
 
 2. **LAN Direct Transfer ("Announce & Pull")**: For files, the PC announces availability via `file_available` signal (see `LAN_SIGNAL_PROTOCOL.md`). Android attempts a direct LAN HTTP download; if it fails, it sends `file_need_relay` to trigger a cloud upload fallback. See `LAN_SYNC_DEV_PLAN.md` for the full state machine.
+
+3. **FCM Dual-Channel (dormant)**: Infrastructure exists but is intentionally disabled. The room-based Socket.IO routing model is clean and sufficient; FCM introduces complexity around offline token routing that has not been fully resolved. See "FCM Dormant State" section below for re-enablement steps.
 
 ### Socket.IO Protocol
 
@@ -83,6 +84,7 @@ ClipboardService (foreground service — owns the connection lifecycle)
 | `ui/viewmodel/MainViewModel.kt` | UI state (connection, peers, messages) as `StateFlow` |
 | `util/CryptoManager.kt` | AES-GCM encrypt/decrypt (AES-256, 12-byte IV, 128-bit tag); `encryptFile`/`decryptFile` for streams |
 | `service/LocalFileServer.kt` | NanoHTTPD server for LAN file serving |
+| `service/FcmService.kt` | FCM receiver — **dormant** (not registered in manifest); kept for future re-enablement |
 | `share/ShareReceiverActivity.kt` | Handles incoming `ACTION_SEND` intents (text, image, file) |
 
 ### RelayEvent Sealed Class
@@ -131,3 +133,23 @@ Defined in `ClipboardManApp.kt`:
 ### Service Coroutine Scope
 
 `ClipboardService` uses `CoroutineScope(Dispatchers.IO + SupervisorJob() + exceptionHandler)` with a `CoroutineExceptionHandler` to prevent uncaught exceptions from crashing the service. Network callbacks use a 1-second debounce delay before reconnecting.
+
+### FCM Dormant State
+
+FCM infrastructure is fully coded but intentionally disabled. The core issue: once Android is offline (killed), the PC client's peer guard (`activePeerCount == 0`) suppresses all sends, so FCM is never triggered. Additionally, routing FCM tokens to the correct room after disconnect requires careful stale-token management that conflicts with the clean room-based architecture.
+
+**What exists (do not delete):**
+- `service/FcmService.kt` — FCM receiver + `FcmTokenHolder` singleton
+- `app/google-services.json` — Firebase Android config
+- Firebase Gradle deps in `app/build.gradle.kts`
+- Server-side: `ROOM_FCM_TOKENS`, `CLIENT_FCM_TOKENS`, FCM send logic in `socket_events.py`
+
+**To re-enable, add back three wiring points:**
+1. `AndroidManifest.xml` — register `FcmService` with `com.google.firebase.MESSAGING_EVENT`
+2. `ClipboardManApp.onCreate()` — fetch token into `FcmTokenHolder`
+3. `RelayRepository` join payload — include `fcm_token`
+
+**Also needs design work before re-enabling:**
+- PC client peer guard must be relaxed when FCM devices are registered in the room
+- Server should include `fcm_device_count` in `room_stats` so PC knows to send even with 0 online peers
+- Stale token cleanup when Android switches rooms

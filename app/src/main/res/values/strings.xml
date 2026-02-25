@@ -1,33 +1,123 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Clipboard Push</string>
-    <!-- 主页 -->
-    <string name="status_connected">已连接</string>
-    <string name="status_disconnected">未连接</string>
-    <string name="status_connecting">连接中...</string>
-    <string name="status_error">连接错误</string>
-    <string name="btn_connect">连接</string>
-    <string name="btn_disconnect">断开</string>
-    <string name="btn_settings">设置</string>
 
-    <!-- 设置页 -->
-    <string name="settings_title">设置</string>
-    <string name="settings_server_address">服务器地址</string>
-    <string name="settings_server_address_hint">例如: 192.168.1.100:9661</string>
-    <string name="settings_file_handling">文件处理方式</string>
-    <string name="settings_file_save_local">保存到本地</string>
-    <string name="settings_file_copy_reference">仅复制引用</string>
-    <string name="settings_auto_connect">启动时自动连接</string>
+    <!-- Connection states -->
+    <string name="state_connected_with_peer">Connected (Ready)</string>
+    <string name="state_connected_waiting">Connected (Waiting for PC…)</string>
+    <string name="state_connecting">Connecting…</string>
+    <string name="state_disconnected">Disconnected</string>
+    <string name="state_error">Connection Error</string>
 
-    <!-- 通知 -->
-    <string name="notification_channel_name">剪贴板服务</string>
-    <string name="notification_channel_description">保持剪贴板推送服务运行</string>
-    <string name="notification_title">Clipboard Push</string>
-    <string name="notification_text_connected">已连接到服务器</string>
-    <string name="notification_text_disconnected">未连接</string>
+    <!-- Home screen -->
+    <string name="selection_count">%d selected</string>
+    <string name="action_select_all">Select All</string>
+    <string name="action_deselect_all">Deselect All</string>
+    <string name="action_delete">Delete</string>
+    <string name="cd_exit_selection">Exit selection mode</string>
+    <string name="cd_push_clipboard">Push clipboard to server</string>
+    <string name="cd_waiting_for_pc">Waiting for PC to connect…</string>
+    <string name="cd_settings">Settings</string>
+    <string name="banner_error">Connection error — tap to retry</string>
+    <string name="banner_disconnected">Disconnected — tap to reconnect</string>
+    <string name="empty_waiting_message">Waiting for messages…</string>
+    <string name="empty_waiting_pc">Waiting for PC to connect…</string>
+    <string name="empty_no_server">Connect to a server to receive messages</string>
+    <string name="empty_go_to_settings">Go to Settings to pair</string>
+    <string name="type_text">Text</string>
+    <string name="type_image">Image</string>
+    <string name="type_video">Video</string>
+    <string name="type_audio">Audio</string>
+    <string name="type_file">File</string>
+    <string name="type_message">Message</string>
+    <string name="download_failed_retry">Download failed · Tap to retry</string>
 
-    <!-- 分享 -->
-    <string name="share_uploading">正在上传...</string>
-    <string name="share_success">上传成功</string>
-    <string name="share_failed">上传失败</string>
+    <!-- Settings screen -->
+    <string name="settings_title">Settings</string>
+    <string name="cd_back">Back</string>
+    <string name="section_connection">Connection &amp; Pairing</string>
+    <string name="status_label">Status: %s</string>
+    <string name="target_device">Target device: %s</string>
+    <string name="waiting_for_pc_transfer">Waiting for PC to connect before syncing…</string>
+    <string name="btn_disconnect">Disconnect</string>
+    <string name="btn_connect">Connect</string>
+    <string name="btn_scan_pair">Scan QR Code to Pair</string>
+    <string name="guide_title">Quick Start</string>
+    <string name="guide_step1_prefix">1. Visit </string>
+    <string name="guide_step1_suffix"> to download the desktop client (Clipboard Push)</string>
+    <string name="guide_step2">2. Open the client settings page</string>
+    <string name="guide_step3">3. Tap the button above to scan the QR code on screen</string>
+    <string name="section_recent">Recent Connections</string>
+    <string name="section_file_handling">File Handling</string>
+    <string name="section_history">History</string>
+    <string name="history_max_count">Max saved messages</string>
+    <string name="history_max_count_desc">Number of history messages to keep</string>
+    <string name="section_other">Other Settings</string>
+    <string name="auto_connect_title">Auto-connect on start</string>
+    <string name="auto_connect_desc">Automatically connect to server when app starts</string>
+    <string name="battery_opt_title">Ignore battery optimization</string>
+    <string name="battery_opt_enabled">Enabled (background runs normally)</string>
+    <string name="battery_opt_disabled">Disabled (service may be killed)</string>
+    <string name="battery_opt_action">Settings →</string>
+    <string name="battery_warning_title">Note for Chinese ROM users</string>
+    <string name="battery_warning_body">Xiaomi / Huawei / OPPO / vivo devices may also need:\n• Search \"Autostart\" in system settings and allow this app\n• Set app to \"Unrestricted\" in Battery settings</string>
+    <string name="battery_opt_toast_error">Cannot open battery settings</string>
+    <string name="section_about">About</string>
+    <string name="about_version">Version</string>
+    <string name="about_privacy">Privacy Policy</string>
+    <string name="about_website">Official Website</string>
+    <string name="about_website_label">clipboardpush.com</string>
+
+    <!-- Recent peer row -->
+    <string name="peer_delete_title">Remove</string>
+    <string name="peer_delete_confirm">Remove \"%s\" from history?</string>
+    <string name="peer_delete_confirm_btn">Remove</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="peer_active_label">Active</string>
+    <string name="peer_last_connected">Last: %s</string>
+    <string name="time_just_now">Just now</string>
+    <string name="time_minutes_ago">%d min ago</string>
+    <string name="time_hours_ago">%d hr ago</string>
+    <string name="time_days_ago">%d d ago</string>
+
+    <!-- MainActivity toasts -->
+    <string name="toast_scan_cancelled">Cancelled</string>
+    <string name="toast_settings_saved">Settings saved. Connecting…</string>
+    <string name="toast_invalid_code">Invalid code: %s</string>
+    <string name="toast_lan_ok">Local Connection: OK</string>
+    <string name="toast_lan_failed">Local Connection: Failed (%d)</string>
+    <string name="toast_lan_unreachable">Local Connection: Unreachable</string>
+    <string name="toast_copied">Copied to clipboard</string>
+    <string name="toast_downloading">Downloading…</string>
+    <string name="toast_download_failed">Download failed</string>
+    <string name="toast_open_failed">Open failed: %s</string>
+    <string name="toast_open_file_failed">Cannot open file: %s</string>
+    <string name="toast_no_peers">Push failed: no devices online in room</string>
+    <string name="toast_clipboard_empty">Clipboard is empty</string>
+    <string name="toast_clipboard_not_text">Clipboard has no text content</string>
+    <string name="toast_service_not_connected">Service not connected</string>
+    <string name="toast_push_success">Pushed successfully</string>
+    <string name="toast_switching_peer">Switching to %s…</string>
+    <string name="chooser_open_image">Open with image viewer</string>
+    <string name="chooser_open_video">Open with video player</string>
+    <string name="chooser_open_audio">Open with audio player</string>
+    <string name="chooser_open_file">Open with…</string>
+
+    <!-- Notifications (NotificationHelper) -->
+    <string name="notif_connected_peers">Connected: %s</string>
+    <string name="notif_connected_no_peers">Connected (no devices)</string>
+    <string name="notif_connecting">Connecting…</string>
+    <string name="notif_disconnected">Disconnected</string>
+    <string name="notif_error">Connection error</string>
+    <string name="notif_send_failed_title">Send Failed</string>
+    <string name="notif_encryption_error">Encryption error. Please re-scan the pairing QR code.</string>
+
+    <!-- ClipboardService -->
+    <string name="toast_evicted_from_room">You have been removed from the room! (%s)</string>
+
+    <!-- Notification channels (ClipboardManApp) -->
+    <string name="notif_channel_service_name">Clipboard Service</string>
+    <string name="notif_channel_service_desc">Keeps the clipboard sync service running</string>
+    <string name="notif_channel_push_name">Clipboard Push</string>
+    <string name="notif_channel_push_desc">Notifications for received clipboard content</string>
 </resources>

@@ -2,18 +2,19 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.google.gms.google-services")
 }
 
 android {
-    namespace = "com.example.clipboardman"
+    namespace = "com.clipboardpush.plus"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.clipboardpush.plus"
+        applicationId = "com.clipboardpush.plus"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 4
+        versionName = "1.0.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -43,6 +44,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -83,6 +85,10 @@ dependencies {
 
     // Socket.IO
     implementation("io.socket:socket.io-client:2.1.0")
+
+    // Firebase (FCM dual-channel push)
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-messaging-ktx")
 
     // QR Code Scanning (ZXing)
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
