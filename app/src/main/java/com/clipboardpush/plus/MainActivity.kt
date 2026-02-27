@@ -266,7 +266,10 @@ class MainActivity : ComponentActivity() {
                         onRetryDownload = { message ->
                             mainViewModel.markDownloadRetrying(message.safeId)
                             clipboardService?.retryFileDownload(message)
-                        }
+                        },
+                        onFileOpen = { message -> handleFileOpen(message) },
+                        onFileShare = { message -> handleFileShare(message) },
+                        onFileCopyName = { message -> handleFileCopyName(message) }
                     )
                 }
             }
@@ -357,6 +360,73 @@ class MainActivity : ComponentActivity() {
             // 图片/文件 - 无本地路径，从网上下载
             message.isFileType && message.fileUrl != null -> {
                 openFileWithSystem(message, serverAddress, useHttps)
+            }
+        }
+    }
+
+    private fun handleFileOpen(message: PushMessage) {
+        val localPath = message.localPath ?: run {
+            Toast.makeText(this, getString(R.string.file_action_downloading), Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            val uri = android.net.Uri.parse(localPath)
+            val mimeType = resolveMimeType(message)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, mimeType)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(intent, getString(R.string.chooser_open_file)))
+        } catch (e: Exception) {
+            Toast.makeText(this, getString(R.string.toast_open_failed, e.message), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun handleFileShare(message: PushMessage) {
+        val localPath = message.localPath ?: return
+        try {
+            val uri = android.net.Uri.parse(localPath)
+            val mimeType = resolveMimeType(message)
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = mimeType
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(intent, getString(R.string.file_action_share)))
+        } catch (e: Exception) {
+            Toast.makeText(this, getString(R.string.toast_open_failed, e.message), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun handleFileCopyName(message: PushMessage) {
+        val name = message.fileName ?: message.content ?: return
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("filename", name))
+        Toast.makeText(this, getString(R.string.toast_filename_copied), Toast.LENGTH_SHORT).show()
+    }
+
+    private fun resolveMimeType(message: PushMessage): String {
+        val mime = message.mimeType
+        if (!mime.isNullOrBlank() && mime != "application/octet-stream") return mime
+        return when (message.type) {
+            PushMessage.TYPE_VIDEO -> "video/*"
+            PushMessage.TYPE_AUDIO -> "audio/*"
+            PushMessage.TYPE_IMAGE -> "image/*"
+            else -> {
+                val ext = message.fileName?.substringAfterLast('.')?.lowercase()
+                when (ext) {
+                    "pdf" -> "application/pdf"
+                    "doc" -> "application/msword"
+                    "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    "xls" -> "application/vnd.ms-excel"
+                    "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    "ppt" -> "application/vnd.ms-powerpoint"
+                    "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                    "zip" -> "application/zip"
+                    "txt" -> "text/plain"
+                    "apk" -> "application/vnd.android.package-archive"
+                    else -> "application/octet-stream"
+                }
             }
         }
     }
@@ -523,7 +593,10 @@ fun MainNavigation(
     onScanClick: () -> Unit,
     onPeerSelected: (PeerEntry) -> Unit,
     onPeerRemoved: (PeerEntry) -> Unit,
-    onRetryDownload: (PushMessage) -> Unit = {}
+    onRetryDownload: (PushMessage) -> Unit = {},
+    onFileOpen: (PushMessage) -> Unit = {},
+    onFileShare: (PushMessage) -> Unit = {},
+    onFileCopyName: (PushMessage) -> Unit = {}
 ) {
     val navController = rememberNavController()
 
@@ -579,7 +652,10 @@ fun MainNavigation(
                 peers = peers,
                 failedDownloadIds = failedDownloadIds,
                 downloadProgress = downloadProgress,
-                onRetryDownload = onRetryDownload
+                onRetryDownload = onRetryDownload,
+                onFileOpen = onFileOpen,
+                onFileShare = onFileShare,
+                onFileCopyName = onFileCopyName
             )
         }
 
