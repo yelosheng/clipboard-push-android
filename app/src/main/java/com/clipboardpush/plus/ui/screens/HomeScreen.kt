@@ -121,6 +121,10 @@ fun HomeScreen(
         else "${if (useHttps) "https" else "http"}://$serverAddress"
     }
 
+    // Push animation triggers
+    var pushTrigger     by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    var pushFailTrigger by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+
     // 选择模式状态
     var isSelectionMode by remember { mutableStateOf(false) }
     var selectedMessageIds by remember { mutableStateOf(setOf<String>()) }
@@ -215,10 +219,15 @@ fun HomeScreen(
                 CenterAlignedTopAppBar(
                     title = {
                         ConnectionIndicator(
-                            connectionState = connectionState,
-                            peerCount = peerCount,
-                            peers = peers,
-                            onPushClick = onPushClipboard
+                            connectionState  = connectionState,
+                            peerCount        = peerCount,
+                            peers            = peers,
+                            onPushClick      = {
+                                onPushClipboard()
+                                pushTrigger++   // trigger dot animation immediately on tap
+                            },
+                            pushTrigger      = pushTrigger,
+                            pushFailTrigger  = pushFailTrigger
                         )
                     },
                     actions = {
@@ -1026,7 +1035,9 @@ private fun ConnectionIndicator(
     peerCount: Int,
     peers: List<String>,
     onPushClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    pushTrigger: Int = 0,       // increment to trigger success animation
+    pushFailTrigger: Int = 0    // increment to trigger fail animation
 ) {
     val isConnectedWithPeer = connectionState == ConnectionState.CONNECTED && peerCount > 0
     val onPrimary = MaterialTheme.colorScheme.onPrimary
@@ -1079,125 +1090,185 @@ private fun ConnectionIndicator(
 
     val pcName = peers.firstOrNull() ?: ""
 
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.height(32.dp)
-        ) {
-            // Phone icon — tap to push
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .then(
-                        if (isConnectedWithPeer)
-                            Modifier.clickable(
-                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                                indication = null,
-                                onClick = onPushClick
-                            )
-                        else Modifier
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Smartphone,
-                    contentDescription = stringResource(R.string.cd_push_clipboard),
-                    tint = onPrimary.copy(alpha = phoneAlpha),
-                    modifier = Modifier.size(20.dp)
-                )
+    // Push success dot animation: 0f = at phone, 1f = at PC
+    val dotProgress = remember { Animatable(0f) }
+    var showDot by remember { mutableStateOf(false) }
+
+    LaunchedEffect(pushTrigger) {
+        if (pushTrigger > 0) {
+            showDot = true
+            dotProgress.snapTo(0f)
+            dotProgress.animateTo(1f, tween(600, easing = FastOutSlowInEasing))
+            showDot = false
+        }
+    }
+
+    // Failure shake animation
+    val shakeOffset = remember { Animatable(0f) }
+    var cloudTintOverride: androidx.compose.ui.graphics.Color? by remember { mutableStateOf(null) }
+
+    LaunchedEffect(pushFailTrigger) {
+        if (pushFailTrigger > 0) {
+            cloudTintOverride = Red500
+            repeat(3) {
+                shakeOffset.animateTo(4f, tween(50))
+                shakeOffset.animateTo(-4f, tween(50))
             }
+            shakeOffset.animateTo(0f, tween(50))
+            cloudTintOverride = null
+        }
+    }
 
-            // Left line
-            IndicatorLine(
-                color = lineLeftColor.copy(alpha = if (leftDashed) 0.5f else 1f),
-                dashed = leftDashed,
+    BoxWithConstraints(
+        modifier = modifier.wrapContentWidth(),
+        contentAlignment = Alignment.TopCenter
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .width(24.dp)
-                    .height(2.dp)
-            )
-
-            // Cloud icon — static icon with rotation animation for CONNECTING
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.size(32.dp)
+                    .height(32.dp)
+                    .graphicsLayer { translationX = shakeOffset.value.dp.toPx() }
             ) {
-                if (connectionState == ConnectionState.CONNECTING) {
-                    // Rotating Sync icon
-                    val infiniteTransition = rememberInfiniteTransition(label = "syncRotation")
-                    val rotationAngle by infiniteTransition.animateFloat(
-                        initialValue = 0f,
-                        targetValue = 360f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(1000, easing = LinearEasing),
-                            repeatMode = RepeatMode.Restart
+                // Phone icon — tap to push
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .then(
+                            if (isConnectedWithPeer)
+                                Modifier.clickable(
+                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                    indication = null,
+                                    onClick = onPushClick
+                                )
+                            else Modifier
                         ),
-                        label = "rotation"
-                    )
+                    contentAlignment = Alignment.Center
+                ) {
                     Icon(
-                        imageVector = Icons.Default.Sync,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier
-                            .size(22.dp)
-                            .graphicsLayer { rotationZ = rotationAngle }
+                        imageVector = Icons.Default.Smartphone,
+                        contentDescription = stringResource(R.string.cd_push_clipboard),
+                        tint = onPrimary.copy(alpha = phoneAlpha),
+                        modifier = Modifier.size(20.dp)
                     )
-                } else {
-                    val cloudIcon = when (connectionState) {
-                        ConnectionState.DISCONNECTED -> Icons.Default.CloudOff
-                        ConnectionState.ERROR        -> Icons.Default.Warning
-                        else                         -> Icons.Default.Cloud
+                }
+
+                // Left line
+                IndicatorLine(
+                    color = lineLeftColor.copy(alpha = if (leftDashed) 0.5f else 1f),
+                    dashed = leftDashed,
+                    modifier = Modifier
+                        .width(24.dp)
+                        .height(2.dp)
+                )
+
+                // Cloud icon — static icon with rotation animation for CONNECTING
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    if (connectionState == ConnectionState.CONNECTING) {
+                        // Rotating Sync icon
+                        val infiniteTransition = rememberInfiniteTransition(label = "syncRotation")
+                        val rotationAngle by infiniteTransition.animateFloat(
+                            initialValue = 0f,
+                            targetValue = 360f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(1000, easing = LinearEasing),
+                                repeatMode = RepeatMode.Restart
+                            ),
+                            label = "rotation"
+                        )
+                        Icon(
+                            imageVector = Icons.Default.Sync,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier
+                                .size(22.dp)
+                                .graphicsLayer { rotationZ = rotationAngle }
+                        )
+                    } else {
+                        val cloudIcon = when (connectionState) {
+                            ConnectionState.DISCONNECTED -> Icons.Default.CloudOff
+                            ConnectionState.ERROR        -> Icons.Default.Warning
+                            else                         -> Icons.Default.Cloud
+                        }
+                        Icon(
+                            imageVector = cloudIcon,
+                            contentDescription = null,
+                            tint = cloudColor,
+                            modifier = Modifier.size(22.dp)
+                        )
                     }
+                }
+
+                // Right line
+                IndicatorLine(
+                    color = lineRightColor.copy(alpha = if (rightDashed) 0.5f else 1f),
+                    dashed = rightDashed,
+                    modifier = Modifier
+                        .width(24.dp)
+                        .height(2.dp)
+                )
+
+                // PC icon
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.size(32.dp)
+                ) {
                     Icon(
-                        imageVector = cloudIcon,
+                        imageVector = Icons.Default.DesktopWindows,
                         contentDescription = null,
-                        tint = cloudColor,
-                        modifier = Modifier.size(22.dp)
+                        tint = onPrimary.copy(alpha = pcAlpha),
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
 
-            // Right line
-            IndicatorLine(
-                color = lineRightColor.copy(alpha = if (rightDashed) 0.5f else 1f),
-                dashed = rightDashed,
-                modifier = Modifier
-                    .width(24.dp)
-                    .height(2.dp)
-            )
-
-            // PC icon
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.size(32.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.DesktopWindows,
-                    contentDescription = null,
-                    tint = onPrimary.copy(alpha = pcAlpha),
-                    modifier = Modifier.size(20.dp)
-                )
+            // PC name label below — AnimatedContent for smooth transitions
+            AnimatedContent(
+                targetState = pcName,
+                transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(200)) },
+                label = "pcName"
+            ) { name ->
+                if (name.isNotEmpty()) {
+                    Text(
+                        text = name,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = onPrimary.copy(alpha = 0.7f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                } else {
+                    Spacer(modifier = Modifier.height(MaterialTheme.typography.labelSmall.lineHeight.value.dp))
+                }
             }
         }
 
-        // PC name label below — AnimatedContent for smooth transitions
-        AnimatedContent(
-            targetState = pcName,
-            transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(200)) },
-            label = "pcName"
-        ) { name ->
-            if (name.isNotEmpty()) {
-                Text(
-                    text = name,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = onPrimary.copy(alpha = 0.7f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            } else {
-                Spacer(modifier = Modifier.height(MaterialTheme.typography.labelSmall.lineHeight.value.dp))
+        // Dot overlay — drawn on top of the Row
+        if (showDot) {
+            // Total width: 32(phone) + 24(line) + 32(cloud) + 24(line) + 32(pc) = 144dp
+            // Dot travels from x=16dp (phone center) to x=128dp (PC center)
+            val totalDp = 144.dp
+            val startDp = 16.dp   // phone icon center
+            val endDp   = 128.dp  // PC icon center
+            val dotX = startDp + (endDp - startDp) * dotProgress.value
+
+            Box(
+                modifier = Modifier
+                    .width(totalDp)
+                    .height(32.dp)
+                    .align(Alignment.TopStart)
+            ) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    drawCircle(
+                        color = androidx.compose.ui.graphics.Color.White,
+                        radius = 4.dp.toPx(),
+                        center = Offset(dotX.toPx(), size.height / 2)
+                    )
+                }
             }
         }
     }
