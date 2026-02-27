@@ -33,6 +33,9 @@ import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.Slideshow
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Android
+import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.ContentCopy
 import com.clipboardpush.plus.util.formatFileSize
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -92,7 +95,10 @@ fun HomeScreen(
     peers: List<String> = emptyList(),
     failedDownloadIds: Set<String> = emptySet(),
     downloadProgress: Map<String, Int> = emptyMap(),
-    onRetryDownload: (PushMessage) -> Unit = {}
+    onRetryDownload: (PushMessage) -> Unit = {},
+    onFileOpen: (PushMessage) -> Unit = {},
+    onFileShare: (PushMessage) -> Unit = {},
+    onFileCopyName: (PushMessage) -> Unit = {}
 ) {
     // 构建基础URL
     val baseUrl = remember(serverAddress, useHttps) {
@@ -104,6 +110,9 @@ fun HomeScreen(
     // 选择模式状态
     var isSelectionMode by remember { mutableStateOf(false) }
     var selectedMessageIds by remember { mutableStateOf(setOf<String>()) }
+
+    // 文件操作底部弹窗状态
+    var fileActionMessage by remember { mutableStateOf<PushMessage?>(null) }
 
     // 列表滚动状态
     val listState = rememberLazyListState()
@@ -375,6 +384,8 @@ fun HomeScreen(
                                     } else {
                                         selectedMessageIds + message.safeId
                                     }
+                                } else if (message.isFileType && message.type != PushMessage.TYPE_IMAGE) {
+                                    fileActionMessage = message
                                 } else {
                                     // 普通模式下执行点击操作
                                     onMessageClick(message)
@@ -392,6 +403,29 @@ fun HomeScreen(
                         )
                     }
                 }
+            }
+
+            // 文件操作底部弹窗
+            fileActionMessage?.let { msg ->
+                val isFailed = msg.safeId in failedDownloadIds
+                FileActionSheet(
+                    message = msg,
+                    isDownloading = msg.localPath == null && !isFailed,
+                    downloadProgress = downloadProgress[msg.safeId],
+                    onDismiss = { fileActionMessage = null },
+                    onOpen = {
+                        fileActionMessage = null
+                        onFileOpen(msg)
+                    },
+                    onShare = {
+                        fileActionMessage = null
+                        onFileShare(msg)
+                    },
+                    onCopyName = {
+                        fileActionMessage = null
+                        onFileCopyName(msg)
+                    }
+                )
             }
         }
     }
@@ -880,6 +914,157 @@ private fun formatTimestamp(timestamp: String?): String {
         }
     } catch (e: Exception) {
         ""
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FileActionSheet(
+    message: PushMessage,
+    isDownloading: Boolean,
+    downloadProgress: Int?,
+    onDismiss: () -> Unit,
+    onOpen: () -> Unit,
+    onShare: () -> Unit,
+    onCopyName: () -> Unit
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp)
+        ) {
+            // Header: icon + filename + size
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                val typeColor = when (message.type) {
+                    PushMessage.TYPE_VIDEO -> Orange500
+                    PushMessage.TYPE_AUDIO -> Purple500
+                    else -> Grey500
+                }
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(typeColor.copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = fileTypeIcon(message.mimeType, message.fileName),
+                        contentDescription = null,
+                        modifier = Modifier.size(28.dp),
+                        tint = typeColor
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = message.fileName ?: message.content ?: "",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (message.fileSize != null && message.fileSize > 0) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = formatFileSize(message.fileSize),
+                            fontSize = 12.sp,
+                            color = TextSecondary
+                        )
+                    }
+                }
+            }
+
+            // Status indicator
+            when {
+                isDownloading -> {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    if (downloadProgress != null) {
+                        LinearProgressIndicator(
+                            progress = { downloadProgress / 100f },
+                            modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(1.5.dp))
+                        )
+                    } else {
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(1.5.dp))
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.file_action_downloading),
+                        fontSize = 12.sp,
+                        color = TextSecondary
+                    )
+                }
+                message.localPath == null -> {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.file_action_failed),
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                else -> {}
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider()
+
+            // Open
+            val canAct = message.localPath != null
+            val disabledAlpha = 0.38f
+            ListItem(
+                headlineContent = {
+                    Text(
+                        text = stringResource(R.string.file_action_open),
+                        color = if (canAct) MaterialTheme.colorScheme.onSurface
+                                else MaterialTheme.colorScheme.onSurface.copy(alpha = disabledAlpha)
+                    )
+                },
+                leadingContent = {
+                    Icon(
+                        Icons.Default.OpenInNew, contentDescription = null,
+                        tint = if (canAct) MaterialTheme.colorScheme.onSurface
+                               else MaterialTheme.colorScheme.onSurface.copy(alpha = disabledAlpha)
+                    )
+                },
+                modifier = if (canAct) Modifier.fillMaxWidth().clickable(onClick = onOpen)
+                           else Modifier.fillMaxWidth()
+            )
+
+            // Share
+            ListItem(
+                headlineContent = {
+                    Text(
+                        text = stringResource(R.string.file_action_share),
+                        color = if (canAct) MaterialTheme.colorScheme.onSurface
+                                else MaterialTheme.colorScheme.onSurface.copy(alpha = disabledAlpha)
+                    )
+                },
+                leadingContent = {
+                    Icon(
+                        Icons.Default.Share, contentDescription = null,
+                        tint = if (canAct) MaterialTheme.colorScheme.onSurface
+                               else MaterialTheme.colorScheme.onSurface.copy(alpha = disabledAlpha)
+                    )
+                },
+                modifier = if (canAct) Modifier.fillMaxWidth().clickable(onClick = onShare)
+                           else Modifier.fillMaxWidth()
+            )
+
+            // Copy filename
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.file_action_copy_name)) },
+                leadingContent = {
+                    Icon(Icons.Default.ContentCopy, contentDescription = null)
+                },
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onCopyName)
+            )
+        }
     }
 }
 
