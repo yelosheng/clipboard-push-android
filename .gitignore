@@ -52,6 +52,9 @@ Thumbs.db
 # Claude
 .claude/
 
+# Internal planning docs (not for public release)
+docs/plans/
+
 # C++ / Client
 cpp_client/build/
 cpp_client/build_win32/

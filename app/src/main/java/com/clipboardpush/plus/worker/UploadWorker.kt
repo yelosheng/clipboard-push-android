@@ -40,7 +40,7 @@ class UploadWorker(
         val uri = Uri.parse(uriString)
 
         val notificationId = System.currentTimeMillis().toInt()
-        setForeground(createForegroundInfo(notificationId, "Uploading...", "Preparing file..."))
+        setForeground(createForegroundInfo(notificationId, applicationContext.getString(R.string.worker_upload_title), applicationContext.getString(R.string.worker_upload_preparing)))
 
         // Temp files
         var tempSourceFile: File? = null
@@ -88,7 +88,7 @@ class UploadWorker(
             
             
             if (localNetwork != null) {
-                 setForeground(createForegroundInfo(notificationId, "Uploading...", "Announcing to LAN..."))
+                 setForeground(createForegroundInfo(notificationId, applicationContext.getString(R.string.worker_upload_title), applicationContext.getString(R.string.worker_upload_announcing)))
                  
                  // Encrypt to temp file
                  tempEncryptedFile = File.createTempFile("enc_", ".tmp", applicationContext.cacheDir)
@@ -169,8 +169,8 @@ class UploadWorker(
                      if (lanSuccess) {
                          NotificationHelper.showPushNotification(
                             applicationContext,
-                            "Upload Complete",
-                            "Sent $fileName to PC (LAN)"
+                            applicationContext.getString(R.string.worker_upload_success_title),
+                            applicationContext.getString(R.string.worker_upload_success_lan, fileName)
                         )
                         return Result.success()
                      }
@@ -194,7 +194,7 @@ class UploadWorker(
                 }
 
                 // 2. Encrypt
-                setForeground(createForegroundInfo(notificationId, "Uploading...", "Encrypting..."))
+                setForeground(createForegroundInfo(notificationId, applicationContext.getString(R.string.worker_upload_title), applicationContext.getString(R.string.worker_upload_encrypting)))
                 tempEncryptedFile = File.createTempFile("enc_", ".tmp", applicationContext.cacheDir)
                 val cryptoManager = CryptoManager(roomKey)
                 
@@ -207,17 +207,17 @@ class UploadWorker(
             val encryptedSize = tempEncryptedFile!!.length()
 
             // 3. Get Auth
-            setForeground(createForegroundInfo(notificationId, "Uploading...", "Requesting Auth..."))
+            setForeground(createForegroundInfo(notificationId, applicationContext.getString(R.string.worker_upload_title), applicationContext.getString(R.string.worker_upload_auth)))
             val authResult = apiService.getUploadAuth(fileName, encryptedSize, "application/octet-stream")
             val auth = authResult.getOrThrow()
 
             // 4. Upload R2
-            setForeground(createForegroundInfo(notificationId, "Uploading...", "Sending to Cloud..."))
+            setForeground(createForegroundInfo(notificationId, applicationContext.getString(R.string.worker_upload_title), applicationContext.getString(R.string.worker_upload_sending)))
             apiService.uploadToR2(auth.upload_url, tempEncryptedFile, "application/octet-stream")
             
 
             // 5. Notify Relay
-            setForeground(createForegroundInfo(notificationId, "Uploading...", "Finalizing..."))
+            setForeground(createForegroundInfo(notificationId, applicationContext.getString(R.string.worker_upload_title), applicationContext.getString(R.string.worker_upload_finalizing)))
             val eventData = mapOf(
                 "download_url" to auth.download_url,
                 "filename" to fileName,
@@ -232,8 +232,8 @@ class UploadWorker(
 
             NotificationHelper.showPushNotification(
                 applicationContext,
-                "Upload Complete",
-                "Sent $fileName to PC"
+                applicationContext.getString(R.string.worker_upload_success_title),
+                applicationContext.getString(R.string.worker_upload_success_cloud, fileName)
             )
 
             return Result.success()
@@ -242,7 +242,7 @@ class UploadWorker(
             Log.e(TAG, "Upload failed", e)
             NotificationHelper.showPushNotification(
                 applicationContext,
-                "Upload Failed",
+                applicationContext.getString(R.string.worker_upload_failed_title),
                 e.message ?: "Unknown error"
             )
             return Result.failure()

@@ -160,4 +160,28 @@
     <string name="notif_channel_service_desc">Keeps the clipboard sync service running</string>
     <string name="notif_channel_push_name">Clipboard Push</string>
     <string name="notif_channel_push_desc">Notifications for received clipboard content</string>
+
+    <!-- Worker notifications (UploadWorker / DownloadWorker) -->
+    <string name="worker_upload_title">Uploading…</string>
+    <string name="worker_upload_preparing">Preparing file…</string>
+    <string name="worker_upload_announcing">Announcing to LAN…</string>
+    <string name="worker_upload_encrypting">Encrypting…</string>
+    <string name="worker_upload_auth">Authorizing…</string>
+    <string name="worker_upload_sending">Sending to cloud…</string>
+    <string name="worker_upload_finalizing">Finalizing…</string>
+    <string name="worker_upload_success_title">Upload Complete</string>
+    <string name="worker_upload_success_lan">Sent %s to PC (LAN)</string>
+    <string name="worker_upload_success_cloud">Sent %s to PC</string>
+    <string name="worker_upload_failed_title">Upload Failed</string>
+    <string name="worker_download_from_lan">Downloading from LAN…</string>
+    <string name="worker_download_in_progress">Downloading…</string>
+    <string name="worker_download_success_title">Download Complete</string>
+    <string name="worker_download_success_body">Saved to Downloads: %s</string>
+    <string name="worker_download_failed_title">Download Failed</string>
+
+    <!-- FcmService notification -->
+    <string name="fcm_received_clipboard_title">Clipboard received</string>
+
+    <!-- QR scanner prompt -->
+    <string name="qr_scan_prompt">Scan Pairing Code from PC</string>
 </resources>

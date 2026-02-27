@@ -1,6 +1,7 @@
 package com.clipboardpush.plus.data.repository
 
 import android.util.Log
+import com.clipboardpush.plus.BuildConfig
 import io.socket.client.IO
 import io.socket.client.Socket
 import kotlinx.coroutines.channels.BufferOverflow
@@ -110,7 +111,7 @@ object RelayRepository {
                 try {
                     if (args.isNotEmpty() && args[0] is JSONObject) {
                         val data = args[0] as JSONObject
-                        Log.d("Relay", "Received clipboard_sync: $data")
+                        if (BuildConfig.DEBUG) Log.d("Relay", "Received clipboard_sync: $data")
                         _events.tryEmit(RelayEvent.ClipboardSync(data))
                     } else {
                         Log.w("Relay", "clipboard_sync: Invalid data format: ${args.getOrNull(0)}")
@@ -122,7 +123,7 @@ object RelayRepository {
             
             socket?.on("file_sync") { args ->
                 try {
-                    Log.d("Relay", "Raw file_sync: ${args.joinToString()}")
+                    if (BuildConfig.DEBUG) Log.d("Relay", "Raw file_sync: ${args.joinToString()}")
                     if (args.isNotEmpty()) {
                         val arg = args[0]
                         val data = when (arg) {
@@ -132,7 +133,7 @@ object RelayRepository {
                         }
                         
                         if (data != null) {
-                             Log.d("Relay", "Received file_sync: $data")
+                            if (BuildConfig.DEBUG) Log.d("Relay", "Received file_sync: $data")
                             _events.tryEmit(RelayEvent.FileSync(data))
                         } else {
                             Log.w("Relay", "file_sync: Invalid data format: $arg")
@@ -146,7 +147,7 @@ object RelayRepository {
             // Handler for file_available (and alias file_announcement)
             val fileAvailableHandler: (Array<Any>) -> Unit = { args ->
                 try {
-                    Log.d("Relay", "Raw file_available/announcement: ${args.joinToString()}")
+                    if (BuildConfig.DEBUG) Log.d("Relay", "Raw file_available/announcement: ${args.joinToString()}")
                     if (args.isNotEmpty()) {
                          val arg = args[0]
                         val data = when (arg) {
@@ -156,7 +157,7 @@ object RelayRepository {
                         }
                         
                         if (data != null) {
-                            Log.d("Relay", "Received file_available: $data")
+                            if (BuildConfig.DEBUG) Log.d("Relay", "Received file_available: $data")
                             _events.tryEmit(RelayEvent.FileAvailable(data))
                         } else {
                              Log.w("Relay", "file_available: Invalid data format: $arg")
@@ -171,7 +172,7 @@ object RelayRepository {
                 try {
                      if (args.isNotEmpty() && args[0] is JSONObject) {
                          val data = args[0] as JSONObject
-                         Log.d("Relay", "Received file_sync_completed: $data")
+                         if (BuildConfig.DEBUG) Log.d("Relay", "Received file_sync_completed: $data")
                          _events.tryEmit(RelayEvent.FileSyncCompleted(data))
                     }
                 } catch (e: Exception) {
@@ -183,7 +184,7 @@ object RelayRepository {
                 try {
                      if (args.isNotEmpty() && args[0] is JSONObject) {
                          val data = args[0] as JSONObject
-                         Log.d("Relay", "Received file_need_relay: $data")
+                         if (BuildConfig.DEBUG) Log.d("Relay", "Received file_need_relay: $data")
                          _events.tryEmit(RelayEvent.FileNeedRelay(data))
                     }
                 } catch (e: Exception) {
@@ -199,7 +200,7 @@ object RelayRepository {
                 try {
                     if (args.isNotEmpty() && args[0] is JSONObject) {
                          val data = args[0] as JSONObject
-                         Log.d("Relay", "Received lan_probe_request: $data")
+                         if (BuildConfig.DEBUG) Log.d("Relay", "Received lan_probe_request: $data")
                          _events.tryEmit(RelayEvent.LanProbeRequest(data))
                     }
                 } catch (e: Exception) {
@@ -212,7 +213,7 @@ object RelayRepository {
                 try {
                     if (args.isNotEmpty() && args[0] is JSONObject) {
                          val data = args[0] as JSONObject
-                         Log.d("Relay", "Received transfer_command: $data")
+                         if (BuildConfig.DEBUG) Log.d("Relay", "Received transfer_command: $data")
                          _events.tryEmit(RelayEvent.TransferCommand(data))
                     }
                 } catch (e: Exception) {
@@ -344,7 +345,7 @@ object RelayRepository {
                 put("received_at_ms", System.currentTimeMillis())
             }
             socket?.emit("file_sync_completed", payload)
-            Log.d(TAG, "Sent file_sync_completed: $payload")
+            if (BuildConfig.DEBUG) Log.d(TAG, "Sent file_sync_completed: $payload")
         }
     }
 
@@ -361,7 +362,7 @@ object RelayRepository {
                 put("reported_at_ms", System.currentTimeMillis())
             }
             socket?.emit("file_need_relay", payload)
-            Log.d(TAG, "Sent file_need_relay: $payload")
+            if (BuildConfig.DEBUG) Log.d(TAG, "Sent file_need_relay: $payload")
         }
     }
 
@@ -381,7 +382,7 @@ object RelayRepository {
                 put("announced_at_ms", System.currentTimeMillis())
             }
             socket?.emit("file_available", payload)
-            Log.d(TAG, "Sent file_available: $payload")
+            if (BuildConfig.DEBUG) Log.d(TAG, "Sent file_available: $payload")
         }
     }
 
@@ -421,7 +422,7 @@ object RelayRepository {
                 put("updated_at_ms", System.currentTimeMillis())
             }
             socket?.emit("peer_network_update", payload)
-            Log.d(TAG, "Sent peer_network_update: $payload")
+            if (BuildConfig.DEBUG) Log.d(TAG, "Sent peer_network_update: $payload")
         }
     }
 }

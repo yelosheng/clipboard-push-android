@@ -6,6 +6,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import androidx.core.content.FileProvider
+import com.clipboardpush.plus.BuildConfig
 import java.io.File
 
 /**
@@ -30,7 +31,7 @@ class ClipboardHelper(private val context: Context) {
         return try {
             val clip = ClipData.newPlainText(CLIP_LABEL, text)
             clipboardManager.setPrimaryClip(clip)
-            Log.d(TAG, "Text copied to clipboard: ${text.take(50)}...")
+            if (BuildConfig.DEBUG) Log.d(TAG, "Text copied to clipboard: ${text.take(50)}...")
             true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to copy text: ${e.message}")

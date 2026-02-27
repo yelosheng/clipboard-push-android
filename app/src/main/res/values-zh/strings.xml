@@ -160,4 +160,28 @@
     <string name="notif_channel_service_desc">保持剪贴板推送服务运行</string>
     <string name="notif_channel_push_name">消息推送</string>
     <string name="notif_channel_push_desc">接收剪贴板推送消息时的通知</string>
+
+    <!-- Worker notifications (UploadWorker / DownloadWorker) -->
+    <string name="worker_upload_title">上传中…</string>
+    <string name="worker_upload_preparing">准备文件…</string>
+    <string name="worker_upload_announcing">通知局域网设备…</string>
+    <string name="worker_upload_encrypting">加密中…</string>
+    <string name="worker_upload_auth">正在获取授权…</string>
+    <string name="worker_upload_sending">上传到云端…</string>
+    <string name="worker_upload_finalizing">正在完成…</string>
+    <string name="worker_upload_success_title">上传完成</string>
+    <string name="worker_upload_success_lan">已通过局域网发送 %s 到电脑</string>
+    <string name="worker_upload_success_cloud">已发送 %s 到电脑</string>
+    <string name="worker_upload_failed_title">上传失败</string>
+    <string name="worker_download_from_lan">正在通过局域网下载…</string>
+    <string name="worker_download_in_progress">下载中…</string>
+    <string name="worker_download_success_title">下载完成</string>
+    <string name="worker_download_success_body">已保存到下载文件夹：%s</string>
+    <string name="worker_download_failed_title">下载失败</string>
+
+    <!-- FcmService notification -->
+    <string name="fcm_received_clipboard_title">收到剪贴板内容</string>
+
+    <!-- QR scanner prompt -->
+    <string name="qr_scan_prompt">扫描电脑端的配对二维码</string>
 </resources>

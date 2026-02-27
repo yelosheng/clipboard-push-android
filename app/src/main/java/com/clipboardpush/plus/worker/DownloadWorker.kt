@@ -60,7 +60,7 @@ class DownloadWorker(
             // In Announce mode, fileUrl IS the local_url. We try it once.
             // If it fails, we fail the worker so Service can request Relay.
             val notificationId = System.currentTimeMillis().toInt()
-            setForeground(createForegroundInfo(notificationId, fileName, "Downloading from LAN..."))
+            setForeground(createForegroundInfo(notificationId, fileName, applicationContext.getString(R.string.worker_download_from_lan)))
             
             return try {
                 val roomId = settingsRepository.roomIdFlow.first()
@@ -94,7 +94,7 @@ class DownloadWorker(
         }
 
         val notificationId = System.currentTimeMillis().toInt()
-        setForeground(createForegroundInfo(notificationId, fileName, "Downloading..."))
+        setForeground(createForegroundInfo(notificationId, fileName, applicationContext.getString(R.string.worker_download_in_progress)))
 
         return try {
             // Get Pairing Info for Local Sync
@@ -163,7 +163,7 @@ class DownloadWorker(
             Log.e(TAG, "Download failed", e)
             NotificationHelper.showPushNotification(
                 applicationContext,
-                "Download Failed",
+                applicationContext.getString(R.string.worker_download_failed_title),
                 e.message ?: "Unknown error"
             )
             Result.failure()
@@ -282,8 +282,8 @@ class DownloadWorker(
                 // Success notification
                 NotificationHelper.showPushNotification(
                     applicationContext,
-                    "Download Complete",
-                    "Saved to Downloads: $uniqueName"
+                    applicationContext.getString(R.string.worker_download_success_title),
+                    applicationContext.getString(R.string.worker_download_success_body, uniqueName)
                 )
                 return Result.success(
                     workDataOf(

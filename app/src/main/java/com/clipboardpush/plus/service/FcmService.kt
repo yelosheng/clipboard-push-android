@@ -1,6 +1,7 @@
 package com.clipboardpush.plus.service
 
 import android.util.Log
+import com.clipboardpush.plus.R
 import com.clipboardpush.plus.data.model.PushMessage
 import com.clipboardpush.plus.data.repository.MessageRepository
 import com.clipboardpush.plus.data.repository.SettingsRepository
@@ -89,7 +90,7 @@ class FcmService : FirebaseMessagingService() {
 
         NotificationHelper.showPushNotification(
             context = applicationContext,
-            title = "收到剪贴板内容",
+            title = getString(R.string.fcm_received_clipboard_title),
             content = if (content.length > 50) content.take(50) + "…" else content
         )
     }

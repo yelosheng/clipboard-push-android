@@ -141,7 +141,7 @@ class MainActivity : ComponentActivity() {
     private fun launchQRScanner() {
         val options = com.journeyapps.barcodescanner.ScanOptions()
         options.setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE)
-        options.setPrompt("Scan Pairing Code from PC")
+        options.setPrompt(getString(R.string.qr_scan_prompt))
         options.setCameraId(0)
         options.setBeepEnabled(false)
         options.setBarcodeImageEnabled(false)
