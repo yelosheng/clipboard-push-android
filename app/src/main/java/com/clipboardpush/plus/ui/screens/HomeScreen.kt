@@ -1031,32 +1031,48 @@ private fun ConnectionIndicator(
     val isConnectedWithPeer = connectionState == ConnectionState.CONNECTED && peerCount > 0
     val onPrimary = MaterialTheme.colorScheme.onPrimary
 
-    // Static colors (will animate in Task 2)
-    val cloudColor = when {
-        connectionState == ConnectionState.CONNECTED && peerCount > 0 -> Green500
-        connectionState == ConnectionState.CONNECTED -> Orange500
-        connectionState == ConnectionState.ERROR -> Red500
-        else -> Grey500
-    }
-    val lineLeftColor = when {
-        connectionState == ConnectionState.CONNECTED -> Green500
-        connectionState == ConnectionState.ERROR -> Red500
-        else -> Grey500
-    }
-    val lineRightColor = when {
-        isConnectedWithPeer -> Green500
-        connectionState == ConnectionState.ERROR -> Red500
-        else -> Grey500
-    }
-    val pcAlpha = when {
-        isConnectedWithPeer -> 1f
-        connectionState == ConnectionState.CONNECTED -> 0.4f
-        else -> 0.5f
-    }
-    val phoneAlpha = when (connectionState) {
-        ConnectionState.DISCONNECTED -> 0.5f
-        else -> 1f
-    }
+    val cloudColor by animateColorAsState(
+        targetValue = when {
+            connectionState == ConnectionState.CONNECTED && peerCount > 0 -> Green500
+            connectionState == ConnectionState.CONNECTED -> Orange500
+            connectionState == ConnectionState.ERROR -> Red500
+            else -> Grey500
+        },
+        animationSpec = tween(300),
+        label = "cloudColor"
+    )
+    val lineLeftColor by animateColorAsState(
+        targetValue = when {
+            connectionState == ConnectionState.CONNECTED -> Green500
+            connectionState == ConnectionState.ERROR -> Red500
+            else -> Grey500
+        },
+        animationSpec = tween(300),
+        label = "lineLeftColor"
+    )
+    val lineRightColor by animateColorAsState(
+        targetValue = when {
+            isConnectedWithPeer -> Green500
+            connectionState == ConnectionState.ERROR -> Red500
+            else -> Grey500
+        },
+        animationSpec = tween(300),
+        label = "lineRightColor"
+    )
+    val pcAlpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = when {
+            isConnectedWithPeer -> 1f
+            connectionState == ConnectionState.CONNECTED -> 0.4f
+            else -> 0.5f
+        },
+        animationSpec = tween(300),
+        label = "pcAlpha"
+    )
+    val phoneAlpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (connectionState == ConnectionState.DISCONNECTED) 0.5f else 1f,
+        animationSpec = tween(300),
+        label = "phoneAlpha"
+    )
 
     val leftDashed  = connectionState != ConnectionState.CONNECTED
     val rightDashed = !isConnectedWithPeer
@@ -1103,22 +1119,44 @@ private fun ConnectionIndicator(
                     .height(2.dp)
             )
 
-            // Cloud icon (static for now — animated in Task 2)
+            // Cloud icon — static icon with rotation animation for CONNECTING
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier.size(32.dp)
             ) {
-                val cloudIcon = when (connectionState) {
-                    ConnectionState.DISCONNECTED -> Icons.Default.CloudOff
-                    ConnectionState.ERROR        -> Icons.Default.Warning
-                    else                         -> Icons.Default.Cloud
+                if (connectionState == ConnectionState.CONNECTING) {
+                    // Rotating Sync icon
+                    val infiniteTransition = rememberInfiniteTransition(label = "syncRotation")
+                    val rotationAngle by infiniteTransition.animateFloat(
+                        initialValue = 0f,
+                        targetValue = 360f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(1000, easing = LinearEasing),
+                            repeatMode = RepeatMode.Restart
+                        ),
+                        label = "rotation"
+                    )
+                    Icon(
+                        imageVector = Icons.Default.Sync,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier
+                            .size(22.dp)
+                            .graphicsLayer { rotationZ = rotationAngle }
+                    )
+                } else {
+                    val cloudIcon = when (connectionState) {
+                        ConnectionState.DISCONNECTED -> Icons.Default.CloudOff
+                        ConnectionState.ERROR        -> Icons.Default.Warning
+                        else                         -> Icons.Default.Cloud
+                    }
+                    Icon(
+                        imageVector = cloudIcon,
+                        contentDescription = null,
+                        tint = cloudColor,
+                        modifier = Modifier.size(22.dp)
+                    )
                 }
-                Icon(
-                    imageVector = cloudIcon,
-                    contentDescription = null,
-                    tint = cloudColor,
-                    modifier = Modifier.size(22.dp)
-                )
             }
 
             // Right line
@@ -1144,15 +1182,23 @@ private fun ConnectionIndicator(
             }
         }
 
-        // PC name label below
-        if (pcName.isNotEmpty()) {
-            Text(
-                text = pcName,
-                style = MaterialTheme.typography.labelSmall,
-                color = onPrimary.copy(alpha = 0.7f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+        // PC name label below — AnimatedContent for smooth transitions
+        AnimatedContent(
+            targetState = pcName,
+            transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(200)) },
+            label = "pcName"
+        ) { name ->
+            if (name.isNotEmpty()) {
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = onPrimary.copy(alpha = 0.7f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            } else {
+                Spacer(modifier = Modifier.height(MaterialTheme.typography.labelSmall.lineHeight.value.dp))
+            }
         }
     }
 }
