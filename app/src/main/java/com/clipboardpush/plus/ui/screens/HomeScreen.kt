@@ -225,38 +225,16 @@ fun HomeScreen(
                             peers            = peers,
                             onPushClick      = {
                                 onPushClipboard()
-                                pushTrigger++   // trigger dot animation immediately on tap
+                                pushTrigger++
                             },
+                            onSettingsClick  = onSettingsClick,
                             pushTrigger      = pushTrigger,
                             pushFailTrigger  = pushFailTrigger
                         )
                     },
-                    actions = {
-                        // Settings — styled to match indicator icons
-                        Box(
-                            modifier = Modifier
-                                .padding(end = 8.dp)
-                                .size(36.dp)
-                                .shadow(elevation = 6.dp, shape = CircleShape, clip = true)
-                                .background(
-                                    MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.12f),
-                                    CircleShape
-                                )
-                                .clickable(onClick = onSettingsClick),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = stringResource(R.string.cd_settings),
-                                tint = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = MaterialTheme.colorScheme.primary,
-                        titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                        actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                        titleContentColor = MaterialTheme.colorScheme.onPrimary
                     )
                 )
             }
@@ -1049,9 +1027,10 @@ private fun ConnectionIndicator(
     peerCount: Int,
     peers: List<String>,
     onPushClick: () -> Unit,
+    onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier,
-    pushTrigger: Int = 0,       // increment to trigger success animation
-    pushFailTrigger: Int = 0    // increment to trigger fail animation
+    pushTrigger: Int = 0,
+    pushFailTrigger: Int = 0
 ) {
     val isConnectedWithPeer = connectionState == ConnectionState.CONNECTED && peerCount > 0
     val onPrimary = MaterialTheme.colorScheme.onPrimary
@@ -1132,107 +1111,116 @@ private fun ConnectionIndicator(
         }
     }
 
+    val labelLineHeight = MaterialTheme.typography.labelSmall.lineHeight.value.dp
+
     BoxWithConstraints(
         modifier = modifier.fillMaxWidth(),
         contentAlignment = Alignment.TopCenter
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
+        // Single Row: all 4 icons in the same layout context — guarantees perfect vertical alignment.
+        // verticalAlignment = Top so PC/Settings Columns (icon + label row) expand downward
+        // without affecting the vertical position of phone and cloud icons.
+        Row(
+            verticalAlignment = Alignment.Top,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp)
+                .graphicsLayer { translationX = shakeOffset.value.dp.toPx() }
+        ) {
+            // ── Phone icon ────────────────────────────────────────────────
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(36.dp)
-                    .padding(horizontal = 8.dp)
-                    .graphicsLayer { translationX = shakeOffset.value.dp.toPx() }
-            ) {
-                // Phone icon — tap to push, circle background as tap hint
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .shadow(elevation = 6.dp, shape = CircleShape, clip = true)
-                        .background(
-                            color = onPrimary.copy(alpha = if (isConnectedWithPeer) 0.22f else 0.12f),
-                            shape = CircleShape
-                        )
-                        .then(
-                            if (isConnectedWithPeer)
-                                Modifier.clickable(onClick = onPushClick)
-                            else Modifier
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Smartphone,
-                        contentDescription = if (isConnectedWithPeer)
-                            stringResource(R.string.cd_push_phone_icon)
-                        else
-                            null,
-                        tint = onPrimary.copy(alpha = phoneAlpha),
-                        modifier = Modifier.size(24.dp)
+                    .size(36.dp)
+                    .shadow(elevation = 6.dp, shape = CircleShape, clip = true)
+                    .background(
+                        color = onPrimary.copy(alpha = if (isConnectedWithPeer) 0.22f else 0.12f),
+                        shape = CircleShape
                     )
-                }
+                    .then(
+                        if (isConnectedWithPeer)
+                            Modifier.clickable(onClick = onPushClick)
+                        else Modifier
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Smartphone,
+                    contentDescription = if (isConnectedWithPeer)
+                        stringResource(R.string.cd_push_phone_icon)
+                    else null,
+                    tint = onPrimary.copy(alpha = phoneAlpha),
+                    modifier = Modifier.size(24.dp)
+                )
+            }
 
-                // Left line — flexible, fills available space
+            // ── Left line (Box 36dp tall keeps line vertically centred in icon row) ──
+            Box(
+                modifier = Modifier.weight(1f).height(36.dp),
+                contentAlignment = Alignment.Center
+            ) {
                 IndicatorLine(
                     color = lineLeftColor.copy(alpha = if (leftDashed) 0.5f else 1f),
                     dashed = leftDashed,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(2.dp)
+                    modifier = Modifier.fillMaxWidth().height(2.dp)
                 )
+            }
 
-                // Cloud icon — circle background + shadow
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .shadow(elevation = 6.dp, shape = CircleShape, clip = true)
-                        .background(onPrimary.copy(alpha = 0.12f), CircleShape)
-                ) {
-                    if (connectionState == ConnectionState.CONNECTING) {
-                        val infiniteTransition = rememberInfiniteTransition(label = "syncRotation")
-                        val rotationAngle by infiniteTransition.animateFloat(
-                            initialValue = 0f,
-                            targetValue = 360f,
-                            animationSpec = infiniteRepeatable(
-                                animation = tween(1000, easing = LinearEasing),
-                                repeatMode = RepeatMode.Restart
-                            ),
-                            label = "rotation"
-                        )
-                        Icon(
-                            imageVector = Icons.Default.Sync,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier
-                                .size(22.dp)
-                                .graphicsLayer { rotationZ = rotationAngle }
-                        )
-                    } else {
-                        val cloudIcon = when (connectionState) {
-                            ConnectionState.DISCONNECTED -> Icons.Default.CloudOff
-                            ConnectionState.ERROR        -> Icons.Default.Warning
-                            else                         -> Icons.Default.Cloud
-                        }
-                        Icon(
-                            imageVector = cloudIcon,
-                            contentDescription = null,
-                            tint = cloudColor,
-                            modifier = Modifier.size(22.dp)
-                        )
+            // ── Cloud icon ────────────────────────────────────────────────
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(36.dp)
+                    .shadow(elevation = 6.dp, shape = CircleShape, clip = true)
+                    .background(onPrimary.copy(alpha = 0.12f), CircleShape)
+            ) {
+                if (connectionState == ConnectionState.CONNECTING) {
+                    val infiniteTransition = rememberInfiniteTransition(label = "syncRotation")
+                    val rotationAngle by infiniteTransition.animateFloat(
+                        initialValue = 0f,
+                        targetValue = 360f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(1000, easing = LinearEasing),
+                            repeatMode = RepeatMode.Restart
+                        ),
+                        label = "rotation"
+                    )
+                    Icon(
+                        imageVector = Icons.Default.Sync,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier
+                            .size(22.dp)
+                            .graphicsLayer { rotationZ = rotationAngle }
+                    )
+                } else {
+                    val cloudIcon = when (connectionState) {
+                        ConnectionState.DISCONNECTED -> Icons.Default.CloudOff
+                        ConnectionState.ERROR        -> Icons.Default.Warning
+                        else                         -> Icons.Default.Cloud
                     }
+                    Icon(
+                        imageVector = cloudIcon,
+                        contentDescription = null,
+                        tint = cloudColor,
+                        modifier = Modifier.size(22.dp)
+                    )
                 }
+            }
 
-                // Right line — flexible, fills available space
+            // ── Right line ────────────────────────────────────────────────
+            Box(
+                modifier = Modifier.weight(1f).height(36.dp),
+                contentAlignment = Alignment.Center
+            ) {
                 IndicatorLine(
                     color = lineRightColor.copy(alpha = if (rightDashed) 0.5f else 1f),
                     dashed = rightDashed,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(2.dp)
+                    modifier = Modifier.fillMaxWidth().height(2.dp)
                 )
+            }
 
-                // PC icon — circle background + shadow; slash overlay when PC is offline
+            // ── PC icon + name label (Column: label sits directly under icon) ──
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
@@ -1246,7 +1234,6 @@ private fun ConnectionIndicator(
                         tint = onPrimary.copy(alpha = pcAlpha),
                         modifier = Modifier.size(24.dp)
                     )
-                    // Slash through PC icon when connected to server but PC is not online
                     if (connectionState == ConnectionState.CONNECTED && peerCount == 0) {
                         Canvas(modifier = Modifier.size(24.dp)) {
                             drawLine(
@@ -1259,15 +1246,10 @@ private fun ConnectionIndicator(
                         }
                     }
                 }
-            }
-
-            // PC name — right-aligned under PC icon
-            Box(modifier = Modifier.fillMaxWidth()) {
                 AnimatedContent(
                     targetState = pcName,
                     transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(200)) },
-                    label = "pcName",
-                    modifier = Modifier.align(Alignment.CenterEnd)
+                    label = "pcName"
                 ) { name ->
                     if (name.isNotEmpty()) {
                         Text(
@@ -1278,15 +1260,38 @@ private fun ConnectionIndicator(
                             overflow = TextOverflow.Ellipsis
                         )
                     } else {
-                        Spacer(modifier = Modifier.height(MaterialTheme.typography.labelSmall.lineHeight.value.dp))
+                        Spacer(modifier = Modifier.height(labelLineHeight))
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // ── Settings icon (Column with matching spacer keeps icon row height uniform) ──
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .shadow(elevation = 6.dp, shape = CircleShape, clip = true)
+                        .background(onPrimary.copy(alpha = 0.12f), CircleShape)
+                        .clickable(onClick = onSettingsClick)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = stringResource(R.string.cd_settings),
+                        tint = onPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                // Spacer matches PC name label height — keeps settings icon top-aligned with PC icon
+                Spacer(modifier = Modifier.height(labelLineHeight))
+            }
         }
 
-        // Dot overlay — travels from phone center to PC center (accounts for 8dp side padding)
+        // Dot overlay — phone center: 8+18=26dp, PC center: maxWidth-8(pad)-8(gap)-36(settings)-18=maxWidth-70dp
         if (showDot) {
-            val dotX: androidx.compose.ui.unit.Dp = 26.dp + (maxWidth - 52.dp) * dotProgress.value
+            val dotX: androidx.compose.ui.unit.Dp = 26.dp + (maxWidth - 96.dp) * dotProgress.value
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
