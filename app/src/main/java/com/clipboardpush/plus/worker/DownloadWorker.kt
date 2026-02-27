@@ -37,7 +37,8 @@ class DownloadWorker(
         const val KEY_MESSAGE_ID = "key_message_id"
         const val KEY_IS_ANNOUNCE = "key_is_announce"
         const val KEY_TRANSFER_ID = "key_transfer_id"
-        
+        const val KEY_PROGRESS = "key_progress"
+
         private const val TAG = "DownloadWorker"
     }
 
@@ -65,7 +66,9 @@ class DownloadWorker(
                 val roomId = settingsRepository.roomIdFlow.first()
                 val tempLocal = File.createTempFile("loc_v2_", ".tmp", applicationContext.cacheDir)
                 
-                downloadToFile(fileUrl, tempLocal, roomId)
+                downloadToFile(fileUrl, tempLocal, roomId) { pct ->
+                    setProgress(workDataOf(KEY_PROGRESS to pct))
+                }
                 
                 if (tempLocal.length() > 0) {
                      processDownloadedFile(tempLocal, fileName, mimeType, messageId, transferId)
@@ -109,7 +112,9 @@ class DownloadWorker(
                     val tempLocal = File.createTempFile("loc_", ".tmp", applicationContext.cacheDir)
                     // Short timeout for local check? OkHttpClient defaults are 10s.
                     // Ideally we'd use a shorter timeout client, but for now reuse 'client'
-                    downloadToFile(localUrl, tempLocal, roomId)
+                    downloadToFile(localUrl, tempLocal, roomId) { pct ->
+                        setProgress(workDataOf(KEY_PROGRESS to pct))
+                    }
                     if (tempLocal.length() > 0) {
                         sourceFile = tempLocal
                         isLocalTransfer = true
@@ -124,7 +129,9 @@ class DownloadWorker(
             // 2. Fallback to Cloud Download (Encrypted)
             if (sourceFile == null) {
                 val tempEncryptedFile = File.createTempFile("enc_", ".tmp", applicationContext.cacheDir)
-                downloadToFile(fullUrl, tempEncryptedFile)
+                downloadToFile(fullUrl, tempEncryptedFile) { pct ->
+                    setProgress(workDataOf(KEY_PROGRESS to pct))
+                }
 
                 // Decrypt
                 val roomKey = settingsRepository.roomKeyFlow.first()
@@ -290,7 +297,10 @@ class DownloadWorker(
             }
     }
 
-    private suspend fun downloadToFile(url: String, file: File, roomId: String? = null) {
+    private suspend fun downloadToFile(
+        url: String, file: File, roomId: String? = null,
+        onProgress: (suspend (Int) -> Unit)? = null
+    ) {
         withContext(Dispatchers.IO) {
             val requestBuilder = Request.Builder().url(url)
             if (!roomId.isNullOrEmpty()) {
@@ -300,9 +310,26 @@ class DownloadWorker(
             val response = client.newCall(request).execute()
             if (!response.isSuccessful) throw IOException("Unexpected code $response")
 
-            response.body?.byteStream()?.use { input ->
-                FileOutputStream(file).use { output ->
-                    input.copyTo(output)
+            response.body?.let { body ->
+                val contentLength = body.contentLength()
+                body.byteStream().use { input ->
+                    FileOutputStream(file).use { output ->
+                        var bytesRead = 0L
+                        var lastReported = -1
+                        val buffer = ByteArray(8 * 1024)
+                        var read: Int
+                        while (input.read(buffer).also { read = it } != -1) {
+                            output.write(buffer, 0, read)
+                            bytesRead += read
+                            if (contentLength > 0 && onProgress != null) {
+                                val pct = ((bytesRead * 100L) / contentLength).toInt().coerceIn(0, 99)
+                                if (pct >= lastReported + 5) {
+                                    lastReported = pct
+                                    onProgress(pct)
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

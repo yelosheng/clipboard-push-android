@@ -41,8 +41,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _failedDownloadIds = MutableStateFlow<Set<String>>(emptySet())
     val failedDownloadIds: StateFlow<Set<String>> = _failedDownloadIds.asStateFlow()
 
+    private val _downloadProgress = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val downloadProgress: StateFlow<Map<String, Int>> = _downloadProgress.asStateFlow()
+
+    fun updateDownloadProgress(messageId: String, progress: Int) {
+        _downloadProgress.update { it + (messageId to progress) }
+    }
+
+    fun clearDownloadProgress(messageId: String) {
+        _downloadProgress.update { it - messageId }
+    }
+
     fun markDownloadFailed(messageId: String) {
         _failedDownloadIds.update { it + messageId }
+        clearDownloadProgress(messageId)
     }
 
     fun markDownloadRetrying(messageId: String) {

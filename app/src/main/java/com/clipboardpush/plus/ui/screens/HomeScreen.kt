@@ -91,6 +91,7 @@ fun HomeScreen(
     onReconnectClick: () -> Unit = {},
     peers: List<String> = emptyList(),
     failedDownloadIds: Set<String> = emptySet(),
+    downloadProgress: Map<String, Int> = emptyMap(),
     onRetryDownload: (PushMessage) -> Unit = {}
 ) {
     // 构建基础URL
@@ -365,6 +366,7 @@ fun HomeScreen(
                             isSelectionMode = isSelectionMode,
                             isSelected = selectedMessageIds.contains(message.safeId),
                             isFailed = message.safeId in failedDownloadIds,
+                            downloadProgress = downloadProgress[message.safeId],
                             onClick = {
                                 if (isSelectionMode) {
                                     // 选择模式下切换选中状态
@@ -404,6 +406,7 @@ fun SwipeableMessageItem(
     isSelectionMode: Boolean = false,
     isSelected: Boolean = false,
     isFailed: Boolean = false,
+    downloadProgress: Int? = null,
     onClick: () -> Unit,
     onLongClick: () -> Unit = {},
     onDelete: () -> Unit,
@@ -417,6 +420,7 @@ fun SwipeableMessageItem(
             isSelectionMode = isSelectionMode,
             isSelected = isSelected,
             isFailed = isFailed,
+            downloadProgress = downloadProgress,
             onClick = onClick,
             onLongClick = onLongClick,
             onRetryDownload = onRetryDownload
@@ -517,6 +521,7 @@ fun SwipeableMessageItem(
                 isSelectionMode = isSelectionMode,
                 isSelected = isSelected,
                 isFailed = isFailed,
+                downloadProgress = downloadProgress,
                 onClick = {
                     if (displayOffset < -10f) {
                         // 如果已展开，点击则收回
@@ -544,6 +549,7 @@ fun MessageItem(
     isSelectionMode: Boolean = false,
     isSelected: Boolean = false,
     isFailed: Boolean = false,
+    downloadProgress: Int? = null,
     onClick: () -> Unit,
     onLongClick: () -> Unit = {},
     onRetryDownload: (PushMessage) -> Unit = {}
@@ -746,6 +752,17 @@ fun MessageItem(
                             .clip(RoundedCornerShape(8.dp))
                             .background(shimmerBrush)
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    if (downloadProgress != null) {
+                        LinearProgressIndicator(
+                            progress = { downloadProgress / 100f },
+                            modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(1.5.dp))
+                        )
+                    } else {
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(1.5.dp))
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -794,6 +811,19 @@ fun MessageItem(
                             contentDescription = null,
                             modifier = Modifier.size(32.dp),
                             tint = typeColor
+                        )
+                    }
+                }
+                if (message.localPath == null && !isFailed) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    if (downloadProgress != null) {
+                        LinearProgressIndicator(
+                            progress = { downloadProgress / 100f },
+                            modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(1.5.dp))
+                        )
+                    } else {
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(1.5.dp))
                         )
                     }
                 }

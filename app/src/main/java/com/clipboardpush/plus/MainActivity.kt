@@ -94,6 +94,10 @@ class MainActivity : ComponentActivity() {
                 mainViewModel.markDownloadFailed(messageId)
             }
 
+            clipboardService?.onMessageDownloadProgress = { messageId, progress ->
+                mainViewModel.updateDownloadProgress(messageId, progress)
+            }
+
             // 同步当前状态
             val currentState = clipboardService?.getConnectionState() ?: ConnectionState.DISCONNECTED
             mainViewModel.updateConnectionState(currentState)
@@ -114,6 +118,7 @@ class MainActivity : ComponentActivity() {
             clipboardService?.onMessageReceived = null
             clipboardService?.onPeerCountChanged = null
             clipboardService?.onMessageDownloadFailed = null
+            clipboardService?.onMessageDownloadProgress = null
             clipboardService = null
             isBound = false
         }
@@ -534,6 +539,11 @@ fun MainNavigation(
     val recentPeers by viewModel.recentPeers.collectAsState()
     val activeRoomId by viewModel.activeRoomId.collectAsState()
     val failedDownloadIds by viewModel.failedDownloadIds.collectAsState()
+    val downloadProgress by viewModel.downloadProgress.collectAsState()
+
+    LaunchedEffect(messages) {
+        messages.filter { it.localPath != null }.forEach { viewModel.clearDownloadProgress(it.safeId) }
+    }
 
     // 自动连接 (仅当设置改变时触发，或者首次进入时)
     LaunchedEffect(autoConnect, serverAddress) {
@@ -568,6 +578,7 @@ fun MainNavigation(
                 onReconnectClick = onStartService,
                 peers = peers,
                 failedDownloadIds = failedDownloadIds,
+                downloadProgress = downloadProgress,
                 onRetryDownload = onRetryDownload
             )
         }

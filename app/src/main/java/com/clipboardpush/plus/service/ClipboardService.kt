@@ -157,6 +157,7 @@ class ClipboardService : Service() {
     var onPeersChanged: ((List<String>) -> Unit)? = null
     var onMessageReceived: ((PushMessage) -> Unit)? = null
     var onMessageDownloadFailed: ((messageId: String) -> Unit)? = null
+    var onMessageDownloadProgress: ((messageId: String, progress: Int) -> Unit)? = null
 
     private val processedMessageIds = Collections.synchronizedSet(HashSet<String>())
 
@@ -593,14 +594,21 @@ class ClipboardService : Service() {
                 WorkManager.getInstance(applicationContext)
                     .getWorkInfoByIdFlow(workId)
                     .collect { workInfo ->
-                        if (workInfo?.state == androidx.work.WorkInfo.State.FAILED) {
-                            Log.w(TAG, "Cloud download failed for message $capturedMessageId")
-                            pendingFiles.remove(capturedFileName)
-                            onMessageDownloadFailed?.invoke(capturedMessageId)
-                            this.cancel()
-                        } else if (workInfo?.state?.isFinished == true) {
-                            pendingFiles.remove(capturedFileName)
-                            this.cancel()
+                        when {
+                            workInfo?.state == androidx.work.WorkInfo.State.RUNNING -> {
+                                val pct = workInfo.progress.getInt(DownloadWorker.KEY_PROGRESS, -1)
+                                if (pct >= 0) onMessageDownloadProgress?.invoke(capturedMessageId, pct)
+                            }
+                            workInfo?.state == androidx.work.WorkInfo.State.FAILED -> {
+                                Log.w(TAG, "Cloud download failed for message $capturedMessageId")
+                                pendingFiles.remove(capturedFileName)
+                                onMessageDownloadFailed?.invoke(capturedMessageId)
+                                this.cancel()
+                            }
+                            workInfo?.state?.isFinished == true -> {
+                                pendingFiles.remove(capturedFileName)
+                                this.cancel()
+                            }
                         }
                     }
             }
@@ -687,7 +695,10 @@ class ClipboardService : Service() {
                             this.cancel()
                         }
                         else -> {
-                            // Running/Enqueued... wait
+                            if (workInfo?.state == androidx.work.WorkInfo.State.RUNNING) {
+                                val pct = workInfo.progress.getInt(DownloadWorker.KEY_PROGRESS, -1)
+                                if (pct >= 0) onMessageDownloadProgress?.invoke(messageId, pct)
+                            }
                         }
                     }
                 }
@@ -730,12 +741,19 @@ class ClipboardService : Service() {
             WorkManager.getInstance(applicationContext)
                 .getWorkInfoByIdFlow(workId)
                 .collect { workInfo ->
-                    if (workInfo?.state == androidx.work.WorkInfo.State.FAILED) {
-                        Log.w(TAG, "Retry download failed for message $messageId")
-                        onMessageDownloadFailed?.invoke(messageId)
-                        this.cancel()
-                    } else if (workInfo?.state?.isFinished == true) {
-                        this.cancel()
+                    when {
+                        workInfo?.state == androidx.work.WorkInfo.State.RUNNING -> {
+                            val pct = workInfo.progress.getInt(DownloadWorker.KEY_PROGRESS, -1)
+                            if (pct >= 0) onMessageDownloadProgress?.invoke(messageId, pct)
+                        }
+                        workInfo?.state == androidx.work.WorkInfo.State.FAILED -> {
+                            Log.w(TAG, "Retry download failed for message $messageId")
+                            onMessageDownloadFailed?.invoke(messageId)
+                            this.cancel()
+                        }
+                        workInfo?.state?.isFinished == true -> {
+                            this.cancel()
+                        }
                     }
                 }
         }
