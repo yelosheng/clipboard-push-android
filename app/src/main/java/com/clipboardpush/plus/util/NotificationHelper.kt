@@ -38,18 +38,19 @@ object NotificationHelper {
         peerCount: Int = 0,
         peers: List<String> = emptyList()
     ): Notification {
-        val contentText = when (state) {
-            ConnectionState.CONNECTED -> {
-                // peers list is already self-filtered by RelayRepository
-                if (peers.isNotEmpty()) {
-                    context.getString(R.string.notif_connected_peers, peers.joinToString(", "))
-                } else {
-                    context.getString(R.string.notif_connected_no_peers)
-                }
-            }
-            ConnectionState.CONNECTING -> context.getString(R.string.notif_connecting)
-            ConnectionState.DISCONNECTED -> context.getString(R.string.notif_disconnected)
-            ConnectionState.ERROR -> context.getString(R.string.notif_error)
+        // Line 1: server connection status
+        val line1 = when (state) {
+            ConnectionState.CONNECTED -> context.getString(R.string.state_server_connected)
+            ConnectionState.CONNECTING -> context.getString(R.string.state_connecting)
+            ConnectionState.DISCONNECTED -> context.getString(R.string.state_disconnected)
+            ConnectionState.ERROR -> context.getString(R.string.state_error)
+        }
+
+        // Line 2: PC status — only shown when connected to server
+        val line2: String? = when {
+            state != ConnectionState.CONNECTED -> null
+            peers.isNotEmpty() -> context.getString(R.string.target_device, peers.joinToString(", "))
+            else -> context.getString(R.string.state_pc_offline)
         }
         
         val color = when (state) {
@@ -94,15 +95,28 @@ object NotificationHelper {
         // 创建自定义布局
         val remoteViews = android.widget.RemoteViews(context.packageName, R.layout.notification_service)
         remoteViews.setTextViewText(R.id.notification_title, context.getString(R.string.app_name))
-        remoteViews.setTextViewText(R.id.notification_text, contentText)
+        remoteViews.setTextViewText(R.id.notification_text, line1)
+
+        // Second line: show/hide based on connected state
+        if (line2 != null) {
+            remoteViews.setTextViewText(R.id.notification_subtext, line2)
+            remoteViews.setViewVisibility(R.id.notification_subtext, android.view.View.VISIBLE)
+        } else {
+            remoteViews.setViewVisibility(R.id.notification_subtext, android.view.View.GONE)
+        }
+
         if (largeIconBitmap != null) {
             remoteViews.setImageViewBitmap(R.id.notification_icon, largeIconBitmap)
         } else {
-            // Fallback to vector drawable resource if bitmap fails (though RemoteViews supports limited vector support depending on API)
-            // Or just leave it as is (defined in layout) or set to a safe png resource
-            remoteViews.setImageViewResource(R.id.notification_icon, R.drawable.ic_launcher_foreground) // Fallback
+            remoteViews.setImageViewResource(R.id.notification_icon, R.drawable.ic_launcher_foreground)
         }
-        remoteViews.setOnClickPendingIntent(R.id.btn_push, pushPendingIntent)
+
+        // Push button: enabled only when peers are online
+        val hasPeers = peers.isNotEmpty()
+        remoteViews.setFloat(R.id.btn_push, "setAlpha", if (hasPeers) 1f else 0.38f)
+        if (hasPeers) {
+            remoteViews.setOnClickPendingIntent(R.id.btn_push, pushPendingIntent)
+        }
 
         return NotificationCompat.Builder(context, ClipboardManApp.NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
