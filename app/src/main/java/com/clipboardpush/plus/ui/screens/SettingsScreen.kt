@@ -92,47 +92,45 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        val statusText = when (connectionState) {
-                            ConnectionState.CONNECTED -> {
-                                if (peers.isNotEmpty()) stringResource(R.string.state_connected_with_peer)
-                                else stringResource(R.string.state_connected_waiting)
-                            }
+                        // Layer 1: server connection status
+                        val serverStatusText = when (connectionState) {
+                            ConnectionState.CONNECTED -> stringResource(R.string.state_server_connected)
                             ConnectionState.CONNECTING -> stringResource(R.string.state_connecting)
                             ConnectionState.DISCONNECTED -> stringResource(R.string.state_disconnected)
                             ConnectionState.ERROR -> stringResource(R.string.state_error)
                         }
-                        val statusColor = when (connectionState) {
+                        val serverStatusColor = when (connectionState) {
                             ConnectionState.CONNECTED -> {
-                                if (peers.isNotEmpty()) Green500 else androidx.compose.ui.graphics.Color(0xFFFFC107)
+                                if (peers.isNotEmpty()) Green500
+                                else androidx.compose.ui.graphics.Color(0xFFFFC107)
                             }
                             ConnectionState.CONNECTING -> Orange500
                             ConnectionState.ERROR -> Red500
                             ConnectionState.DISCONNECTED -> Grey500
                         }
 
+                        // Layer 2: PC peer sub-text (only shown when connected to server)
+                        val pcSubText: String? = when {
+                            connectionState != ConnectionState.CONNECTED -> null
+                            peers.isNotEmpty() -> stringResource(R.string.target_device, peers.joinToString(", "))
+                            else -> stringResource(R.string.state_pc_offline)
+                        }
+                        val pcSubColor = if (peers.isNotEmpty()) Green500
+                                         else androidx.compose.ui.graphics.Color(0xFFFFC107)
+
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = stringResource(R.string.status_label, statusText),
+                                text = stringResource(R.string.status_label, serverStatusText),
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = statusColor
+                                color = serverStatusColor
                             )
-
-                            // Display Connected PC Name or waiting hint
-                            if (connectionState == ConnectionState.CONNECTED) {
+                            if (pcSubText != null) {
                                 Spacer(modifier = Modifier.height(2.dp))
-                                if (peers.isNotEmpty()) {
-                                    Text(
-                                        text = stringResource(R.string.target_device, peers.joinToString(", ")),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                } else {
-                                    Text(
-                                        text = stringResource(R.string.waiting_for_pc_transfer),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = androidx.compose.ui.graphics.Color(0xFFFFC107)
-                                    )
-                                }
+                                Text(
+                                    text = pcSubText,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = pcSubColor
+                                )
                             }
                         }
 
@@ -234,9 +232,12 @@ fun SettingsScreen(
                 SettingsSection(title = stringResource(R.string.section_recent)) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         recentPeers.forEach { entry ->
+                            val isCurrentRoom = entry.room == activeRoomId
+                            val isPeerOnline = isCurrentRoom && peers.any { it == entry.displayName }
                             RecentPeerRow(
                                 entry = entry,
-                                isActive = entry.room == activeRoomId,
+                                isCurrentRoom = isCurrentRoom,
+                                isPeerOnline = isPeerOnline,
                                 onSelect = { onPeerSelected(entry) },
                                 onRemove = { onPeerRemoved(entry) }
                             )
@@ -511,7 +512,8 @@ fun SettingsSection(
 @Composable
 private fun RecentPeerRow(
     entry: PeerEntry,
-    isActive: Boolean,
+    isCurrentRoom: Boolean,
+    isPeerOnline: Boolean,
     onSelect: () -> Unit,
     onRemove: () -> Unit
 ) {
@@ -569,7 +571,7 @@ private fun RecentPeerRow(
                 ),
             shape = RoundedCornerShape(8.dp),
             colors = CardDefaults.cardColors(
-                containerColor = if (isActive)
+                containerColor = if (isCurrentRoom && isPeerOnline)
                     MaterialTheme.colorScheme.primaryContainer
                 else
                     MaterialTheme.colorScheme.surfaceVariant
@@ -591,17 +593,31 @@ private fun RecentPeerRow(
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold
                         )
-                        if (isActive) {
-                            Surface(
-                                color = Green500,
-                                shape = RoundedCornerShape(4.dp)
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.peer_active_label),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
+                        if (isCurrentRoom) {
+                            if (isPeerOnline) {
+                                Surface(
+                                    color = Green500,
+                                    shape = RoundedCornerShape(4.dp)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.peer_active_label),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            } else {
+                                Surface(
+                                    color = Grey500,
+                                    shape = RoundedCornerShape(4.dp)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.peer_offline_label),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
                             }
                         }
                     }
