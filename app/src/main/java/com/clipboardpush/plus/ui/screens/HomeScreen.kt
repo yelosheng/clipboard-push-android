@@ -232,11 +232,24 @@ fun HomeScreen(
                         )
                     },
                     actions = {
-                        // Settings button only (Send moved to phone icon tap)
-                        IconButton(onClick = onSettingsClick) {
+                        // Settings — styled to match indicator icons
+                        Box(
+                            modifier = Modifier
+                                .padding(end = 8.dp)
+                                .size(36.dp)
+                                .shadow(elevation = 6.dp, shape = CircleShape, clip = true)
+                                .background(
+                                    MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.12f),
+                                    CircleShape
+                                )
+                                .clickable(onClick = onSettingsClick),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Icon(
                                 imageVector = Icons.Default.Settings,
-                                contentDescription = stringResource(R.string.cd_settings)
+                                contentDescription = stringResource(R.string.cd_settings),
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     },
