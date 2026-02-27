@@ -78,6 +78,20 @@ import com.clipboardpush.plus.data.model.PushMessage
 import com.clipboardpush.plus.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
+import androidx.compose.material.icons.filled.DesktopWindows
+import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.graphicsLayer
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -197,79 +211,18 @@ fun HomeScreen(
                     )
                 )
             } else {
-                // 正常模式的 TopAppBar
-                TopAppBar(
+                // 正常模式的 TopAppBar — Phone→Cloud→PC indicator
+                CenterAlignedTopAppBar(
                     title = {
-                        if (connectionState == ConnectionState.CONNECTED) {
-                            // Filter logic: same as SettingsScreen
-                            // peers list is already self-filtered by RelayRepository
-                            if (peers.isNotEmpty()) {
-                                Text(
-                                    text = peers.joinToString(", "),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                    },
-                    navigationIcon = {
-                        // 显示连接状态图标
-                        val (icon, tint, description) = when (connectionState) {
-                            ConnectionState.CONNECTED -> {
-                                if (peerCount > 0) {
-                                    Triple(Icons.Default.Cloud, Green500, stringResource(R.string.state_connected_with_peer))
-                                } else {
-                                    Triple(Icons.Default.Cloud, androidx.compose.ui.graphics.Color(0xFFFFC107), stringResource(R.string.state_connected_waiting)) // Yellow for Alone
-                                }
-                            }
-                            ConnectionState.CONNECTING -> Triple(Icons.Default.Sync, Orange500, stringResource(R.string.state_connecting))
-                            ConnectionState.ERROR -> Triple(Icons.Default.Warning, Red500, stringResource(R.string.state_error))
-                            ConnectionState.DISCONNECTED -> Triple(Icons.Default.CloudOff, Grey500, stringResource(R.string.state_disconnected))
-                        }
-
-                        IconButton(
-                            onClick = {
-                                if (connectionState != ConnectionState.CONNECTED) {
-                                    onReconnectClick()
-                                } else {
-                                    // Connected toast or info?
-                                }
-                            }
-                        ) {
-                            if (connectionState == ConnectionState.CONNECTING) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    color = tint,
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = icon,
-                                    contentDescription = description,
-                                    tint = tint,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                            }
-                        }
+                        ConnectionIndicator(
+                            connectionState = connectionState,
+                            peerCount = peerCount,
+                            peers = peers,
+                            onPushClick = onPushClipboard
+                        )
                     },
                     actions = {
-                        // 推送剪贴板按钮 - disabled when no peers online
-                        val isPushEnabled = connectionState != ConnectionState.CONNECTED || peerCount > 0
-                        IconButton(
-                            onClick = onPushClipboard,
-                            enabled = isPushEnabled
-                        ) {
-                            // 使用 Send 图标表示推送
-                            Icon(
-                                imageVector = Icons.Default.Send,
-                                contentDescription = if (isPushEnabled)
-                                    stringResource(R.string.cd_push_clipboard)
-                                else
-                                    stringResource(R.string.cd_waiting_for_pc)
-                            )
-                        }
-                        // 设置按钮
+                        // Settings button only (Send moved to phone icon tap)
                         IconButton(onClick = onSettingsClick) {
                             Icon(
                                 imageVector = Icons.Default.Settings,
@@ -277,10 +230,9 @@ fun HomeScreen(
                             )
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = MaterialTheme.colorScheme.primary,
                         titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                        navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
                         actionIconContentColor = MaterialTheme.colorScheme.onPrimary
                     )
                 )
@@ -1065,6 +1017,165 @@ private fun FileActionSheet(
                 modifier = Modifier.fillMaxWidth().clickable(onClick = onCopyName)
             )
         }
+    }
+}
+
+@Composable
+private fun ConnectionIndicator(
+    connectionState: ConnectionState,
+    peerCount: Int,
+    peers: List<String>,
+    onPushClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val isConnectedWithPeer = connectionState == ConnectionState.CONNECTED && peerCount > 0
+    val onPrimary = MaterialTheme.colorScheme.onPrimary
+
+    // Static colors (will animate in Task 2)
+    val cloudColor = when {
+        connectionState == ConnectionState.CONNECTED && peerCount > 0 -> Green500
+        connectionState == ConnectionState.CONNECTED -> Orange500
+        connectionState == ConnectionState.ERROR -> Red500
+        else -> Grey500
+    }
+    val lineLeftColor = when {
+        connectionState == ConnectionState.CONNECTED -> Green500
+        connectionState == ConnectionState.ERROR -> Red500
+        else -> Grey500
+    }
+    val lineRightColor = when {
+        isConnectedWithPeer -> Green500
+        connectionState == ConnectionState.ERROR -> Red500
+        else -> Grey500
+    }
+    val pcAlpha = when {
+        isConnectedWithPeer -> 1f
+        connectionState == ConnectionState.CONNECTED -> 0.4f
+        else -> 0.5f
+    }
+    val phoneAlpha = when (connectionState) {
+        ConnectionState.DISCONNECTED -> 0.5f
+        else -> 1f
+    }
+
+    val leftDashed  = connectionState != ConnectionState.CONNECTED
+    val rightDashed = !isConnectedWithPeer
+
+    val pcName = peers.firstOrNull() ?: ""
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.height(32.dp)
+        ) {
+            // Phone icon — tap to push
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .then(
+                        if (isConnectedWithPeer)
+                            Modifier.clickable(
+                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                indication = null,
+                                onClick = onPushClick
+                            )
+                        else Modifier
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Smartphone,
+                    contentDescription = stringResource(R.string.cd_push_clipboard),
+                    tint = onPrimary.copy(alpha = phoneAlpha),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            // Left line
+            IndicatorLine(
+                color = lineLeftColor.copy(alpha = if (leftDashed) 0.5f else 1f),
+                dashed = leftDashed,
+                modifier = Modifier
+                    .width(24.dp)
+                    .height(2.dp)
+            )
+
+            // Cloud icon (static for now — animated in Task 2)
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.size(32.dp)
+            ) {
+                val cloudIcon = when (connectionState) {
+                    ConnectionState.DISCONNECTED -> Icons.Default.CloudOff
+                    ConnectionState.ERROR        -> Icons.Default.Warning
+                    else                         -> Icons.Default.Cloud
+                }
+                Icon(
+                    imageVector = cloudIcon,
+                    contentDescription = null,
+                    tint = cloudColor,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+
+            // Right line
+            IndicatorLine(
+                color = lineRightColor.copy(alpha = if (rightDashed) 0.5f else 1f),
+                dashed = rightDashed,
+                modifier = Modifier
+                    .width(24.dp)
+                    .height(2.dp)
+            )
+
+            // PC icon
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.DesktopWindows,
+                    contentDescription = null,
+                    tint = onPrimary.copy(alpha = pcAlpha),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+
+        // PC name label below
+        if (pcName.isNotEmpty()) {
+            Text(
+                text = pcName,
+                style = MaterialTheme.typography.labelSmall,
+                color = onPrimary.copy(alpha = 0.7f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun IndicatorLine(
+    color: androidx.compose.ui.graphics.Color,
+    dashed: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier) {
+        val strokePx = 1.5.dp.toPx()
+        val dashEffect = if (dashed)
+            PathEffect.dashPathEffect(floatArrayOf(6f, 5f), 0f)
+        else null
+        drawLine(
+            color = color,
+            start = Offset(0f, size.height / 2),
+            end   = Offset(size.width, size.height / 2),
+            strokeWidth = strokePx,
+            cap = StrokeCap.Round,
+            pathEffect = dashEffect
+        )
     }
 }
 
