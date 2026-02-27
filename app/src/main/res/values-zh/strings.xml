@@ -17,6 +17,7 @@
     <string name="cd_exit_selection">退出选择模式</string>
     <string name="cd_push_clipboard">推送剪贴板内容到服务器</string>
     <string name="cd_waiting_for_pc">等待 PC 端连接…</string>
+    <string name="cd_push_phone_icon">点击推送剪贴板</string>
     <string name="cd_settings">设置</string>
     <string name="banner_error">连接错误 - 点击重试</string>
     <string name="banner_disconnected">未连接 - 点击重连</string>

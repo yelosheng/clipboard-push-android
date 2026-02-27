@@ -1149,7 +1149,10 @@ private fun ConnectionIndicator(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Smartphone,
-                        contentDescription = stringResource(R.string.cd_push_clipboard),
+                        contentDescription = if (isConnectedWithPeer)
+                            stringResource(R.string.cd_push_phone_icon)
+                        else
+                            null,
                         tint = onPrimary.copy(alpha = phoneAlpha),
                         modifier = Modifier.size(20.dp)
                     )
