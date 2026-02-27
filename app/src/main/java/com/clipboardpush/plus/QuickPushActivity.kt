@@ -67,7 +67,7 @@ class QuickPushActivity : ComponentActivity() {
                 // Peer guard: check if any peers are online before pushing
                 val currentPeerCount = com.clipboardpush.plus.service.ClipboardService.latestPeerCount
                 if (currentPeerCount <= 0) {
-                    Toast.makeText(this@QuickPushActivity, "推送失败：没有在线设备", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@QuickPushActivity, getString(R.string.toast_no_peers), Toast.LENGTH_SHORT).show()
                     finish()
                     return@launch
                 }
@@ -77,7 +77,7 @@ class QuickPushActivity : ComponentActivity() {
                 val clipData = clipboardManager.primaryClip
                 
                 if (clipData == null || clipData.itemCount == 0) {
-                    Toast.makeText(this@QuickPushActivity, "剪贴板为空", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@QuickPushActivity, getString(R.string.toast_clipboard_empty), Toast.LENGTH_SHORT).show()
                     finish()
                     return@launch
                 }
@@ -87,7 +87,7 @@ class QuickPushActivity : ComponentActivity() {
                 val text = item.text?.toString() ?: item.coerceToText(this@QuickPushActivity)?.toString()
                 
                 if (text.isNullOrBlank()) {
-                    Toast.makeText(this@QuickPushActivity, "剪贴板不是文本", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@QuickPushActivity, getString(R.string.toast_clipboard_not_text), Toast.LENGTH_SHORT).show()
                     finish()
                     return@launch
                 }
@@ -99,7 +99,7 @@ class QuickPushActivity : ComponentActivity() {
                 val roomKey = settingsRepository.roomKeyFlow.first()
                 
                 if (serverAddress.isBlank() || roomId.isNullOrBlank()) {
-                    Toast.makeText(this@QuickPushActivity, "未配置服务器", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@QuickPushActivity, getString(R.string.toast_server_not_configured), Toast.LENGTH_SHORT).show()
                     finish()
                     return@launch
                 }
@@ -117,13 +117,13 @@ class QuickPushActivity : ComponentActivity() {
                             isEncrypted = true
                         } else {
                             Log.e(TAG, "Encryption returned null, aborting send")
-                            Toast.makeText(this@QuickPushActivity, "加密失败，请重新扫码配对", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this@QuickPushActivity, getString(R.string.notif_encryption_error), Toast.LENGTH_SHORT).show()
                             finish()
                             return@launch
                         }
                     } catch (e: Exception) {
                         Log.e(TAG, "Encryption failed", e)
-                        Toast.makeText(this@QuickPushActivity, "加密失败，请重新扫码配对", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@QuickPushActivity, getString(R.string.notif_encryption_error), Toast.LENGTH_SHORT).show()
                         finish()
                         return@launch
                     }
@@ -150,16 +150,16 @@ class QuickPushActivity : ComponentActivity() {
                 val result = apiService.relayEvent(roomId, "clipboard_sync", payload, clientId)
                 
                 if (result.isFailure) {
-                    Toast.makeText(this@QuickPushActivity, "发送失败", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@QuickPushActivity, getString(R.string.toast_push_failed), Toast.LENGTH_SHORT).show()
                 } else {
                     // 震动反馈
                     vibrateSuccess()
-                    Toast.makeText(this@QuickPushActivity, "推送成功", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@QuickPushActivity, getString(R.string.toast_push_success), Toast.LENGTH_SHORT).show()
                 }
                 
             } catch (e: Exception) {
                 Log.e(TAG, "Quick push failed", e)
-                Toast.makeText(this@QuickPushActivity, "推送失败", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@QuickPushActivity, getString(R.string.toast_push_failed), Toast.LENGTH_SHORT).show()
             }
             
             // 完成后关闭

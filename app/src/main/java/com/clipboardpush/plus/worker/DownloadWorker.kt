@@ -193,7 +193,7 @@ class DownloadWorker(
                                 messageRepository.updateMessageLocalPath(messageId, savedUri.toString())
                             }
                             NotificationHelper.showPushNotification(
-                                applicationContext, "已复制到剪贴板", fileName
+                                applicationContext, applicationContext.getString(R.string.toast_copied), fileName
                             )
                             return Result.success(workDataOf("uri" to savedUri.toString(), KEY_TRANSFER_ID to (transferId ?: "")))
                         } else {
@@ -207,7 +207,7 @@ class DownloadWorker(
                         Log.d(TAG, "Clipboard-only: copied file path to clipboard")
                         sourceFile.delete()
                         NotificationHelper.showPushNotification(
-                            applicationContext, "已复制到剪贴板", fileName
+                            applicationContext, applicationContext.getString(R.string.toast_copied), fileName
                         )
                         return Result.success(workDataOf(KEY_TRANSFER_ID to (transferId ?: "")))
                     }

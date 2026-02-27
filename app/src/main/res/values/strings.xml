@@ -117,9 +117,31 @@
     <string name="notif_error">Connection error</string>
     <string name="notif_send_failed_title">Send Failed</string>
     <string name="notif_encryption_error">Encryption error. Please re-scan the pairing QR code.</string>
+    <string name="notif_downloading">Downloading</string>
+    <string name="notif_evicted_title">Removed from room</string>
+    <string name="notif_evicted_body">Reason: %s. Please reconnect.</string>
 
     <!-- ClipboardService -->
     <string name="toast_evicted_from_room">You have been removed from the room! (%s)</string>
+
+    <!-- QuickPushActivity -->
+    <string name="toast_server_not_configured">Server not configured</string>
+    <string name="toast_push_failed">Push failed</string>
+
+    <!-- ShareReceiverActivity -->
+    <string name="toast_share_empty">Nothing to share</string>
+    <string name="toast_room_not_configured">Not connected. Open the app first.</string>
+    <string name="toast_share_get_failed">Failed to get shared content</string>
+    <string name="share_unknown_file">Unknown</string>
+    <string name="share_dialog_title">Send to PC</string>
+    <string name="share_uploading_text">Sending…</string>
+    <string name="share_queueing">Adding to queue…</string>
+    <string name="share_queue_failed">Failed to queue: %s</string>
+    <string name="share_queued_one">%s queued</string>
+    <string name="share_queued_multiple">%d files queued</string>
+    <string name="share_idle">Preparing…</string>
+    <string name="share_success">Sent</string>
+    <string name="action_close">Close</string>
 
     <!-- Notification channels (ClipboardManApp) -->
     <string name="notif_channel_service_name">Clipboard Service</string>

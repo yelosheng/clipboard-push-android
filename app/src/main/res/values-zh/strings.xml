@@ -117,9 +117,31 @@
     <string name="notif_error">连接错误</string>
     <string name="notif_send_failed_title">发送失败</string>
     <string name="notif_encryption_error">加密出错，请重新扫码配对</string>
+    <string name="notif_downloading">下载中</string>
+    <string name="notif_evicted_title">已移出房间</string>
+    <string name="notif_evicted_body">原因: %s，请重新连接。</string>
 
     <!-- ClipboardService -->
     <string name="toast_evicted_from_room">您已被移出房间! (%s)</string>
+
+    <!-- QuickPushActivity -->
+    <string name="toast_server_not_configured">未配置服务器</string>
+    <string name="toast_push_failed">推送失败</string>
+
+    <!-- ShareReceiverActivity -->
+    <string name="toast_share_empty">分享内容为空</string>
+    <string name="toast_room_not_configured">未连接，请先打开主APP</string>
+    <string name="toast_share_get_failed">无法获取分享内容</string>
+    <string name="share_unknown_file">未知文件</string>
+    <string name="share_dialog_title">发送到电脑</string>
+    <string name="share_uploading_text">发送中…</string>
+    <string name="share_queueing">加入队列中…</string>
+    <string name="share_queue_failed">加入队列失败：%s</string>
+    <string name="share_queued_one">%s 已加入队列</string>
+    <string name="share_queued_multiple">%d 个文件已加入队列</string>
+    <string name="share_idle">准备中…</string>
+    <string name="share_success">已发送</string>
+    <string name="action_close">关闭</string>
 
     <!-- Notification channels -->
     <string name="notif_channel_service_name">剪贴板服务</string>

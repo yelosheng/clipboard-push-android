@@ -12,11 +12,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import com.clipboardpush.plus.R
 import com.clipboardpush.plus.data.remote.ApiService
 import com.clipboardpush.plus.data.repository.SettingsRepository
 import com.clipboardpush.plus.ui.theme.ClipboardManTheme
@@ -78,7 +80,7 @@ class ShareReceiverActivity : ComponentActivity() {
             val serverAddress = settingsRepository.serverAddressFlow.first()
             val useHttps = settingsRepository.useHttpsFlow.first()
             if (serverAddress.isBlank()) {
-                showError("未配置服务器地址")
+                showError(getString(R.string.toast_server_not_configured))
                 return@launch
             }
 
@@ -102,13 +104,13 @@ class ShareReceiverActivity : ComponentActivity() {
         // Peer guard: check if any peers are online before sharing
         val currentPeerCount = com.clipboardpush.plus.service.ClipboardService.latestPeerCount
         if (currentPeerCount <= 0) {
-            showError("推送失败：房间内没有其他在线设备")
+            showError(getString(R.string.toast_no_peers))
             return
         }
 
         var text = intent.getStringExtra(Intent.EXTRA_TEXT)
         if (text.isNullOrBlank()) {
-            showError("分享内容为空")
+            showError(getString(R.string.toast_share_empty))
             return
         }
 
@@ -124,12 +126,12 @@ class ShareReceiverActivity : ComponentActivity() {
         text = text.trim().removeSurrounding("\"")
 
         contentDescription.value = text.take(50) + if (text.length > 50) "..." else ""
-        uploadState.value = UploadState.Uploading("正在发送文本...")
+        uploadState.value = UploadState.Uploading(getString(R.string.share_uploading_text))
 
         // 获取 roomId
         val roomId = settingsRepository.roomIdFlow.first()
         if (roomId.isNullOrBlank()) {
-            showError("未配置房间ID，请先在APP中连接服务器")
+            showError(getString(R.string.toast_room_not_configured))
             return
         }
         
@@ -149,11 +151,11 @@ class ShareReceiverActivity : ComponentActivity() {
         val result = apiService?.relayEvent(roomId, "clipboard_sync", data, clientId)
         result?.onSuccess {
             uploadState.value = UploadState.Success
-            Toast.makeText(this, "推送成功", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.toast_push_success), Toast.LENGTH_SHORT).show()
             delay(500)
             finish()
         }?.onFailure { error ->
-            showError("推送失败")
+            showError(getString(R.string.toast_push_failed))
         }
     }
 
@@ -185,7 +187,7 @@ class ShareReceiverActivity : ComponentActivity() {
         }
 
         if (uris.isEmpty()) {
-            showError("无法获取分享内容")
+            showError(getString(R.string.toast_share_get_failed))
             return
         }
 
@@ -193,19 +195,19 @@ class ShareReceiverActivity : ComponentActivity() {
         val roomId = settingsRepository.roomIdFlow.first()
         val roomKey = settingsRepository.roomKeyFlow.first()
         if (roomId.isNullOrBlank() || roomKey.isNullOrBlank()) {
-            showError("未配置房间，请先在APP中扫码配对")
+            showError(getString(R.string.toast_room_not_configured))
             return
         }
 
         // 预先收集所有文件名，用于进度和错误提示
-        val fileNames = uris.map { getFileName(it) ?: "未知文件" }
+        val fileNames = uris.map { getFileName(it) ?: getString(R.string.share_unknown_file) }
 
         contentDescription.value = if (fileNames.size == 1) {
             fileNames[0]
         } else {
             fileNames.joinToString("、")
         }
-        uploadState.value = UploadState.Uploading("正在加入上传队列...")
+        uploadState.value = UploadState.Uploading(getString(R.string.share_queueing))
 
         // 使用 WorkManager 后台上传
         var queuedCount = 0
@@ -232,18 +234,18 @@ class ShareReceiverActivity : ComponentActivity() {
         }
 
         if (failedNames.isNotEmpty()) {
-            showError("加入队列失败：${failedNames.joinToString("、")}")
+            showError(getString(R.string.share_queue_failed, failedNames.joinToString(", ")))
             return
         }
 
         // 显示成功并立即关闭
         uploadState.value = UploadState.Success
         val successMsg = if (queuedCount == 1) {
-            "${fileNames[0]} 已加入上传队列"
+            getString(R.string.share_queued_one, fileNames[0])
         } else {
-            "$queuedCount 个文件已加入上传队列"
+            getString(R.string.share_queued_multiple, queuedCount)
         }
-        Toast.makeText(this, "$successMsg\n详情请查看通知栏", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, successMsg, Toast.LENGTH_SHORT).show()
         delay(800)
         finish()
     }
@@ -311,7 +313,7 @@ fun ShareDialog(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "发送到服务器",
+                    text = stringResource(R.string.share_dialog_title),
                     style = MaterialTheme.typography.titleLarge
                 )
 
@@ -333,7 +335,7 @@ fun ShareDialog(
                 // 状态显示
                 when (uploadState) {
                     is UploadState.Idle -> {
-                        Text("准备上传...")
+                        Text(stringResource(R.string.share_idle))
                     }
                     is UploadState.Uploading -> {
                         CircularProgressIndicator(
@@ -349,7 +351,7 @@ fun ShareDialog(
                             color = MaterialTheme.colorScheme.primary
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text("上传成功")
+                        Text(stringResource(R.string.share_success))
                     }
                     is UploadState.Error -> {
                         Text(
@@ -365,7 +367,7 @@ fun ShareDialog(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(onClick = onDismiss) {
-                            Text("关闭")
+                            Text(stringResource(R.string.action_close))
                         }
                     }
                 }

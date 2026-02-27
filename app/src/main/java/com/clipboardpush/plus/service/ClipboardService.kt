@@ -514,7 +514,7 @@ class ClipboardService : Service() {
             val previewText = if (content.length > 50) content.take(50) + "..." else content
             NotificationHelper.showPushNotification(
                 this,
-                "收到文本",
+                getString(R.string.type_text),
                 previewText,
                 System.currentTimeMillis().toInt()
             )
@@ -541,8 +541,8 @@ class ClipboardService : Service() {
                 // Optional: Update status to "Downloading from Cloud..." via notification?
                 NotificationHelper.showPushNotification(
                     this,
-                    "下载中 (云端)",
-                    "正在从云端下载: $fileName",
+                    getString(R.string.notif_downloading),
+                    fileName,
                     messageId.hashCode()
                 )
             } else {
@@ -559,11 +559,11 @@ class ClipboardService : Service() {
                 saveAndNotifyMessage(msg)
                 
                 // 发送系统通知
-                val typeLabel = if (mimeType == "image") "图片" else "文件"
+                val typeTitle = if (mimeType == "image") getString(R.string.type_image) else getString(R.string.type_file)
                 NotificationHelper.showPushNotification(
                     this,
-                    "收到$typeLabel",
-                    "正在下载: $fileName",
+                    typeTitle,
+                    fileName,
                     messageId.hashCode()
                 )
                 
@@ -655,8 +655,8 @@ class ClipboardService : Service() {
 
         NotificationHelper.showPushNotification(
             this,
-            "收到局域网文件",
-            "正在高速下载: $fileName",
+            getString(R.string.type_file),
+            fileName,
             messageId.hashCode()
         )
 
@@ -845,8 +845,8 @@ class ClipboardService : Service() {
         // 3. Notify User
         NotificationHelper.showPushNotification(
             this,
-            "已从房间移除",
-            "您已被移出房间 (原因: $reason)。请重新连接。"
+            getString(R.string.notif_evicted_title),
+            getString(R.string.notif_evicted_body, reason)
         )
 
         // 4. Toast (Main Thread)
