@@ -1,6 +1,6 @@
 # Clipboard Push — Android
 
-> Real-time clipboard sync between Android and PC, with end-to-end AES-256-GCM encryption.
+> Push your clipboard between Android and PC instantly, with end-to-end AES-256-GCM encryption.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Android](https://img.shields.io/badge/Android-8.0%2B-green.svg)](https://developer.android.com)
@@ -12,14 +12,16 @@
 
 ## What is this?
 
-Clipboard Push is an Android clipboard sync tool that keeps your phone and PC clipboard in sync in real time. Copy something on your phone and it instantly appears on your PC — and vice versa. No account required, no data stored in the cloud.
+Clipboard Push is an Android app that lets you push clipboard content between your phone and PC on demand. Press a hotkey on your PC, or tap the Push button on your phone — the clipboard content transfers instantly. No account required.
+
+The core model is **push-on-demand**: you decide when to send. There is no silent background sync that fires on every copy.
 
 ## Features
 
-- **Real-time sync** — clipboard content is pushed instantly with no perceptible delay
-- **File transfer** — send images, documents, videos, and other files from phone to PC
+- **Push on demand** — tap the Push button on Android or press the hotkey on PC to transfer clipboard content instantly
+- **File transfer** — send images, documents, and videos between phone and PC in both directions
 - **AES-256-GCM encryption** — all content is encrypted before leaving your device; the relay server only sees ciphertext
-- **LAN direct transfer** — files travel directly between devices over Wi-Fi, bypassing the cloud for maximum speed
+- **LAN direct transfer** — files travel directly between devices over Wi-Fi for maximum speed; cloud relay is the fallback
 - **QR code pairing** — scan the QR code shown by the PC client to pair; no registration needed
 - **Self-hostable** — spin up a private relay server with Docker in minutes
 - **Open source** — fully auditable code, no hidden data collection
@@ -29,7 +31,7 @@ Clipboard Push is an Android clipboard sync tool that keeps your phone and PC cl
 1. Install the app from [Google Play](https://play.google.com/store/apps/details?id=com.clipboardpush.plus) or download the APK from [Releases](https://github.com/clipboardpush/clipboard-push-android/releases)
 2. Download and install the [PC client](https://github.com/clipboardpush/clipboard-push-win32/releases) (Windows)
 3. Open the app → tap **Connect** → tap the QR icon → scan the QR code shown by the PC client
-4. Start copying — content syncs automatically
+4. Tap **Push** on Android, or press the hotkey on PC — clipboard content transfers instantly
 
 ## Architecture
 
@@ -38,12 +40,12 @@ Android App  ── Socket.IO (AES-256-GCM) ──► Relay Server ◄── Soc
                                                    │
                                            Cloud Storage R2 (file relay, optional)
 
-On same Wi-Fi:  Android App ◄─── HTTP direct pull ─── PC Client  (bypasses relay server)
+On same Wi-Fi:  Android App ◄──── HTTP direct pull ────► PC Client  (bypasses relay server)
 ```
 
-- **Text sync**: Android encrypts with AES-256-GCM and sends to the relay server; the PC client receives and decrypts
-- **File transfer**: Android announces file availability; PC first attempts a direct LAN pull; if that fails, the file is uploaded to cloud storage for the PC to download
-- **Pairing**: After scanning the QR code, both sides share a room ID and encryption key — the server never sees the plaintext key
+- **Text push**: content is AES-256-GCM encrypted on-device and relayed through the server; the server never sees plaintext
+- **File transfer**: the sender serves the encrypted file over HTTP; the receiver attempts a direct LAN pull first; if that fails, the file is uploaded to cloud storage (encrypted) for the receiver to download. Files are not permanently stored.
+- **Pairing**: scanning the QR code shares a room ID and encryption key between both sides — the server never sees the plaintext key
 
 For protocol details see [CLAUDE.md](CLAUDE.md) and [LAN_SIGNAL_PROTOCOL.md](LAN_SIGNAL_PROTOCOL.md).
 
@@ -85,9 +87,9 @@ See the [relay server repository](https://github.com/clipboardpush/clipboard-pus
 
 ## Privacy
 
-- All clipboard text is encrypted with **AES-256-GCM** before transmission
-- The relay server only forwards ciphertext and cannot read the content
+- All clipboard text is encrypted with **AES-256-GCM** before transmission; the relay server only sees ciphertext
 - Files transferred over LAN never pass through the relay server
+- When files are relayed through the cloud, they are encrypted end-to-end and not permanently stored
 - No user accounts, no email addresses, no personal data collected
 - Full privacy policy: [clipboardpush.com/privacy](https://clipboardpush.com/privacy)
 
