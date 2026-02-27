@@ -3,6 +3,7 @@ package com.clipboardpush.plus.data.remote
 import android.util.Log
 import com.clipboardpush.plus.data.model.PushMessage
 import com.google.gson.Gson
+import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.*
@@ -276,14 +277,14 @@ class ApiService(private val baseUrl: String) {
     }
 
     data class UploadAuthResponse(
-        val upload_url: String,
-        val download_url: String,
-        val file_id: String
+        @SerializedName("upload_url") val upload_url: String,
+        @SerializedName("download_url") val download_url: String,
+        @SerializedName("file_id") val file_id: String
     )
 
     private data class ApiResponse(
-        val status: String,
-        val message: PushMessage? = null,
-        val error: String? = null
+        @SerializedName("status") val status: String,
+        @SerializedName("message") val message: PushMessage? = null,
+        @SerializedName("error") val error: String? = null
     )
 }

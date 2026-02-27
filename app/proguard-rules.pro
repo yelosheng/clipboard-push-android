@@ -5,9 +5,10 @@
 -keepattributes *Annotation*
 -keepattributes EnclosingMethod
 
-# Gson - keep data model classes used for JSON serialization
+# Gson - keep data model classes and API response classes used for JSON serialization
 -keep class com.clipboardpush.plus.data.model.** { *; }
 -keepclassmembers class com.clipboardpush.plus.data.model.** { *; }
+-keep class com.clipboardpush.plus.data.remote.ApiService$* { *; }
 
 # Gson + R8: retain generic type info on TypeToken anonymous classes
 # Without these, TypeToken<List<PushMessage>>() has its generic erased by R8,
