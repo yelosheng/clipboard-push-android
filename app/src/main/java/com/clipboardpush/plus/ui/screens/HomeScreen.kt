@@ -1045,8 +1045,7 @@ private fun ConnectionIndicator(
 
     val cloudColor by animateColorAsState(
         targetValue = when {
-            connectionState == ConnectionState.CONNECTED && peerCount > 0 -> Green500
-            connectionState == ConnectionState.CONNECTED -> Orange500
+            connectionState == ConnectionState.CONNECTED -> Green500
             connectionState == ConnectionState.ERROR -> Red500
             else -> Grey500
         },
@@ -1130,6 +1129,7 @@ private fun ConnectionIndicator(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(36.dp)
+                    .padding(horizontal = 8.dp)
                     .graphicsLayer { translationX = shakeOffset.value.dp.toPx() }
             ) {
                 // Phone icon — tap to push, circle background as tap hint
@@ -1219,7 +1219,7 @@ private fun ConnectionIndicator(
                         .height(2.dp)
                 )
 
-                // PC icon — circle background + shadow
+                // PC icon — circle background + shadow; slash overlay when PC is offline
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
@@ -1233,6 +1233,18 @@ private fun ConnectionIndicator(
                         tint = onPrimary.copy(alpha = pcAlpha),
                         modifier = Modifier.size(24.dp)
                     )
+                    // Slash through PC icon when connected to server but PC is not online
+                    if (connectionState == ConnectionState.CONNECTED && peerCount == 0) {
+                        Canvas(modifier = Modifier.size(24.dp)) {
+                            drawLine(
+                                color = onPrimary.copy(alpha = 0.9f),
+                                start = Offset(size.width * 0.1f, size.height * 0.9f),
+                                end   = Offset(size.width * 0.9f, size.height * 0.1f),
+                                strokeWidth = 2.5.dp.toPx(),
+                                cap = StrokeCap.Round
+                            )
+                        }
+                    }
                 }
             }
 
@@ -1259,9 +1271,9 @@ private fun ConnectionIndicator(
             }
         }
 
-        // Dot overlay — travels from phone center (18dp) to PC center (maxWidth - 18dp)
+        // Dot overlay — travels from phone center to PC center (accounts for 8dp side padding)
         if (showDot) {
-            val dotX: androidx.compose.ui.unit.Dp = 18.dp + (maxWidth - 36.dp) * dotProgress.value
+            val dotX: androidx.compose.ui.unit.Dp = 26.dp + (maxWidth - 52.dp) * dotProgress.value
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
