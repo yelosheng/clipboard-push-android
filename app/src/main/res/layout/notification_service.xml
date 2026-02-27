@@ -44,6 +44,15 @@
             android:textColor="?android:attr/textColorSecondary"
             android:textSize="12sp"
             android:layout_marginTop="2dp" />
+
+        <TextView
+            android:id="@+id/notification_subtext"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="?android:attr/textColorSecondary"
+            android:textSize="11sp"
+            android:layout_marginTop="1dp"
+            android:visibility="gone" />
     </LinearLayout>
 
     <!-- 右侧推送按钮 - 简洁的圆形按钮 -->
