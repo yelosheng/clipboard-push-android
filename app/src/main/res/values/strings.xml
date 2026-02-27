@@ -85,6 +85,7 @@
     <string name="about_privacy">Privacy Policy</string>
     <string name="about_website">Official Website</string>
     <string name="about_website_label">clipboardpush.com</string>
+    <string name="about_github">Source Code</string>
 
     <!-- Recent peer row -->
     <string name="peer_delete_title">Remove</string>

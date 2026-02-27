@@ -85,6 +85,7 @@
     <string name="about_privacy">隐私政策</string>
     <string name="about_website">官方网站</string>
     <string name="about_website_label">clipboardpush.com</string>
+    <string name="about_github">开源代码</string>
 
     <!-- Recent peer row -->
     <string name="peer_delete_title">删除记录</string>
