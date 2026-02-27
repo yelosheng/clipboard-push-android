@@ -1129,20 +1129,23 @@ private fun ConnectionIndicator(
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .height(32.dp)
+                    .height(36.dp)
                     .graphicsLayer { translationX = shakeOffset.value.dp.toPx() }
             ) {
                 // Phone icon — tap to push
                 Box(
                     modifier = Modifier
-                        .size(32.dp)
+                        .size(36.dp)
+                        .background(
+                            color = if (isConnectedWithPeer)
+                                onPrimary.copy(alpha = 0.18f)
+                            else
+                                androidx.compose.ui.graphics.Color.Transparent,
+                            shape = CircleShape
+                        )
                         .then(
                             if (isConnectedWithPeer)
-                                Modifier.clickable(
-                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                                    indication = null,
-                                    onClick = onPushClick
-                                )
+                                Modifier.clickable(onClick = onPushClick)
                             else Modifier
                         ),
                     contentAlignment = Alignment.Center
@@ -1154,7 +1157,7 @@ private fun ConnectionIndicator(
                         else
                             null,
                         tint = onPrimary.copy(alpha = phoneAlpha),
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(24.dp)
                     )
                 }
 
@@ -1163,7 +1166,7 @@ private fun ConnectionIndicator(
                     color = lineLeftColor.copy(alpha = if (leftDashed) 0.5f else 1f),
                     dashed = leftDashed,
                     modifier = Modifier
-                        .width(24.dp)
+                        .width(36.dp)
                         .height(2.dp)
                 )
 
@@ -1212,20 +1215,20 @@ private fun ConnectionIndicator(
                     color = lineRightColor.copy(alpha = if (rightDashed) 0.5f else 1f),
                     dashed = rightDashed,
                     modifier = Modifier
-                        .width(24.dp)
+                        .width(36.dp)
                         .height(2.dp)
                 )
 
                 // PC icon
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(36.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.DesktopWindows,
                         contentDescription = null,
                         tint = onPrimary.copy(alpha = pcAlpha),
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }
@@ -1252,17 +1255,17 @@ private fun ConnectionIndicator(
 
         // Dot overlay — drawn on top of the Row
         if (showDot) {
-            // Total width: 32(phone) + 24(line) + 32(cloud) + 24(line) + 32(pc) = 144dp
-            // Dot travels from x=16dp (phone center) to x=128dp (PC center)
-            val totalDp = 144.dp
-            val startDp = 16.dp   // phone icon center
-            val endDp   = 128.dp  // PC icon center
+            // Total width: 36(phone) + 36(line) + 32(cloud) + 36(line) + 36(pc) = 176dp
+            // Dot travels from x=18dp (phone center) to x=158dp (PC center)
+            val totalDp = 176.dp
+            val startDp = 18.dp   // phone icon center
+            val endDp   = 158.dp  // PC icon center
             val dotX = startDp + (endDp - startDp) * dotProgress.value
 
             Box(
                 modifier = Modifier
                     .width(totalDp)
-                    .height(32.dp)
+                    .height(36.dp)
                     .align(Alignment.TopStart)
             ) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
