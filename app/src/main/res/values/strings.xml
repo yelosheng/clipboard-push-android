@@ -8,6 +8,9 @@
     <string name="state_connecting">Connecting…</string>
     <string name="state_disconnected">Disconnected</string>
     <string name="state_error">Connection Error</string>
+    <string name="state_server_connected">Server connected</string>
+    <string name="state_pc_offline">PC not online</string>
+    <string name="peer_offline_label">Offline</string>
 
     <!-- Home screen -->
     <string name="selection_count">%d selected</string>
