@@ -1,9 +1,11 @@
 package com.clipboardpush.plus.data.repository
 
 import android.content.Context
+import androidx.annotation.StringRes
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
+import com.clipboardpush.plus.R
 import com.clipboardpush.plus.data.model.PeerEntry
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -56,11 +58,11 @@ class SettingsRepository(
         private const val DEFAULT_MAX_HISTORY_COUNT = 100
     }
 
-    enum class FileHandleMode(val value: Int, val label: String, val description: String) {
-        SAVE_LOCAL(FILE_MODE_SAVE_LOCAL, "保存到下载文件夹", "下载的文件将保存到公共 Downloads 目录"),
-        COPY_REFERENCE(FILE_MODE_COPY_REFERENCE, "复制文件引用", "文件不保存到本地，仅复制路径引用到剪贴板"),
-        SAVE_AND_COPY_IMAGE(FILE_MODE_SAVE_AND_COPY_IMAGE, "保存并复制图片", "图片文件同时保存到本地并复制到剪贴板"),
-        CLIPBOARD_ONLY(FILE_MODE_CLIPBOARD_ONLY, "仅复制到剪贴板", "文件不保存到本地，直接复制内容到剪贴板");
+    enum class FileHandleMode(val value: Int, @StringRes val labelRes: Int, @StringRes val descRes: Int) {
+        SAVE_LOCAL(FILE_MODE_SAVE_LOCAL, R.string.file_mode_save_local_label, R.string.file_mode_save_local_desc),
+        COPY_REFERENCE(FILE_MODE_COPY_REFERENCE, R.string.file_mode_copy_ref_label, R.string.file_mode_copy_ref_desc),
+        SAVE_AND_COPY_IMAGE(FILE_MODE_SAVE_AND_COPY_IMAGE, R.string.file_mode_save_image_label, R.string.file_mode_save_image_desc),
+        CLIPBOARD_ONLY(FILE_MODE_CLIPBOARD_ONLY, R.string.file_mode_clipboard_only_label, R.string.file_mode_clipboard_only_desc);
 
         companion object {
             fun fromValue(value: Int) =

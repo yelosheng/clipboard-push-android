@@ -59,6 +59,14 @@
     <string name="guide_step3">3. 点击上方按钮扫描屏幕上的二维码</string>
     <string name="section_recent">最近连接</string>
     <string name="section_file_handling">文件处理方式</string>
+    <string name="file_mode_save_local_label">保存到下载文件夹</string>
+    <string name="file_mode_save_local_desc">下载的文件将保存到公共 Downloads 目录</string>
+    <string name="file_mode_copy_ref_label">复制文件引用</string>
+    <string name="file_mode_copy_ref_desc">文件不保存到本地，仅复制路径引用到剪贴板</string>
+    <string name="file_mode_save_image_label">保存并复制图片</string>
+    <string name="file_mode_save_image_desc">图片文件同时保存到本地并复制到剪贴板</string>
+    <string name="file_mode_clipboard_only_label">仅复制到剪贴板</string>
+    <string name="file_mode_clipboard_only_desc">文件不保存到本地，直接复制内容到剪贴板</string>
     <string name="section_history">历史记录</string>
     <string name="history_max_count">最大保存消息数量</string>
     <string name="history_max_count_desc">设置列表中保存的历史消息条数</string>

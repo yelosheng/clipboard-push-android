@@ -59,6 +59,14 @@
     <string name="guide_step3">3. Tap the button above to scan the QR code on screen</string>
     <string name="section_recent">Recent Connections</string>
     <string name="section_file_handling">File Handling</string>
+    <string name="file_mode_save_local_label">Save to Downloads</string>
+    <string name="file_mode_save_local_desc">Downloaded files are saved to the public Downloads folder</string>
+    <string name="file_mode_copy_ref_label">Copy file reference</string>
+    <string name="file_mode_copy_ref_desc">File is not saved locally; only the path reference is copied to clipboard</string>
+    <string name="file_mode_save_image_label">Save and copy image</string>
+    <string name="file_mode_save_image_desc">Image files are saved locally and also copied to clipboard</string>
+    <string name="file_mode_clipboard_only_label">Clipboard only</string>
+    <string name="file_mode_clipboard_only_desc">File is not saved locally; content is copied directly to clipboard</string>
     <string name="section_history">History</string>
     <string name="history_max_count">Max saved messages</string>
     <string name="history_max_count_desc">Number of history messages to keep</string>

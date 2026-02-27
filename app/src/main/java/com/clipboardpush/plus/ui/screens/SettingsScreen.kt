@@ -253,8 +253,8 @@ fun SettingsScreen(
                     SettingsRepository.FileHandleMode.entries.forEachIndexed { index, mode ->
                         if (index > 0) Spacer(modifier = Modifier.height(8.dp))
                         RadioButtonOption(
-                            text = mode.label,
-                            description = mode.description,
+                            text = stringResource(mode.labelRes),
+                            description = stringResource(mode.descRes),
                             selected = fileHandleMode == mode.value,
                             onClick = { onFileHandleModeChange(mode.value) }
                         )
