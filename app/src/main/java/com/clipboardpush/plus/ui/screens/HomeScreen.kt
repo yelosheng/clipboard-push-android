@@ -48,6 +48,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -1120,27 +1121,24 @@ private fun ConnectionIndicator(
     }
 
     BoxWithConstraints(
-        modifier = modifier.wrapContentWidth(),
+        modifier = modifier.fillMaxWidth(),
         contentAlignment = Alignment.TopCenter
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
+                    .fillMaxWidth()
                     .height(36.dp)
                     .graphicsLayer { translationX = shakeOffset.value.dp.toPx() }
             ) {
-                // Phone icon — tap to push
+                // Phone icon — tap to push, circle background as tap hint
                 Box(
                     modifier = Modifier
                         .size(36.dp)
+                        .shadow(elevation = 6.dp, shape = CircleShape, clip = true)
                         .background(
-                            color = if (isConnectedWithPeer)
-                                onPrimary.copy(alpha = 0.18f)
-                            else
-                                androidx.compose.ui.graphics.Color.Transparent,
+                            color = onPrimary.copy(alpha = if (isConnectedWithPeer) 0.22f else 0.12f),
                             shape = CircleShape
                         )
                         .then(
@@ -1161,22 +1159,24 @@ private fun ConnectionIndicator(
                     )
                 }
 
-                // Left line
+                // Left line — flexible, fills available space
                 IndicatorLine(
                     color = lineLeftColor.copy(alpha = if (leftDashed) 0.5f else 1f),
                     dashed = leftDashed,
                     modifier = Modifier
-                        .width(36.dp)
+                        .weight(1f)
                         .height(2.dp)
                 )
 
-                // Cloud icon — static icon with rotation animation for CONNECTING
+                // Cloud icon — circle background + shadow
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier
+                        .size(36.dp)
+                        .shadow(elevation = 6.dp, shape = CircleShape, clip = true)
+                        .background(onPrimary.copy(alpha = 0.12f), CircleShape)
                 ) {
                     if (connectionState == ConnectionState.CONNECTING) {
-                        // Rotating Sync icon
                         val infiniteTransition = rememberInfiniteTransition(label = "syncRotation")
                         val rotationAngle by infiniteTransition.animateFloat(
                             initialValue = 0f,
@@ -1210,19 +1210,22 @@ private fun ConnectionIndicator(
                     }
                 }
 
-                // Right line
+                // Right line — flexible, fills available space
                 IndicatorLine(
                     color = lineRightColor.copy(alpha = if (rightDashed) 0.5f else 1f),
                     dashed = rightDashed,
                     modifier = Modifier
-                        .width(36.dp)
+                        .weight(1f)
                         .height(2.dp)
                 )
 
-                // PC icon
+                // PC icon — circle background + shadow
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier
+                        .size(36.dp)
+                        .shadow(elevation = 6.dp, shape = CircleShape, clip = true)
+                        .background(onPrimary.copy(alpha = 0.12f), CircleShape)
                 ) {
                     Icon(
                         imageVector = Icons.Default.DesktopWindows,
@@ -1233,48 +1236,43 @@ private fun ConnectionIndicator(
                 }
             }
 
-            // PC name label below — AnimatedContent for smooth transitions
-            AnimatedContent(
-                targetState = pcName,
-                transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(200)) },
-                label = "pcName"
-            ) { name ->
-                if (name.isNotEmpty()) {
-                    Text(
-                        text = name,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = onPrimary.copy(alpha = 0.7f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                } else {
-                    Spacer(modifier = Modifier.height(MaterialTheme.typography.labelSmall.lineHeight.value.dp))
+            // PC name — right-aligned under PC icon
+            Box(modifier = Modifier.fillMaxWidth()) {
+                AnimatedContent(
+                    targetState = pcName,
+                    transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(200)) },
+                    label = "pcName",
+                    modifier = Modifier.align(Alignment.CenterEnd)
+                ) { name ->
+                    if (name.isNotEmpty()) {
+                        Text(
+                            text = name,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = onPrimary.copy(alpha = 0.7f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    } else {
+                        Spacer(modifier = Modifier.height(MaterialTheme.typography.labelSmall.lineHeight.value.dp))
+                    }
                 }
             }
         }
 
-        // Dot overlay — drawn on top of the Row
+        // Dot overlay — travels from phone center (18dp) to PC center (maxWidth - 18dp)
         if (showDot) {
-            // Total width: 36(phone) + 36(line) + 32(cloud) + 36(line) + 36(pc) = 176dp
-            // Dot travels from x=18dp (phone center) to x=158dp (PC center)
-            val totalDp = 176.dp
-            val startDp = 18.dp   // phone icon center
-            val endDp   = 158.dp  // PC icon center
-            val dotX = startDp + (endDp - startDp) * dotProgress.value
-
-            Box(
+            val dotX: androidx.compose.ui.unit.Dp = 18.dp + (maxWidth - 36.dp) * dotProgress.value
+            Canvas(
                 modifier = Modifier
-                    .width(totalDp)
+                    .fillMaxWidth()
                     .height(36.dp)
                     .align(Alignment.TopStart)
             ) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    drawCircle(
-                        color = androidx.compose.ui.graphics.Color.White,
-                        radius = 4.dp.toPx(),
-                        center = Offset(dotX.toPx(), size.height / 2)
-                    )
-                }
+                drawCircle(
+                    color = androidx.compose.ui.graphics.Color.White,
+                    radius = 4.dp.toPx(),
+                    center = Offset(dotX.toPx(), size.height / 2)
+                )
             }
         }
     }
