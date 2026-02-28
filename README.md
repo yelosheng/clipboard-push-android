@@ -38,7 +38,7 @@ The core model is **push-on-demand**: you decide when to send. There is no silen
 ```
 Android App  ── Socket.IO (AES-256-GCM) ──► Relay Server ◄── Socket.IO (AES-256-GCM) ──  PC Client
                                                    │
-                                           Cloud Storage R2 (file relay, optional)
+                                           Cloud storage or local disk (file relay, optional)
 
 On same Wi-Fi:  Android App ◄──── HTTP direct pull ────► PC Client  (bypasses relay server)
 ```
@@ -89,7 +89,7 @@ See the [relay server repository](https://github.com/clipboardpush/clipboard-pus
 
 - All clipboard text is encrypted with **AES-256-GCM** before transmission; the relay server only sees ciphertext
 - Files transferred over LAN never pass through the relay server
-- When files are relayed through cloud storage (R2), they are encrypted end-to-end; the relay server automatically purges all R2 objects every 60 minutes, minimizing data exposure time
+- When files are relayed through cloud storage (R2) or local server storage, they are encrypted end-to-end; the relay server automatically purges all stored files every 60 minutes, minimizing data exposure time
 - No user accounts, no email addresses, no personal data collected
 - Full privacy policy: [clipboardpush.com/privacy](https://clipboardpush.com/privacy)
 
