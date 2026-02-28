@@ -89,7 +89,7 @@ See the [relay server repository](https://github.com/clipboardpush/clipboard-pus
 
 - All clipboard text is encrypted with **AES-256-GCM** before transmission; the relay server only sees ciphertext
 - Files transferred over LAN never pass through the relay server
-- When files are relayed through the cloud, they are encrypted end-to-end and not permanently stored
+- When files are relayed through cloud storage (R2), they are encrypted end-to-end; the relay server automatically purges all R2 objects every 60 minutes, minimizing data exposure time
 - No user accounts, no email addresses, no personal data collected
 - Full privacy policy: [clipboardpush.com/privacy](https://clipboardpush.com/privacy)
 
