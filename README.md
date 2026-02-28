@@ -28,7 +28,7 @@ The core model is **push-on-demand**: you decide when to send. There is no silen
 
 ## Quick Start
 
-1. Install the app from [Google Play](https://play.google.com/store/apps/details?id=com.clipboardpush.plus) or download the APK from [Releases](https://github.com/clipboardpush/clipboard-push-android/releases)
+1. Download the APK from [Releases](https://github.com/clipboardpush/clipboard-push-android/releases)
 2. Download and install the [PC client](https://github.com/clipboardpush/clipboard-push-win32/releases) (Windows)
 3. Open the app → tap **Connect** → tap the QR icon → scan the QR code shown by the PC client
 4. Tap **Push** on Android, or press the hotkey on PC — clipboard content transfers instantly
