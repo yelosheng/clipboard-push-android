@@ -44,6 +44,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.animation.animateColorAsState
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,6 +53,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -113,7 +115,8 @@ fun HomeScreen(
     onRetryDownload: (PushMessage) -> Unit = {},
     onFileOpen: (PushMessage) -> Unit = {},
     onFileShare: (PushMessage) -> Unit = {},
-    onFileCopyName: (PushMessage) -> Unit = {}
+    onFileCopyName: (PushMessage) -> Unit = {},
+    isFileUploading: Boolean = false
 ) {
     // 构建基础URL
     val baseUrl = remember(serverAddress, useHttps) {
@@ -229,7 +232,8 @@ fun HomeScreen(
                             },
                             onSettingsClick  = onSettingsClick,
                             pushTrigger      = pushTrigger,
-                            pushFailTrigger  = pushFailTrigger
+                            pushFailTrigger  = pushFailTrigger,
+                            isFileUploading  = isFileUploading
                         )
                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -1030,7 +1034,8 @@ private fun ConnectionIndicator(
     onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier,
     pushTrigger: Int = 0,
-    pushFailTrigger: Int = 0
+    pushFailTrigger: Int = 0,
+    isFileUploading: Boolean = false
 ) {
     val isConnectedWithPeer = connectionState == ConnectionState.CONNECTED && peerCount > 0
     val onPrimary = MaterialTheme.colorScheme.onPrimary
@@ -1092,6 +1097,22 @@ private fun ConnectionIndicator(
             dotProgress.snapTo(0f)
             dotProgress.animateTo(1f, tween(600, easing = FastOutSlowInEasing))
             showDot = false
+        }
+    }
+
+    LaunchedEffect(isFileUploading) {
+        if (isFileUploading) {
+            try {
+                while (true) {
+                    showDot = true
+                    dotProgress.snapTo(0f)
+                    dotProgress.animateTo(1f, tween(1000, easing = FastOutSlowInEasing))
+                    showDot = false
+                    delay(400)
+                }
+            } finally {
+                showDot = false
+            }
         }
     }
 
@@ -1254,10 +1275,12 @@ private fun ConnectionIndicator(
                     if (name.isNotEmpty()) {
                         Text(
                             text = name,
+                            modifier = Modifier.width(36.dp),
                             style = MaterialTheme.typography.labelSmall,
                             color = onPrimary.copy(alpha = 0.7f),
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center
                         )
                     } else {
                         Spacer(modifier = Modifier.height(labelLineHeight))

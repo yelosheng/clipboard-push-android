@@ -55,6 +55,7 @@ Thumbs.db
 # Internal dirs (not for public release)
 .agent/
 docs/
+store-assets/
 
 # C++ / Client
 cpp_client/build/

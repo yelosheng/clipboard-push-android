@@ -42,6 +42,8 @@ class UploadWorker(
         val notificationId = System.currentTimeMillis().toInt()
         setForeground(createForegroundInfo(notificationId, applicationContext.getString(R.string.worker_upload_title), applicationContext.getString(R.string.worker_upload_preparing)))
 
+        com.clipboardpush.plus.service.ClipboardService.onUploadStarted()
+
         // Temp files
         var tempSourceFile: File? = null
         var tempEncryptedFile: File? = null
@@ -55,6 +57,10 @@ class UploadWorker(
             if (roomId.isNullOrEmpty() || roomKey.isNullOrEmpty()) {
                 throw IllegalStateException("Not paired with PC")
             }
+
+            val pcName = settingsRepository.recentPeersFlow.first()
+                .firstOrNull { it.room == roomId }?.displayName
+                ?: applicationContext.getString(R.string.default_pc_name)
 
             val baseUrl = settingsRepository.getHttpBaseUrl(serverAddress, useHttps)
             val apiService = ApiService(baseUrl)
@@ -170,7 +176,7 @@ class UploadWorker(
                          NotificationHelper.showPushNotification(
                             applicationContext,
                             applicationContext.getString(R.string.worker_upload_success_title),
-                            applicationContext.getString(R.string.worker_upload_success_lan, fileName)
+                            applicationContext.getString(R.string.worker_upload_success_lan, fileName, pcName)
                         )
                         return Result.success()
                      }
@@ -233,7 +239,7 @@ class UploadWorker(
             NotificationHelper.showPushNotification(
                 applicationContext,
                 applicationContext.getString(R.string.worker_upload_success_title),
-                applicationContext.getString(R.string.worker_upload_success_cloud, fileName)
+                applicationContext.getString(R.string.worker_upload_success_cloud, fileName, pcName)
             )
 
             return Result.success()
@@ -247,6 +253,7 @@ class UploadWorker(
             )
             return Result.failure()
         } finally {
+            com.clipboardpush.plus.service.ClipboardService.onUploadFinished()
             tempSourceFile?.delete()
             tempEncryptedFile?.delete()
         }

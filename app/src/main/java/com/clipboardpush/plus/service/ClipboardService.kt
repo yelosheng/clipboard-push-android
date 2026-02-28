@@ -27,6 +27,7 @@ import com.clipboardpush.plus.util.NotificationHelper
 import com.clipboardpush.plus.worker.DownloadWorker
 import com.clipboardpush.plus.worker.UploadWorker
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import org.json.JSONObject
 import java.util.Collections
@@ -47,6 +48,22 @@ class ClipboardService : Service() {
         @Volatile
         var latestPeerCount: Int = 0
             private set
+
+        /** Tracks concurrent upload count; drives fileUploadActive for AppBar animation. */
+        private val _activeUploadCount = java.util.concurrent.atomic.AtomicInteger(0)
+        val fileUploadActive = MutableStateFlow(false)
+
+        fun onUploadStarted() {
+            _activeUploadCount.incrementAndGet()
+            fileUploadActive.value = true
+        }
+
+        fun onUploadFinished() {
+            if (_activeUploadCount.decrementAndGet() <= 0) {
+                _activeUploadCount.set(0)
+                fileUploadActive.value = false
+            }
+        }
     }
 
     private val binder = LocalBinder()

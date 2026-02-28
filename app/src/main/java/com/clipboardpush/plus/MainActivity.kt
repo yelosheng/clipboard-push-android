@@ -613,6 +613,7 @@ fun MainNavigation(
     val activeRoomId by viewModel.activeRoomId.collectAsState()
     val failedDownloadIds by viewModel.failedDownloadIds.collectAsState()
     val downloadProgress by viewModel.downloadProgress.collectAsState()
+    val isFileUploading by viewModel.fileUploadActive.collectAsState()
 
     LaunchedEffect(messages) {
         messages.filter { it.localPath != null }.forEach { viewModel.clearDownloadProgress(it.safeId) }
@@ -655,7 +656,8 @@ fun MainNavigation(
                 onRetryDownload = onRetryDownload,
                 onFileOpen = onFileOpen,
                 onFileShare = onFileShare,
-                onFileCopyName = onFileCopyName
+                onFileCopyName = onFileCopyName,
+                isFileUploading = isFileUploading
             )
         }
 

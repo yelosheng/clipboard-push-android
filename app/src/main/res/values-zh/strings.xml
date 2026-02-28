@@ -171,9 +171,10 @@
     <string name="worker_upload_sending">上传到云端…</string>
     <string name="worker_upload_finalizing">正在完成…</string>
     <string name="worker_upload_success_title">上传完成</string>
-    <string name="worker_upload_success_lan">已通过局域网发送 %s 到电脑</string>
-    <string name="worker_upload_success_cloud">已发送 %s 到电脑</string>
+    <string name="worker_upload_success_lan">已通过局域网发送 %1$s 到 %2$s</string>
+    <string name="worker_upload_success_cloud">已发送 %1$s 到 %2$s</string>
     <string name="worker_upload_failed_title">上传失败</string>
+    <string name="default_pc_name">电脑</string>
     <string name="worker_download_from_lan">正在通过局域网下载…</string>
     <string name="worker_download_in_progress">下载中…</string>
     <string name="worker_download_success_title">下载完成</string>

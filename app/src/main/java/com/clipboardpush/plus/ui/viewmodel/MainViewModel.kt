@@ -104,6 +104,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val activeRoomId: StateFlow<String?> = settingsRepository.roomIdFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    val fileUploadActive: StateFlow<Boolean> = com.clipboardpush.plus.service.ClipboardService.fileUploadActive
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     /**
      * 更新连接状态 (由 Service 调用)
      */
