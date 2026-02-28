@@ -54,7 +54,7 @@ For protocol details see the [Relay Server API](https://github.com/clipboardpush
 **Requirements:**
 - Android Studio Hedgehog or newer
 - JDK 17
-- Android SDK API 34
+- Android SDK API 35
 
 ```bash
 git clone https://github.com/clipboardpush/clipboard-push-android.git
@@ -67,7 +67,7 @@ cd clipboard-push-android
 ./gradlew test
 ```
 
-> **Note:** Firebase Cloud Messaging (FCM) infrastructure is present in the codebase but intentionally disabled — it does not affect normal use. No `google-services.json` is needed to build.
+> **Note:** Firebase Cloud Messaging (FCM) infrastructure is present in the codebase but intentionally disabled — it does not affect normal use. Building requires a `google-services.json` file (due to the Firebase Gradle plugin). You can obtain one by creating a placeholder Firebase project at [console.firebase.google.com](https://console.firebase.google.com) and registering the app with package name `com.clipboardpush.plus`.
 
 ## Self-Hosting the Relay Server
 
