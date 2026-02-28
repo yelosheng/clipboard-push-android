@@ -47,7 +47,7 @@ On same Wi-Fi:  Android App ◄──── HTTP direct pull ────► PC 
 - **File transfer**: the sender serves the encrypted file over HTTP; the receiver attempts a direct LAN pull first; if that fails, the file is uploaded to cloud storage (encrypted) for the receiver to download. Files are not permanently stored.
 - **Pairing**: scanning the QR code shares a room ID and encryption key between both sides — the server never sees the plaintext key
 
-For protocol details see [LAN_SIGNAL_PROTOCOL.md](LAN_SIGNAL_PROTOCOL.md).
+For protocol details see the [Relay Server API](https://github.com/clipboardpush/clipboard-push-server/blob/master/RELAY_SERVER_API.md).
 
 ## Building from Source
 
