@@ -28,7 +28,7 @@ tasks.register("incrementVersion") {
 }
 tasks.whenTaskAdded {
     if (name == "assembleRelease" || name == "bundleRelease") {
-        dependsOn("incrementVersion")
+        finalizedBy("incrementVersion")
     }
 }
 // ─────────────────────────────────────────────────────────────────────────────
