@@ -5,6 +5,32 @@ plugins {
     id("com.google.gms.google-services")
 }
 
+// ── Version management ────────────────────────────────────────────────────────
+val versionPropsFile = rootProject.file("version.properties")
+val versionProps = java.util.Properties().apply {
+    load(versionPropsFile.inputStream())
+}
+val appVersionCode = versionProps["VERSION_CODE"].toString().toInt()
+val appVersionName = versionProps["VERSION_NAME"].toString()
+
+// Increment versionCode (+1) and patch of versionName (x.y.z → x.y.z+1).
+// Runs automatically before every assembleRelease / bundleRelease.
+tasks.register("incrementVersion") {
+    doLast {
+        val newCode = appVersionCode + 1
+        val parts = appVersionName.split(".")
+        val newName = "${parts[0]}.${parts[1]}.${parts[2].toInt() + 1}"
+        versionPropsFile.writeText("VERSION_CODE=$newCode\nVERSION_NAME=$newName\n")
+        println("Version bumped: $appVersionName ($appVersionCode) → $newName ($newCode)")
+    }
+}
+tasks.whenTaskAdded {
+    if (name == "assembleRelease" || name == "bundleRelease") {
+        dependsOn("incrementVersion")
+    }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 android {
     namespace = "com.clipboardpush.plus"
     compileSdk = 34
@@ -13,8 +39,8 @@ android {
         applicationId = "com.clipboardpush.plus"
         minSdk = 26
         targetSdk = 34
-        versionCode = 4
-        versionName = "1.0.6"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
