@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -7,7 +9,7 @@ plugins {
 
 // ── Version management ────────────────────────────────────────────────────────
 val versionPropsFile = rootProject.file("version.properties")
-val versionProps = java.util.Properties().apply {
+val versionProps = Properties().apply {
     load(versionPropsFile.inputStream())
 }
 val appVersionCode = versionProps["VERSION_CODE"].toString().toInt()
