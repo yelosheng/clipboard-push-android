@@ -47,7 +47,7 @@ On same Wi-Fi:  Android App ◄──── HTTP direct pull ────► PC 
 - **File transfer**: the sender serves the encrypted file over HTTP; the receiver attempts a direct LAN pull first; if that fails, the file is uploaded to cloud storage (encrypted) for the receiver to download. Files are not permanently stored.
 - **Pairing**: scanning the QR code shares a room ID and encryption key between both sides — the server never sees the plaintext key
 
-For protocol details see [CLAUDE.md](CLAUDE.md) and [LAN_SIGNAL_PROTOCOL.md](LAN_SIGNAL_PROTOCOL.md).
+For protocol details see [LAN_SIGNAL_PROTOCOL.md](LAN_SIGNAL_PROTOCOL.md).
 
 ## Building from Source
 
@@ -67,7 +67,7 @@ cd clipboard-push-android
 ./gradlew test
 ```
 
-> **Note:** Firebase Cloud Messaging (FCM) infrastructure is present in the codebase but intentionally disabled — it does not affect normal use. No `google-services.json` is needed to build. See the "FCM Dormant State" section in [CLAUDE.md](CLAUDE.md) for re-enablement steps.
+> **Note:** Firebase Cloud Messaging (FCM) infrastructure is present in the codebase but intentionally disabled — it does not affect normal use. No `google-services.json` is needed to build.
 
 ## Self-Hosting the Relay Server
 
