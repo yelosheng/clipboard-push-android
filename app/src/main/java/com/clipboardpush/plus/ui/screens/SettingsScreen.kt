@@ -480,7 +480,7 @@ fun SettingsScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { uriHandler.openUri("https://github.com/clipboardpush/clipboard-push-android") }
+                            .clickable { uriHandler.openUri("https://github.com/yelosheng/clipboard-push-android") }
                             .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
