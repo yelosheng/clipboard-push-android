@@ -6,7 +6,7 @@
 [![Android](https://img.shields.io/badge/Android-8.0%2B-green.svg)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-purple.svg)](https://developer.android.com/jetpack/compose)
 
-**Related:** [Website](https://clipboardpush.com) · [PC Client](https://github.com/clipboardpush/clipboard-push-win32) · [Relay Server](https://github.com/clipboardpush/clipboard-push-server) · [Privacy Policy](https://clipboardpush.com/privacy)
+**Related:** [Website](https://clipboardpush.com) · [PC Client](https://github.com/yelosheng/clipboard-push-win32) · [Relay Server](https://github.com/yelosheng/clipboard-push-server) · [Privacy Policy](https://clipboardpush.com/privacy)
 
 ---
 
@@ -28,8 +28,8 @@ The core model is **push-on-demand**: you decide when to send. There is no silen
 
 ## Quick Start
 
-1. Download the APK from [Releases](https://github.com/clipboardpush/clipboard-push-android/releases)
-2. Download and install the [PC client](https://github.com/clipboardpush/clipboard-push-win32/releases) (Windows)
+1. Download the APK from [Releases](https://github.com/yelosheng/clipboard-push-android/releases)
+2. Download and install the [PC client](https://github.com/yelosheng/clipboard-push-win32/releases) (Windows)
 3. Open the app → tap **Connect** → tap the QR icon → scan the QR code shown by the PC client
 4. Tap **Push** on Android, or press the hotkey on PC — clipboard content transfers instantly
 
@@ -47,7 +47,7 @@ On same Wi-Fi:  Android App ◄──── HTTP direct pull ────► PC 
 - **File transfer**: the sender serves the encrypted file over HTTP; the receiver attempts a direct LAN pull first; if that fails, the file is uploaded to cloud storage (encrypted) for the receiver to download. Files are not permanently stored.
 - **Pairing**: scanning the QR code shares a room ID and encryption key between both sides — the server never sees the plaintext key
 
-For protocol details see the [Relay Server API](https://github.com/clipboardpush/clipboard-push-server/blob/master/RELAY_SERVER_API.md).
+For protocol details see the [Relay Server API](https://github.com/yelosheng/clipboard-push-server/blob/master/RELAY_SERVER_API.md).
 
 ## Building from Source
 
@@ -57,7 +57,7 @@ For protocol details see the [Relay Server API](https://github.com/clipboardpush
 - Android SDK API 35
 
 ```bash
-git clone https://github.com/clipboardpush/clipboard-push-android.git
+git clone https://github.com/yelosheng/clipboard-push-android.git
 cd clipboard-push-android
 
 # Build debug APK
@@ -74,7 +74,7 @@ cd clipboard-push-android
 Prefer not to use the public server? Stand up a private one in minutes:
 
 ```bash
-git clone https://github.com/clipboardpush/clipboard-push-server.git
+git clone https://github.com/yelosheng/clipboard-push-server.git
 cd clipboard-push-server
 cp .env.example .env
 # Edit .env with your configuration
@@ -83,7 +83,7 @@ docker-compose up -d
 
 Then in the app: **Settings → Server Address** → enter your server's address and port.
 
-See the [relay server repository](https://github.com/clipboardpush/clipboard-push-server) for full deployment instructions.
+See the [relay server repository](https://github.com/yelosheng/clipboard-push-server) for full deployment instructions.
 
 ## Privacy
 
@@ -97,7 +97,7 @@ See the [relay server repository](https://github.com/clipboardpush/clipboard-pus
 
 Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting a PR.
 
-Bug reports and feature requests: [GitHub Issues](https://github.com/clipboardpush/clipboard-push-android/issues)
+Bug reports and feature requests: [GitHub Issues](https://github.com/yelosheng/clipboard-push-android/issues)
 
 ## License
 
