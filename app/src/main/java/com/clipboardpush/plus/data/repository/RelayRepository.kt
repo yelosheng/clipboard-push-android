@@ -4,10 +4,17 @@ import android.util.Log
 import com.clipboardpush.plus.BuildConfig
 import io.socket.client.IO
 import io.socket.client.Socket
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.net.URISyntaxException
 
@@ -35,6 +42,38 @@ object RelayRepository {
     private val _peers = MutableSharedFlow<List<String>>(replay = 1)
     val peers = _peers.asSharedFlow()
 
+    private val _reconnectNeeded = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val reconnectNeeded: SharedFlow<Unit> = _reconnectNeeded.asSharedFlow()
+
+    private val heartbeatScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var heartbeatJob: Job? = null
+    @Volatile private var pongReceived = false
+
+    private fun startHeartbeat() {
+        heartbeatJob?.cancel()
+        heartbeatJob = heartbeatScope.launch {
+            while (isActive) {
+                delay(15_000)
+                if (socket?.connected() != true) break
+                pongReceived = false
+                socket?.emit("client_ping")
+                delay(8_000)
+                if (!pongReceived) {
+                    Log.w(TAG, "Heartbeat: no pong in 8s, zombie connection detected")
+                    _connectionStatus.tryEmit(false)
+                    _reconnectNeeded.tryEmit(Unit)
+                    break
+                }
+                Log.d(TAG, "Heartbeat: pong received, connection alive")
+            }
+        }
+    }
+
+    private fun stopHeartbeat() {
+        heartbeatJob?.cancel()
+        heartbeatJob = null
+    }
+
     fun connect(context: android.content.Context, serverUrl: String, roomId: String, clientId: String) {
         disconnect() // Close existing
         currentClientId = clientId
@@ -56,6 +95,7 @@ object RelayRepository {
             socket?.on(Socket.EVENT_CONNECT) {
                 Log.d("RelayRepository", "Connected to Relay")
                 _connectionStatus.tryEmit(true)
+                startHeartbeat()
                 // Join Room with V4 PeerMeta
                 try {
                     val networkInfo = com.clipboardpush.plus.util.NetworkUtil.getLocalNetworkInfo(context)
@@ -97,6 +137,7 @@ object RelayRepository {
             }?.on(Socket.EVENT_DISCONNECT) { args ->
                 val reason = if (args.isNotEmpty()) args[0].toString() else "Unknown"
                 Log.d("RelayRepository", "Disconnected from Relay: $reason")
+                stopHeartbeat()
                 _connectionStatus.tryEmit(false)
             }?.on(Socket.EVENT_CONNECT_ERROR) { args ->
                 val error = if (args.isNotEmpty()) args[0].toString() else "Unknown"
@@ -107,6 +148,11 @@ object RelayRepository {
             }?.on("reconnect") {
             }
             
+            socket?.on("server_pong") {
+                pongReceived = true
+                Log.d(TAG, "server_pong received")
+            }
+
             socket?.on("clipboard_sync") { args ->
                 try {
                     if (args.isNotEmpty() && args[0] is JSONObject) {
@@ -299,6 +345,7 @@ object RelayRepository {
     }
 
     fun disconnect() {
+        stopHeartbeat()
         socket?.disconnect()
         socket?.off()
         socket = null

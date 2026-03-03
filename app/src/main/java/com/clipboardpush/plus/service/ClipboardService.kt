@@ -318,7 +318,18 @@ class ClipboardService : Service() {
                 Log.e(TAG, "Error processing relay event", e)
             }
         }
-        
+
+        serviceScope.launch {
+            try {
+                relayRepository.reconnectNeeded.collect {
+                    Log.w(TAG, "Heartbeat triggered reconnect")
+                    reconnect()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error observing reconnect needed", e)
+            }
+        }
+
         // Listen for clipboard changes to SEND (Upload)
         try {
             clipboardHelper.addPrimaryClipChangedListener(object : ClipboardHelper.OnPrimaryClipChangedListener {
