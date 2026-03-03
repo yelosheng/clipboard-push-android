@@ -29,7 +29,19 @@ class UploadWorker(
         const val KEY_URI_STRING = "key_uri_string"
         const val KEY_MIME_TYPE = "key_mime_type"
         private const val TAG = "UploadWorker"
-        private const val LAN_ACK_TIMEOUT_MS = 8_000L
+        private const val LARGE_FILE_THRESHOLD_BYTES = 50L * 1024 * 1024 // 50 MB
+
+        /** Returns adaptive LAN ACK timeout: 2s per MB, min 30s, max 10min. */
+        fun lanAckTimeoutMs(fileSizeBytes: Long): Long =
+            minOf(10 * 60_000L, maxOf(30_000L, fileSizeBytes / (1024 * 1024) * 2_000L))
+
+        /** Returns true if the device is on WiFi or Ethernet (i.e., can reach LAN peers). */
+        fun isOnLan(context: Context): Boolean {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+            val caps = cm.getNetworkCapabilities(cm.activeNetwork ?: return false) ?: return false
+            return caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ||
+                   caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET)
+        }
     }
 
     private val settingsRepository = SettingsRepository(context)
@@ -38,6 +50,25 @@ class UploadWorker(
         val uriString = inputData.getString(KEY_URI_STRING) ?: return Result.failure()
         val mimeType = inputData.getString(KEY_MIME_TYPE) ?: "application/octet-stream"
         val uri = Uri.parse(uriString)
+
+        // Quick early reject: if ContentResolver reports size > 50MB and not on LAN, fail fast
+        // (avoids copying a huge file before rejecting; post-copy check is the definitive one)
+        val onLan = isOnLan(applicationContext)
+        if (!onLan) {
+            val approxSize = try {
+                applicationContext.contentResolver.query(
+                    uri, arrayOf(android.provider.OpenableColumns.SIZE), null, null, null
+                )?.use { c -> if (c.moveToFirst()) c.getLong(0) else -1L } ?: -1L
+            } catch (_: Exception) { -1L }
+            if (approxSize > LARGE_FILE_THRESHOLD_BYTES) {
+                NotificationHelper.showPushNotification(
+                    applicationContext,
+                    applicationContext.getString(R.string.worker_upload_failed_title),
+                    applicationContext.getString(R.string.worker_upload_lan_required)
+                )
+                return Result.failure()
+            }
+        }
 
         val notificationId = System.currentTimeMillis().toInt()
         setForeground(createForegroundInfo(notificationId, applicationContext.getString(R.string.worker_upload_title), applicationContext.getString(R.string.worker_upload_preparing)))
@@ -89,10 +120,20 @@ class UploadWorker(
             val deviceId = android.provider.Settings.Secure.getString(applicationContext.contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "android_unknown"
             val senderId = "android_$deviceId"
             
-            // Check if we have network info (implies LAN capability)
+            // Definitive large-file check using actual size from temp file (reliable)
+            val actualSize = tempSourceFile!!.length()
+            val isLargeFile = actualSize > LARGE_FILE_THRESHOLD_BYTES
+            if (isLargeFile && !onLan) {
+                NotificationHelper.showPushNotification(
+                    applicationContext,
+                    applicationContext.getString(R.string.worker_upload_failed_title),
+                    applicationContext.getString(R.string.worker_upload_lan_required)
+                )
+                return Result.failure()
+            }
+
             val localNetwork = com.clipboardpush.plus.util.NetworkUtil.getLocalNetworkInfo(applicationContext)
-            
-            
+
             if (localNetwork != null) {
                  setForeground(createForegroundInfo(notificationId, applicationContext.getString(R.string.worker_upload_title), applicationContext.getString(R.string.worker_upload_announcing)))
                  
@@ -128,10 +169,12 @@ class UploadWorker(
                      )
                      
                      
-                     // Wait for ACK
+                     // Wait for ACK (adaptive timeout: 2s per MB based on actual file size)
+                     val lanTimeout = lanAckTimeoutMs(actualSize)
+                     Log.d(TAG, "LAN ACK timeout: ${lanTimeout / 1000}s for ${actualSize / (1024*1024)}MB")
                      var lanSuccess = false
                      try {
-                         withTimeout(LAN_ACK_TIMEOUT_MS) { // LAN ACK timeout
+                         withTimeout(lanTimeout) {
                              com.clipboardpush.plus.data.repository.RelayRepository.events.collect { event ->
                                  if (event is com.clipboardpush.plus.data.repository.RelayEvent.FileSyncCompleted) {
                                       // Check if it matches our transfer
@@ -179,10 +222,25 @@ class UploadWorker(
                             applicationContext.getString(R.string.worker_upload_success_lan, fileName, pcName)
                         )
                         return Result.success()
+                     } else if (isLargeFile) {
+                         // Large file: LAN failed, do NOT fall back to cloud
+                         NotificationHelper.showPushNotification(
+                             applicationContext,
+                             applicationContext.getString(R.string.worker_upload_failed_title),
+                             applicationContext.getString(R.string.worker_upload_lan_large_failed)
+                         )
+                         return Result.failure()
                      }
-                 } else {
                  }
-            } else {
+            } else if (isLargeFile) {
+                // Large file, no LAN port available — should not reach here due to early check,
+                // but guard just in case
+                NotificationHelper.showPushNotification(
+                    applicationContext,
+                    applicationContext.getString(R.string.worker_upload_failed_title),
+                    applicationContext.getString(R.string.worker_upload_lan_required)
+                )
+                return Result.failure()
             }
             
             // If we are here, LAN failed or skipped. Fallback to Cloud.

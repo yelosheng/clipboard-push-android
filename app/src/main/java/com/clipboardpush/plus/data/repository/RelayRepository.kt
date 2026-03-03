@@ -15,8 +15,10 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import okhttp3.OkHttpClient
 import org.json.JSONObject
 import java.net.URISyntaxException
+import java.util.concurrent.TimeUnit
 
 object RelayRepository {
     private const val TAG = "Relay"
@@ -79,7 +81,17 @@ object RelayRepository {
         currentClientId = clientId
 
         try {
+            // OkHttp client with WebSocket-level ping to detect dead connections reliably.
+            // OkHttp sends a WebSocket ping frame every 20s; if no pong is received before the
+            // next ping is due, OkHttp closes the WebSocket and fires onFailure →
+            // socket.io fires EVENT_DISCONNECT → notification updates and reconnect starts.
+            val okHttpClient = OkHttpClient.Builder()
+                .pingInterval(20, TimeUnit.SECONDS)
+                .build()
+
             val opts = IO.Options()
+            opts.webSocketFactory = okHttpClient
+            opts.callFactory = okHttpClient
             opts.forceNew = true // Ensure new connection instance to avoid listener accumulation
             opts.transports = arrayOf("websocket") // Force WebSocket (User confirmed stable)
             opts.reconnection = true

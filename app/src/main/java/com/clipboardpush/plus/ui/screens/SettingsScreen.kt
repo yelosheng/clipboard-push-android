@@ -415,6 +415,14 @@ fun SettingsScreen(
             // 关于
             SettingsSection(title = stringResource(R.string.section_about)) {
                 val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+                val context = androidx.compose.ui.platform.LocalContext.current
+                val versionName = remember {
+                    try {
+                        context.packageManager.getPackageInfo(context.packageName, 0).versionName
+                    } catch (_: Exception) {
+                        com.clipboardpush.plus.BuildConfig.VERSION_NAME
+                    }
+                }
                 Column {
                     Row(
                         modifier = Modifier
@@ -428,7 +436,7 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodyLarge
                         )
                         Text(
-                            text = "v${com.clipboardpush.plus.BuildConfig.VERSION_NAME}",
+                            text = "v$versionName",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
