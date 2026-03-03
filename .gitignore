@@ -5,6 +5,7 @@ local.properties
 .idea/
 *.apk
 *.aab
+output-metadata.json
 *.ap_
 *.dex
 app/google-services.json
