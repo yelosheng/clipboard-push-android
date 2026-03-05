@@ -78,14 +78,13 @@ class MainActivity : ComponentActivity() {
             }
             
             // 设置 Peers 回调
-            clipboardService?.onPeersChanged = { peers ->
+            clipboardService?.onPeersChanged = { roomId, peers ->
                 mainViewModel.updatePeers(peers)
-                // Update display name for active room once PC reports its identity
-                if (peers.isNotEmpty()) {
-                    val currentRoom = mainViewModel.activeRoomId.value
-                    if (!currentRoom.isNullOrBlank()) {
-                        mainViewModel.updateRecentPeerDisplayName(currentRoom, peers.first())
-                    }
+                // Update display name for active room once PC reports its identity.
+                // Use roomId from the service (authoritative) to avoid a race where
+                // activeRoomId StateFlow hasn't yet reflected a recent room switch.
+                if (peers.isNotEmpty() && !roomId.isNullOrBlank()) {
+                    mainViewModel.updateRecentPeerDisplayName(roomId, peers.first())
                 }
             }
 

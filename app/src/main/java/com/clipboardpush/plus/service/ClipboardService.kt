@@ -171,7 +171,7 @@ class ClipboardService : Service() {
 
     var onStateChanged: ((ConnectionState) -> Unit)? = null
     var onPeerCountChanged: ((Int) -> Unit)? = null
-    var onPeersChanged: ((List<String>) -> Unit)? = null
+    var onPeersChanged: ((roomId: String?, peers: List<String>) -> Unit)? = null
     var onMessageReceived: ((PushMessage) -> Unit)? = null
     var onMessageDownloadFailed: ((messageId: String) -> Unit)? = null
     var onMessageDownloadProgress: ((messageId: String, progress: Int) -> Unit)? = null
@@ -289,7 +289,7 @@ class ClipboardService : Service() {
             try {
                 relayRepository.peers.collect { peers ->
                     currentPeers = peers
-                    onPeersChanged?.invoke(peers)
+                    onPeersChanged?.invoke(roomId, peers)
                     if (currentState == ConnectionState.CONNECTED) {
                         NotificationHelper.updateServiceNotification(this@ClipboardService, currentState, serverAddress, currentPeerCount, peers)
                     }
