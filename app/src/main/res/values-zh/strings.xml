@@ -52,11 +52,19 @@
     <string name="btn_disconnect">断开</string>
     <string name="btn_connect">连接</string>
     <string name="btn_scan_pair">扫描二维码配对 (Scan to Pair)</string>
+
     <string name="guide_title">首次使用指南</string>
     <string name="guide_step1_prefix">1. 访问 </string>
     <string name="guide_step1_suffix"> 下载桌面客户端 (Clipboard Push)</string>
     <string name="guide_step2">2. 打开客户端设置页面</string>
     <string name="guide_step3">3. 点击上方按钮扫描屏幕上的二维码</string>
+    <string name="onboarding_push_title">点击此处推送剪贴板到电脑</string>
+    <string name="onboarding_push_body">在手机上复制任意内容，然后点击此按钮即可立即发送到电脑。</string>
+    <string name="onboarding_settings_title">点击这里开始配对</string>
+    <string name="onboarding_settings_body">进入设置页面，扫描电脑上的二维码即可完成配对。</string>
+    <string name="onboarding_scan_title">扫描二维码完成配对</string>
+    <string name="onboarding_scan_body">在电脑上打开 Clipboard Push，点击「显示二维码」，然后点击此按钮扫描即可。</string>
+    <string name="onboarding_got_it">知道了</string>
     <string name="section_recent">最近连接</string>
     <string name="section_file_handling">文件处理方式</string>
     <string name="file_mode_save_local_label">保存到下载文件夹</string>
@@ -128,6 +136,9 @@
     <string name="notif_connecting">正在连接…</string>
     <string name="notif_disconnected">未连接</string>
     <string name="notif_error">连接错误</string>
+    <string name="notif_push_btn_label">推送</string>
+    <string name="notif_tip_title">💡 提示：一键推送剪贴板</string>
+    <string name="notif_tip_body">在手机上复制任意内容，然后点击通知栏的 ▶ 按钮，即可立即发送到电脑。</string>
     <string name="notif_send_failed_title">发送失败</string>
     <string name="notif_encryption_error">加密出错，请重新扫码配对</string>
     <string name="notif_downloading">下载中</string>

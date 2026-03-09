@@ -216,6 +216,36 @@ object NotificationHelper {
     }
 
     private const val ENCRYPTION_ERROR_NOTIFICATION_ID = 1003
+    private const val PUSH_TIP_NOTIFICATION_ID = 1005
+
+    /**
+     * 首次 peer 上线时，发一次性使用提示通知（方向 B）
+     */
+    fun showPushTipNotification(context: Context) {
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            0,
+            Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val notification = NotificationCompat.Builder(context, ClipboardManApp.NOTIFICATION_CHANNEL_PUSH)
+            .setContentTitle(context.getString(R.string.notif_tip_title))
+            .setContentText(context.getString(R.string.notif_tip_body))
+            .setStyle(NotificationCompat.BigTextStyle()
+                .bigText(context.getString(R.string.notif_tip_body)))
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .build()
+
+        val notificationManager = context.getSystemService(NotificationManager::class.java)
+        notificationManager.notify(PUSH_TIP_NOTIFICATION_ID, notification)
+    }
 
     /**
      * 获取服务通知 ID

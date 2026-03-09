@@ -1,5 +1,11 @@
 package com.clipboardpush.plus.ui.screens
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -13,15 +19,26 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Warning
 
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 
 import androidx.compose.foundation.background
@@ -33,6 +50,7 @@ import com.clipboardpush.plus.data.model.PeerEntry
 import com.clipboardpush.plus.data.repository.SettingsRepository
 import com.clipboardpush.plus.ui.theme.*
 import androidx.compose.ui.text.withStyle
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,8 +74,13 @@ fun SettingsScreen(
     recentPeers: List<PeerEntry> = emptyList(),
     activeRoomId: String? = null,
     onPeerSelected: (PeerEntry) -> Unit = {},
-    onPeerRemoved: (PeerEntry) -> Unit = {}
+    onPeerRemoved: (PeerEntry) -> Unit = {},
+    showScanOnboarding: Boolean = false,
+    onOnboardingDismiss: () -> Unit = {}
 ) {
+    var scanButtonBounds by remember { mutableStateOf<Rect?>(null) }
+
+    Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -160,10 +183,21 @@ fun SettingsScreen(
                     // 2. 配对按钮
                     Button(
                         onClick = onScanClick,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onGloballyPositioned { coordinates ->
+                                scanButtonBounds = coordinates.boundsInWindow()
+                            }
                     ) {
+                        Icon(
+                            imageVector = Icons.Default.QrCodeScanner,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(stringResource(R.string.btn_scan_pair))
                     }
+
 
                     Spacer(modifier = Modifier.height(16.dp))
 
@@ -508,6 +542,105 @@ fun SettingsScreen(
             }
 
             Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+
+    if (showScanOnboarding && scanButtonBounds != null) {
+        ScanOnboardingOverlay(
+            buttonBounds = scanButtonBounds!!,
+            onDismiss = onOnboardingDismiss
+        )
+    }
+    } // closes Box
+}
+
+@Composable
+private fun ScanOnboardingOverlay(
+    buttonBounds: Rect,
+    onDismiss: () -> Unit
+) {
+    val density = LocalDensity.current
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 0.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseAlpha"
+    )
+
+    val spotlightPadding = with(density) { 16.dp.toPx() }
+    val spotlightRadius = (maxOf(buttonBounds.width, buttonBounds.height) / 2f) + spotlightPadding
+    val spotlightCenter = Offset(buttonBounds.center.x, buttonBounds.center.y)
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clickable(onClick = onDismiss)
+    ) {
+        // Dark overlay with spotlight hole
+        androidx.compose.foundation.Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+        ) {
+            drawRect(color = Color.Black.copy(alpha = 0.75f))
+            drawCircle(
+                color = Color.Transparent,
+                radius = spotlightRadius,
+                center = spotlightCenter,
+                blendMode = BlendMode.Clear
+            )
+            // Pulsing ring
+            drawCircle(
+                color = Color.White.copy(alpha = pulseAlpha),
+                radius = spotlightRadius + with(density) { 10.dp.toPx() },
+                center = spotlightCenter,
+                style = Stroke(width = with(density) { 2.dp.toPx() })
+            )
+        }
+
+        // Explanation card below the button
+        val cardTopPx = buttonBounds.bottom + with(density) { 20.dp.toPx() }
+        val cardStartPx = with(density) { 24.dp.toPx() }
+        val cardEndPx = with(density) { 24.dp.toPx() }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .offset {
+                    IntOffset(
+                        x = cardStartPx.roundToInt(),
+                        y = cardTopPx.roundToInt()
+                    )
+                }
+                .padding(end = with(density) { cardEndPx.toDp() }),
+            horizontalAlignment = Alignment.Start
+        ) {
+            Text(
+                text = stringResource(R.string.onboarding_scan_title),
+                style = MaterialTheme.typography.titleMedium,
+                color = Color.White,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = stringResource(R.string.onboarding_scan_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.85f)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = Color.White),
+            ) {
+                Text(
+                    text = stringResource(R.string.onboarding_got_it),
+                    color = Color.Black
+                )
+            }
         }
     }
 }

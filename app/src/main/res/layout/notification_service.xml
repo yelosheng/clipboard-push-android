@@ -55,22 +55,33 @@
             android:visibility="gone" />
     </LinearLayout>
 
-    <!-- 右侧推送按钮 - 简洁的圆形按钮 -->
-    <FrameLayout
+    <!-- 右侧推送按钮 - 图标 + 文字 -->
+    <LinearLayout
         android:id="@+id/btn_push"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
+        android:layout_width="52dp"
+        android:layout_height="wrap_content"
         android:layout_marginEnd="4dp"
+        android:orientation="vertical"
+        android:gravity="center"
         android:background="@drawable/btn_push_background"
         android:clickable="true"
-        android:focusable="true">
+        android:focusable="true"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp">
 
         <ImageView
             android:layout_width="20dp"
             android:layout_height="20dp"
-            android:layout_gravity="center"
             android:src="@drawable/ic_send"
-            android:contentDescription="推送" />
-    </FrameLayout>
+            android:contentDescription="@string/notif_push_btn_label" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/notif_push_btn_label"
+            android:textSize="9sp"
+            android:textColor="#FFFFFF"
+            android:layout_marginTop="3dp" />
+    </LinearLayout>
 
 </LinearLayout>

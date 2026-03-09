@@ -51,6 +51,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -91,9 +93,13 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.material.icons.filled.DesktopWindows
 import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -116,8 +122,15 @@ fun HomeScreen(
     onFileOpen: (PushMessage) -> Unit = {},
     onFileShare: (PushMessage) -> Unit = {},
     onFileCopyName: (PushMessage) -> Unit = {},
-    isFileUploading: Boolean = false
+    isFileUploading: Boolean = false,
+    showOnboarding: Boolean = false,
+    onOnboardingDismiss: () -> Unit = {},
+    showPushOnboarding: Boolean = false,
+    onPushOnboardingDismiss: () -> Unit = {}
 ) {
+    var settingsButtonBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    var phoneButtonBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+
     // 构建基础URL
     val baseUrl = remember(serverAddress, useHttps) {
         if (serverAddress.isBlank()) ""
@@ -160,6 +173,7 @@ fun HomeScreen(
         }
     }
 
+    Box(modifier = androidx.compose.ui.Modifier.fillMaxSize()) {
     Scaffold(
         topBar = {
             if (isSelectionMode) {
@@ -233,7 +247,9 @@ fun HomeScreen(
                             onSettingsClick  = onSettingsClick,
                             pushTrigger      = pushTrigger,
                             pushFailTrigger  = pushFailTrigger,
-                            isFileUploading  = isFileUploading
+                            isFileUploading  = isFileUploading,
+                            onSettingsBoundsChanged = { settingsButtonBounds = it },
+                            onPhoneBoundsChanged = { phoneButtonBounds = it }
                         )
                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -382,6 +398,195 @@ fun HomeScreen(
                         fileActionMessage = null
                         onFileCopyName(msg)
                     }
+                )
+            }
+        }
+    }
+
+    if (showOnboarding && settingsButtonBounds != null) {
+        SettingsOnboardingOverlay(
+            buttonBounds = settingsButtonBounds!!,
+            onDismiss = onOnboardingDismiss
+        )
+    }
+
+    if (showPushOnboarding && phoneButtonBounds != null) {
+        PushOnboardingOverlay(
+            buttonBounds = phoneButtonBounds!!,
+            onDismiss = onPushOnboardingDismiss
+        )
+    }
+    } // closes Box
+}
+
+@Composable
+private fun SettingsOnboardingOverlay(
+    buttonBounds: androidx.compose.ui.geometry.Rect,
+    onDismiss: () -> Unit
+) {
+    val density = LocalDensity.current
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 0.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseAlpha"
+    )
+
+    val spotlightPadding = with(density) { 18.dp.toPx() }
+    val spotlightRadius = (maxOf(buttonBounds.width, buttonBounds.height) / 2f) + spotlightPadding
+    val spotlightCenter = androidx.compose.ui.geometry.Offset(buttonBounds.center.x, buttonBounds.center.y)
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clickable(onClick = onDismiss)
+    ) {
+        androidx.compose.foundation.Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+        ) {
+            drawRect(color = Color.Black.copy(alpha = 0.75f))
+            drawCircle(
+                color = Color.Transparent,
+                radius = spotlightRadius,
+                center = spotlightCenter,
+                blendMode = BlendMode.Clear
+            )
+            drawCircle(
+                color = Color.White.copy(alpha = pulseAlpha),
+                radius = spotlightRadius + with(density) { 10.dp.toPx() },
+                center = spotlightCenter,
+                style = Stroke(width = with(density) { 2.dp.toPx() })
+            )
+        }
+
+        // Explanation card below the settings icon
+        val cardTopPx = buttonBounds.bottom + with(density) { 16.dp.toPx() }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .offset {
+                    IntOffset(
+                        x = with(density) { 24.dp.roundToPx() },
+                        y = cardTopPx.roundToInt()
+                    )
+                }
+                .padding(end = 24.dp),
+            horizontalAlignment = Alignment.Start
+        ) {
+            Text(
+                text = stringResource(R.string.onboarding_settings_title),
+                style = MaterialTheme.typography.titleMedium,
+                color = Color.White,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = stringResource(R.string.onboarding_settings_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.85f)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = Color.White)
+            ) {
+                Text(
+                    text = stringResource(R.string.onboarding_got_it),
+                    color = Color.Black
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PushOnboardingOverlay(
+    buttonBounds: androidx.compose.ui.geometry.Rect,
+    onDismiss: () -> Unit
+) {
+    val density = LocalDensity.current
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 0.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseAlpha"
+    )
+
+    val spotlightPadding = with(density) { 18.dp.toPx() }
+    val spotlightRadius = (maxOf(buttonBounds.width, buttonBounds.height) / 2f) + spotlightPadding
+    val spotlightCenter = androidx.compose.ui.geometry.Offset(buttonBounds.center.x, buttonBounds.center.y)
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clickable(onClick = onDismiss)
+    ) {
+        androidx.compose.foundation.Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+        ) {
+            drawRect(color = Color.Black.copy(alpha = 0.75f))
+            drawCircle(
+                color = Color.Transparent,
+                radius = spotlightRadius,
+                center = spotlightCenter,
+                blendMode = BlendMode.Clear
+            )
+            drawCircle(
+                color = Color.White.copy(alpha = pulseAlpha),
+                radius = spotlightRadius + with(density) { 10.dp.toPx() },
+                center = spotlightCenter,
+                style = Stroke(width = with(density) { 2.dp.toPx() })
+            )
+        }
+
+        // Explanation card below the phone icon
+        val cardTopPx = buttonBounds.bottom + with(density) { 16.dp.toPx() }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .offset {
+                    IntOffset(
+                        x = with(density) { 16.dp.roundToPx() },
+                        y = cardTopPx.roundToInt()
+                    )
+                }
+                .padding(end = 16.dp),
+            horizontalAlignment = Alignment.Start
+        ) {
+            Text(
+                text = stringResource(R.string.onboarding_push_title),
+                style = MaterialTheme.typography.titleMedium,
+                color = Color.White,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = stringResource(R.string.onboarding_push_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.85f)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = Color.White)
+            ) {
+                Text(
+                    text = stringResource(R.string.onboarding_got_it),
+                    color = Color.Black
                 )
             }
         }
@@ -1058,7 +1263,9 @@ private fun ConnectionIndicator(
     modifier: Modifier = Modifier,
     pushTrigger: Int = 0,
     pushFailTrigger: Int = 0,
-    isFileUploading: Boolean = false
+    isFileUploading: Boolean = false,
+    onSettingsBoundsChanged: ((androidx.compose.ui.geometry.Rect) -> Unit)? = null,
+    onPhoneBoundsChanged: ((androidx.compose.ui.geometry.Rect) -> Unit)? = null
 ) {
     val isConnectedWithPeer = connectionState == ConnectionState.CONNECTED && peerCount > 0
     val onPrimary = MaterialTheme.colorScheme.onPrimary
@@ -1184,7 +1391,10 @@ private fun ConnectionIndicator(
                         if (isConnectedWithPeer)
                             Modifier.clickable(onClick = onPushClick)
                         else Modifier
-                    ),
+                    )
+                    .onGloballyPositioned { coordinates ->
+                        onPhoneBoundsChanged?.invoke(coordinates.boundsInWindow())
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -1322,6 +1532,9 @@ private fun ConnectionIndicator(
                         .shadow(elevation = 6.dp, shape = CircleShape, clip = true)
                         .background(onPrimary.copy(alpha = 0.12f), CircleShape)
                         .clickable(onClick = onSettingsClick)
+                        .onGloballyPositioned { coordinates ->
+                            onSettingsBoundsChanged?.invoke(coordinates.boundsInWindow())
+                        }
                 ) {
                     Icon(
                         imageVector = Icons.Default.Settings,

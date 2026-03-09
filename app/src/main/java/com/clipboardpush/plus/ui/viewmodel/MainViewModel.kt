@@ -104,6 +104,42 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val activeRoomId: StateFlow<String?> = settingsRepository.roomIdFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    // Push onboarding: show once when first peer comes online after pairing
+    val showPushOnboarding: StateFlow<Boolean> = combine(
+        settingsRepository.onboardingPushShownFlow,
+        _peerCount
+    ) { shown, peers -> !shown && peers > 0 }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    fun dismissPushOnboarding() {
+        viewModelScope.launch {
+            settingsRepository.markOnboardingPushShown()
+        }
+    }
+
+    // Home onboarding: only show to new users (no recent peers yet)
+    val showHomeOnboarding: StateFlow<Boolean> = combine(
+        settingsRepository.onboardingHomeShownFlow,
+        settingsRepository.recentPeersFlow
+    ) { shown, peers -> !shown && peers.isEmpty() }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    fun dismissHomeOnboarding() {
+        viewModelScope.launch {
+            settingsRepository.markOnboardingHomeShown()
+        }
+    }
+
+    val showScanOnboarding: StateFlow<Boolean> = settingsRepository.onboardingScanShownFlow
+        .map { !it }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    fun dismissScanOnboarding() {
+        viewModelScope.launch {
+            settingsRepository.markOnboardingScanShown()
+        }
+    }
+
     val fileUploadActive: StateFlow<Boolean> = com.clipboardpush.plus.service.ClipboardService.fileUploadActive
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 

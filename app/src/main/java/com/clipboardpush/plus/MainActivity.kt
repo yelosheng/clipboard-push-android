@@ -613,6 +613,9 @@ fun MainNavigation(
     val failedDownloadIds by viewModel.failedDownloadIds.collectAsState()
     val downloadProgress by viewModel.downloadProgress.collectAsState()
     val isFileUploading by viewModel.fileUploadActive.collectAsState()
+    val showScanOnboarding by viewModel.showScanOnboarding.collectAsState()
+    val showHomeOnboarding by viewModel.showHomeOnboarding.collectAsState()
+    val showPushOnboarding by viewModel.showPushOnboarding.collectAsState()
 
     LaunchedEffect(messages) {
         messages.filter { it.localPath != null }.forEach { viewModel.clearDownloadProgress(it.safeId) }
@@ -656,7 +659,14 @@ fun MainNavigation(
                 onFileOpen = onFileOpen,
                 onFileShare = onFileShare,
                 onFileCopyName = onFileCopyName,
-                isFileUploading = isFileUploading
+                isFileUploading = isFileUploading,
+                showOnboarding = showHomeOnboarding,
+                onOnboardingDismiss = {
+                    viewModel.dismissHomeOnboarding()
+                    navController.navigate("settings")
+                },
+                showPushOnboarding = showPushOnboarding,
+                onPushOnboardingDismiss = { viewModel.dismissPushOnboarding() }
             )
         }
 
@@ -687,7 +697,9 @@ fun MainNavigation(
                 recentPeers = recentPeers,
                 activeRoomId = activeRoomId,
                 onPeerSelected = onPeerSelected,
-                onPeerRemoved = onPeerRemoved
+                onPeerRemoved = onPeerRemoved,
+                showScanOnboarding = showScanOnboarding,
+                onOnboardingDismiss = { viewModel.dismissScanOnboarding() }
             )
         }
     }

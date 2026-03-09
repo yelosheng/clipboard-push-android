@@ -293,6 +293,14 @@ class ClipboardService : Service() {
                     if (currentState == ConnectionState.CONNECTED) {
                         NotificationHelper.updateServiceNotification(this@ClipboardService, currentState, serverAddress, currentPeerCount, peers)
                     }
+                    // Show one-time tip notification when a peer comes online for the first time ever
+                    if (peers.isNotEmpty()) {
+                        val tipShown = settingsRepository.onboardingNotifTipShownFlow.first()
+                        if (!tipShown) {
+                            settingsRepository.markOnboardingNotifTipShown()
+                            NotificationHelper.showPushTipNotification(this@ClipboardService)
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error observing peers", e)

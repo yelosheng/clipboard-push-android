@@ -37,6 +37,12 @@ class SettingsRepository(
         private val KEY_AUTO_CONNECT = booleanPreferencesKey("auto_connect")
         private val KEY_MAX_HISTORY_COUNT = intPreferencesKey("max_history_count")
         
+        // Onboarding
+        private val KEY_ONBOARDING_HOME_SHOWN = booleanPreferencesKey("onboarding_home_shown")
+        private val KEY_ONBOARDING_PUSH_SHOWN = booleanPreferencesKey("onboarding_push_shown")
+        private val KEY_ONBOARDING_NOTIF_TIP_SHOWN = booleanPreferencesKey("onboarding_notif_tip_shown")
+        private val KEY_ONBOARDING_SCAN_SHOWN = booleanPreferencesKey("onboarding_scan_shown")
+
         // Pairing Info
         private val KEY_ROOM_ID = stringPreferencesKey("room_id")
         private val KEY_RECENT_PEERS = stringPreferencesKey("recent_peers")
@@ -180,6 +186,48 @@ class SettingsRepository(
             address
         } else {
             "$protocol://$address"
+        }
+    }
+
+    // --- Onboarding ---
+
+    val onboardingNotifTipShownFlow: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[KEY_ONBOARDING_NOTIF_TIP_SHOWN] ?: false
+    }
+
+    suspend fun markOnboardingNotifTipShown() {
+        dataStore.edit { preferences ->
+            preferences[KEY_ONBOARDING_NOTIF_TIP_SHOWN] = true
+        }
+    }
+
+    val onboardingPushShownFlow: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[KEY_ONBOARDING_PUSH_SHOWN] ?: false
+    }
+
+    suspend fun markOnboardingPushShown() {
+        dataStore.edit { preferences ->
+            preferences[KEY_ONBOARDING_PUSH_SHOWN] = true
+        }
+    }
+
+    val onboardingHomeShownFlow: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[KEY_ONBOARDING_HOME_SHOWN] ?: false
+    }
+
+    suspend fun markOnboardingHomeShown() {
+        dataStore.edit { preferences ->
+            preferences[KEY_ONBOARDING_HOME_SHOWN] = true
+        }
+    }
+
+    val onboardingScanShownFlow: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[KEY_ONBOARDING_SCAN_SHOWN] ?: false
+    }
+
+    suspend fun markOnboardingScanShown() {
+        dataStore.edit { preferences ->
+            preferences[KEY_ONBOARDING_SCAN_SHOWN] = true
         }
     }
 

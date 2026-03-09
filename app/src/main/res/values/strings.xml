@@ -52,11 +52,19 @@
     <string name="btn_disconnect">Disconnect</string>
     <string name="btn_connect">Connect</string>
     <string name="btn_scan_pair">Scan QR Code to Pair</string>
+
     <string name="guide_title">Quick Start</string>
     <string name="guide_step1_prefix">1. Visit </string>
     <string name="guide_step1_suffix"> to download the desktop client (Clipboard Push)</string>
     <string name="guide_step2">2. Open the client settings page</string>
     <string name="guide_step3">3. Tap the button above to scan the QR code on screen</string>
+    <string name="onboarding_push_title">Tap to push clipboard to PC</string>
+    <string name="onboarding_push_body">Copy anything on your phone, then tap this button to send it to your PC instantly.</string>
+    <string name="onboarding_settings_title">Get started — tap Settings</string>
+    <string name="onboarding_settings_body">Open Settings to pair with your PC by scanning a QR code.</string>
+    <string name="onboarding_scan_title">Scan the QR code to pair</string>
+    <string name="onboarding_scan_body">Open Clipboard Push on your PC and click "Show QR Code", then tap here to scan it.</string>
+    <string name="onboarding_got_it">Got it</string>
     <string name="section_recent">Recent Connections</string>
     <string name="section_file_handling">File Handling</string>
     <string name="file_mode_save_local_label">Save to Downloads</string>
@@ -128,6 +136,9 @@
     <string name="notif_connecting">Connecting…</string>
     <string name="notif_disconnected">Disconnected</string>
     <string name="notif_error">Connection error</string>
+    <string name="notif_push_btn_label">Push</string>
+    <string name="notif_tip_title">💡 Tip: Push clipboard with one tap</string>
+    <string name="notif_tip_body">Copy anything on your phone, then tap the ▶ button in the notification bar to send it to your PC instantly.</string>
     <string name="notif_send_failed_title">Send Failed</string>
     <string name="notif_encryption_error">Encryption error. Please re-scan the pairing QR code.</string>
     <string name="notif_downloading">Downloading</string>
