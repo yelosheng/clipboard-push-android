@@ -666,7 +666,10 @@ fun MainNavigation(
                     navController.navigate("settings")
                 },
                 showPushOnboarding = showPushOnboarding,
-                onPushOnboardingDismiss = { viewModel.dismissPushOnboarding() }
+                onPushOnboardingDismiss = { viewModel.dismissPushOnboarding() },
+                recentPeers    = recentPeers,
+                activeRoomId   = activeRoomId,
+                onPeerSelected = onPeerSelected,
             )
         }
 

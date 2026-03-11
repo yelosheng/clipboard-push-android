@@ -139,6 +139,8 @@
     <string name="notif_push_btn_label">推送</string>
     <string name="notif_tip_title">💡 提示：一键推送剪贴板</string>
     <string name="notif_tip_body">在手机上复制任意内容，然后点击通知栏的 ▶ 按钮，即可立即发送到电脑。</string>
+    <string name="peer_switcher_header">切换设备</string>
+    <string name="status_offline">离线</string>
     <string name="notif_send_failed_title">发送失败</string>
     <string name="notif_encryption_error">加密出错，请重新扫码配对</string>
     <string name="notif_downloading">下载中</string>

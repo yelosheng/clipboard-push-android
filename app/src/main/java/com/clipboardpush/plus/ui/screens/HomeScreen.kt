@@ -91,8 +91,12 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.filled.DesktopWindows
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Smartphone
+import com.clipboardpush.plus.data.model.PeerEntry
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
@@ -126,7 +130,10 @@ fun HomeScreen(
     showOnboarding: Boolean = false,
     onOnboardingDismiss: () -> Unit = {},
     showPushOnboarding: Boolean = false,
-    onPushOnboardingDismiss: () -> Unit = {}
+    onPushOnboardingDismiss: () -> Unit = {},
+    recentPeers: List<PeerEntry> = emptyList(),
+    activeRoomId: String? = null,
+    onPeerSelected: (PeerEntry) -> Unit = {}
 ) {
     var settingsButtonBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     var phoneButtonBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
@@ -237,19 +244,22 @@ fun HomeScreen(
                 CenterAlignedTopAppBar(
                     title = {
                         ConnectionIndicator(
-                            connectionState  = connectionState,
-                            peerCount        = peerCount,
-                            peers            = peers,
-                            onPushClick      = {
+                            connectionState         = connectionState,
+                            peerCount               = peerCount,
+                            peers                   = peers,
+                            onPushClick             = {
                                 onPushClipboard()
                                 pushTrigger++
                             },
-                            onSettingsClick  = onSettingsClick,
-                            pushTrigger      = pushTrigger,
-                            pushFailTrigger  = pushFailTrigger,
-                            isFileUploading  = isFileUploading,
+                            onSettingsClick         = onSettingsClick,
+                            pushTrigger             = pushTrigger,
+                            pushFailTrigger         = pushFailTrigger,
+                            isFileUploading         = isFileUploading,
                             onSettingsBoundsChanged = { settingsButtonBounds = it },
-                            onPhoneBoundsChanged = { phoneButtonBounds = it }
+                            onPhoneBoundsChanged    = { phoneButtonBounds = it },
+                            recentPeers             = recentPeers,
+                            activeRoomId            = activeRoomId,
+                            onPeerSelected          = onPeerSelected,
                         )
                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -1265,7 +1275,10 @@ private fun ConnectionIndicator(
     pushFailTrigger: Int = 0,
     isFileUploading: Boolean = false,
     onSettingsBoundsChanged: ((androidx.compose.ui.geometry.Rect) -> Unit)? = null,
-    onPhoneBoundsChanged: ((androidx.compose.ui.geometry.Rect) -> Unit)? = null
+    onPhoneBoundsChanged: ((androidx.compose.ui.geometry.Rect) -> Unit)? = null,
+    recentPeers: List<PeerEntry> = emptyList(),
+    activeRoomId: String? = null,
+    onPeerSelected: (PeerEntry) -> Unit = {}
 ) {
     val isConnectedWithPeer = connectionState == ConnectionState.CONNECTED && peerCount > 0
     val onPrimary = MaterialTheme.colorScheme.onPrimary
@@ -1316,6 +1329,9 @@ private fun ConnectionIndicator(
     val rightDashed = !isConnectedWithPeer
 
     val pcName = peers.firstOrNull() ?: ""
+    val showChip    = recentPeers.isNotEmpty()
+    val showChevron = recentPeers.size >= 2
+    var dropdownExpanded by remember { mutableStateOf(false) }
 
     // Push success dot animation: 0f = at phone, 1f = at PC
     val dotProgress = remember { Animatable(0f) }
@@ -1473,52 +1489,173 @@ private fun ConnectionIndicator(
                 )
             }
 
-            // ── PC icon + name label (Column: label sits directly under icon) ──
+            // ── PC area: plain icon (no history) OR peer-switcher chip ──────
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .shadow(elevation = 6.dp, shape = CircleShape, clip = true)
-                        .background(onPrimary.copy(alpha = 0.12f), CircleShape)
+                    modifier = Modifier.height(36.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.DesktopWindows,
-                        contentDescription = null,
-                        tint = onPrimary.copy(alpha = pcAlpha),
-                        modifier = Modifier.size(24.dp)
-                    )
-                    if (connectionState == ConnectionState.CONNECTED && peerCount == 0) {
-                        Canvas(modifier = Modifier.size(24.dp)) {
-                            drawLine(
-                                color = onPrimary.copy(alpha = 0.9f),
-                                start = Offset(size.width * 0.1f, size.height * 0.9f),
-                                end   = Offset(size.width * 0.9f, size.height * 0.1f),
-                                strokeWidth = 2.5.dp.toPx(),
-                                cap = StrokeCap.Round
+                    if (!showChip) {
+                        // No peer history — original 36dp circle icon
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .size(36.dp)
+                                .shadow(elevation = 6.dp, shape = CircleShape, clip = true)
+                                .background(onPrimary.copy(alpha = 0.12f), CircleShape)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DesktopWindows,
+                                contentDescription = null,
+                                tint = onPrimary.copy(alpha = pcAlpha),
+                                modifier = Modifier.size(24.dp)
                             )
+                            if (connectionState == ConnectionState.CONNECTED && peerCount == 0) {
+                                Canvas(modifier = Modifier.size(24.dp)) {
+                                    drawLine(
+                                        color = onPrimary.copy(alpha = 0.9f),
+                                        start = Offset(size.width * 0.1f, size.height * 0.9f),
+                                        end   = Offset(size.width * 0.9f, size.height * 0.1f),
+                                        strokeWidth = 2.5.dp.toPx(),
+                                        cap = StrokeCap.Round
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        // Has peer history — show chip
+                        val primary = MaterialTheme.colorScheme.primary
+                        Box {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = onPrimary.copy(
+                                    alpha = if (isConnectedWithPeer) 0.22f else 0.12f
+                                ),
+                                border = if (showChevron)
+                                    BorderStroke(1.dp, primary.copy(alpha = 0.65f))
+                                else null,
+                                modifier = if (showChevron)
+                                    Modifier.clickable { dropdownExpanded = true }
+                                else Modifier
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.DesktopWindows,
+                                        contentDescription = null,
+                                        tint = onPrimary.copy(alpha = pcAlpha),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    if (pcName.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text(
+                                            text = pcName,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = onPrimary.copy(alpha = 0.85f),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.widthIn(max = 60.dp)
+                                        )
+                                    }
+                                    if (showChevron) {
+                                        Spacer(modifier = Modifier.width(2.dp))
+                                        Icon(
+                                            imageVector = if (dropdownExpanded)
+                                                Icons.Default.ExpandLess
+                                            else
+                                                Icons.Default.ExpandMore,
+                                            contentDescription = null,
+                                            tint = primary.copy(alpha = 0.9f),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Diagonal slash overlay when connected but peer is offline
+                            if (connectionState == ConnectionState.CONNECTED && peerCount == 0) {
+                                Canvas(modifier = Modifier.matchParentSize()) {
+                                    drawLine(
+                                        color = onPrimary.copy(alpha = 0.8f),
+                                        start = Offset(size.width * 0.15f, size.height * 0.85f),
+                                        end   = Offset(size.width * 0.85f, size.height * 0.15f),
+                                        strokeWidth = 2.dp.toPx(),
+                                        cap = StrokeCap.Round
+                                    )
+                                }
+                            }
+
+                            // Peer switcher dropdown (only when ≥ 2 peers)
+                            if (showChevron) {
+                                DropdownMenu(
+                                    expanded = dropdownExpanded,
+                                    onDismissRequest = { dropdownExpanded = false }
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.peer_switcher_header),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                                    )
+                                    HorizontalDivider()
+                                    recentPeers.forEach { peer ->
+                                        val isActive = peer.room == activeRoomId
+                                        val itemColor = if (isActive)
+                                            Green500
+                                        else
+                                            MaterialTheme.colorScheme.onSurface
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = peer.displayName,
+                                                    color = itemColor,
+                                                    fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            },
+                                            leadingIcon = {
+                                                Icon(
+                                                    imageVector = Icons.Default.DesktopWindows,
+                                                    contentDescription = null,
+                                                    tint = itemColor,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            },
+                                            trailingIcon = {
+                                                if (isActive) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Check,
+                                                        contentDescription = null,
+                                                        tint = Green500,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                } else {
+                                                    Text(
+                                                        text = stringResource(R.string.status_offline),
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            },
+                                            onClick = {
+                                                dropdownExpanded = false
+                                                if (!isActive) onPeerSelected(peer)
+                                            },
+                                            modifier = if (isActive)
+                                                Modifier.background(Green500.copy(alpha = 0.10f))
+                                            else Modifier
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
-                AnimatedContent(
-                    targetState = pcName,
-                    transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(200)) },
-                    label = "pcName"
-                ) { name ->
-                    if (name.isNotEmpty()) {
-                        Text(
-                            text = name,
-                            modifier = Modifier.width(36.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = onPrimary.copy(alpha = 0.7f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            textAlign = TextAlign.Center
-                        )
-                    } else {
-                        Spacer(modifier = Modifier.height(labelLineHeight))
-                    }
-                }
+                // Spacer matching name-label height — keeps settings icon top-aligned
+                Spacer(modifier = Modifier.height(labelLineHeight))
             }
 
             Spacer(modifier = Modifier.width(8.dp))

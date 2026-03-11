@@ -139,6 +139,8 @@
     <string name="notif_push_btn_label">Push</string>
     <string name="notif_tip_title">💡 Tip: Push clipboard with one tap</string>
     <string name="notif_tip_body">Copy anything on your phone, then tap the ▶ button in the notification bar to send it to your PC instantly.</string>
+    <string name="peer_switcher_header">Switch Device</string>
+    <string name="status_offline">Offline</string>
     <string name="notif_send_failed_title">Send Failed</string>
     <string name="notif_encryption_error">Encryption error. Please re-scan the pairing QR code.</string>
     <string name="notif_downloading">Downloading</string>
