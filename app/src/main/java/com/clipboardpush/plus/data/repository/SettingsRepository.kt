@@ -276,8 +276,7 @@ class SettingsRepository(
     // --- Recent Peers History ---
 
     val recentPeersFlow: Flow<List<PeerEntry>> = dataStore.data.map { preferences ->
-        // distinctBy displayName (newest-first) cleans up stale re-pairing duplicates
-        deserializePeers(preferences[KEY_RECENT_PEERS]).distinctBy { it.displayName }
+        deserializePeers(preferences[KEY_RECENT_PEERS])
     }
 
     suspend fun addOrUpdateRecentPeer(peer: PeerEntry) {
@@ -298,7 +297,8 @@ class SettingsRepository(
     suspend fun updateRecentPeerDisplayName(room: String, name: String) {
         dataStore.edit { preferences ->
             val current = deserializePeers(preferences[KEY_RECENT_PEERS])
-            // Update name for this room, then remove other entries with the same name (stale re-pairings)
+            // Update name for this room, then remove other entries with the same name
+            // (stale re-pairings of the same physical machine with a new room_id).
             val updated = current
                 .map { if (it.room == room) it.copy(displayName = name) else it }
                 .filter { it.room == room || it.displayName != name }

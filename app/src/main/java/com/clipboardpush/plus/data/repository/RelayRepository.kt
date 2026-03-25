@@ -25,6 +25,7 @@ object RelayRepository {
     
     private var socket: Socket? = null
     private var currentClientId: String = ""
+    private var currentRoomId: String = ""
     var networkEpoch: Int = 0
     
     // Events exposed to Service / UI
@@ -79,6 +80,7 @@ object RelayRepository {
     fun connect(context: android.content.Context, serverUrl: String, roomId: String, clientId: String) {
         disconnect() // Close existing
         currentClientId = clientId
+        currentRoomId = roomId
 
         try {
             // OkHttp client with WebSocket-level ping to detect dead connections reliably.
@@ -284,7 +286,15 @@ object RelayRepository {
                 try {
                     if (args.isNotEmpty() && args[0] is JSONObject) {
                          val data = args[0] as JSONObject
-                         
+
+                         // Discard stale events from a previous room (race: old socket may
+                         // deliver a final room_state_changed after roomId was switched).
+                         val eventRoom = data.optString("room", "")
+                         if (eventRoom.isNotEmpty() && eventRoom != currentRoomId) {
+                             Log.w(TAG, "Ignoring room_state_changed for stale room $eventRoom (current: $currentRoomId)")
+                             return@on
+                         }
+
                          // Parse peers array, filter out self
                          val peersArray = data.optJSONArray("peers")
                          val peerNames = mutableListOf<String>()
@@ -299,10 +309,10 @@ object RelayRepository {
                                  }
                              }
                          }
-                         
+
                          _peerCount.tryEmit(peerNames.size)
                          _peers.tryEmit(peerNames)
-                         
+
                          _events.tryEmit(RelayEvent.RoomStateChanged(data))
                     }
                 } catch (e: Exception) {
@@ -326,7 +336,14 @@ object RelayRepository {
                 try {
                     if (args.isNotEmpty() && args[0] is JSONObject) {
                         val data = args[0] as JSONObject
-                        
+
+                        // Discard stale events from a previous room.
+                        val eventRoom = data.optString("room", "")
+                        if (eventRoom.isNotEmpty() && eventRoom != currentRoomId) {
+                            Log.w(TAG, "Ignoring room_stats for stale room $eventRoom (current: $currentRoomId)")
+                            return@on
+                        }
+
                         // Parse clients list, filtering out self
                         val clientsArray = data.optJSONArray("clients")
                         val clientList = mutableListOf<String>()
@@ -362,6 +379,7 @@ object RelayRepository {
         socket?.off()
         socket = null
         currentClientId = ""
+        currentRoomId = ""
         _connectionStatus.tryEmit(false)
         _peerCount.tryEmit(0)
         _peers.tryEmit(emptyList())
