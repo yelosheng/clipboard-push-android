@@ -6,6 +6,8 @@
 [![Android](https://img.shields.io/badge/Android-8.0%2B-green.svg)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-purple.svg)](https://developer.android.com/jetpack/compose)
 
+[<img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" height="60">](https://play.google.com/store/apps/details?id=com.clipboardpush.plus)
+
 **Related:** [Website](https://clipboardpush.com) · [PC Client](https://github.com/yelosheng/clipboard-push-win32) · [Relay Server](https://github.com/yelosheng/clipboard-push-server) · [Privacy Policy](https://clipboardpush.com/privacy)
 
 ---
