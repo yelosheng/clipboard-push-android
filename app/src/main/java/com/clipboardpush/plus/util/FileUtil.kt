@@ -20,6 +20,16 @@ object FileUtil {
     private const val TAG = "FileUtil"
     private const val APP_FOLDER = "ClipboardPush"
 
+    private val IMAGE_EXTENSIONS = setOf(
+        "jpg", "jpeg", "png", "gif", "bmp", "webp", "heic", "heif", "tiff", "tif", "svg", "ico", "avif"
+    )
+
+    fun isImageFileName(name: String?): Boolean {
+        if (name.isNullOrBlank()) return false
+        val ext = name.substringAfterLast('.', "").lowercase(Locale.ROOT)
+        return ext.isNotEmpty() && ext in IMAGE_EXTENSIONS
+    }
+
     /**
      * 获取下载目录
      * Android 10+ 使用 App 私有目录

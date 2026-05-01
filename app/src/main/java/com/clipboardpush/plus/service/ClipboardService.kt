@@ -583,9 +583,10 @@ class ClipboardService : Service() {
                 )
             } else {
                 messageId = System.currentTimeMillis().toString()
+                val isImage = mimeType == "image" || com.clipboardpush.plus.util.FileUtil.isImageFileName(fileName)
                  val msg = PushMessage(
                     id = messageId,
-                    type = if (mimeType == "image") PushMessage.TYPE_IMAGE else PushMessage.TYPE_FILE,
+                    type = if (isImage) PushMessage.TYPE_IMAGE else PushMessage.TYPE_FILE,
                     content = fileName,
                     timestamp = data.optString("timestamp"),
                     fileUrl = downloadUrl,
@@ -593,9 +594,9 @@ class ClipboardService : Service() {
                     fileSize = (data.optLong("file_size").takeIf { it > 0 } ?: data.optLong("size").takeIf { it > 0 })
                 )
                 saveAndNotifyMessage(msg)
-                
+
                 // 发送系统通知
-                val typeTitle = if (mimeType == "image") getString(R.string.type_image) else getString(R.string.type_file)
+                val typeTitle = if (isImage) getString(R.string.type_image) else getString(R.string.type_file)
                 NotificationHelper.showPushNotification(
                     this,
                     typeTitle,
@@ -674,9 +675,10 @@ class ClipboardService : Service() {
         }
         
         val messageId = System.currentTimeMillis().toString()
+        val isImage = mimeType == "image" || com.clipboardpush.plus.util.FileUtil.isImageFileName(fileName)
         val msg = PushMessage(
             id = messageId,
-            type = if (mimeType == "image") PushMessage.TYPE_IMAGE else PushMessage.TYPE_FILE,
+            type = if (isImage) PushMessage.TYPE_IMAGE else PushMessage.TYPE_FILE,
             content = fileName,
             timestamp = System.currentTimeMillis().toString(),
             fileUrl = localUrl, // Temporary, will update
@@ -685,13 +687,13 @@ class ClipboardService : Service() {
         )
         // We save message now so user sees something is happening
         saveAndNotifyMessage(msg)
-        
+
         // Track pending file
         pendingFiles[fileName] = messageId
 
         NotificationHelper.showPushNotification(
             this,
-            getString(R.string.type_file),
+            getString(if (isImage) R.string.type_image else R.string.type_file),
             fileName,
             messageId.hashCode()
         )
