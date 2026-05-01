@@ -77,3 +77,15 @@ cpp_client/logs/
 lib/catch
 lib/rapidjson
 lib/websocketpp
+
+.agents/
+.kiro/
+.qwen/
+.claude/
+.windsurf/
+.moonshot/
+.codexai/
+.colossalai/
+.superpowers/
+
+
