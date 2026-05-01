@@ -44,7 +44,9 @@ class DownloadWorker(
 
     private val settingsRepository = SettingsRepository(context)
     private val messageRepository = MessageRepository(context)
-    private val client = OkHttpClient()
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(2, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
 
     override suspend fun doWork(): Result {
         val fileUrl = inputData.getString(KEY_FILE_URL) ?: return Result.failure()
@@ -97,67 +99,32 @@ class DownloadWorker(
         setForeground(createForegroundInfo(notificationId, fileName, applicationContext.getString(R.string.worker_download_in_progress)))
 
         return try {
-            // Get Pairing Info for Local Sync
-            val peerIp = settingsRepository.peerLocalIpFlow.first()
-            val peerPort = settingsRepository.peerLocalPortFlow.first()
-            val roomId = settingsRepository.roomIdFlow.first()
-            
-            var sourceFile: File? = null
-            var isLocalTransfer = false
-
-            // 1. Try Local Download (Plaintext)
-            if (!peerIp.isNullOrBlank() && peerPort != null && peerPort > 0) {
-                val localUrl = "http://$peerIp:$peerPort/files/$fileName"
-                try {
-                    val tempLocal = File.createTempFile("loc_", ".tmp", applicationContext.cacheDir)
-                    // Short timeout for local check? OkHttpClient defaults are 10s.
-                    // Ideally we'd use a shorter timeout client, but for now reuse 'client'
-                    downloadToFile(localUrl, tempLocal, roomId) { pct ->
-                        setProgress(workDataOf(KEY_PROGRESS to pct))
-                    }
-                    if (tempLocal.length() > 0) {
-                        sourceFile = tempLocal
-                        isLocalTransfer = true
-                    } else {
-                         tempLocal.delete()
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Local download failed, falling back to cloud", e)
-                }
+            // file_sync arrives only after the server has decided relay is required and
+            // the sender has uploaded to relay/cloud. Go straight to the cloud URL — any
+            // LAN-first attempt here would just burn the OkHttp connectTimeout against a
+            // stale peer IP. SAME_LAN delivery uses the announce path above.
+            val tempEncryptedFile = File.createTempFile("enc_", ".tmp", applicationContext.cacheDir)
+            downloadToFile(fullUrl, tempEncryptedFile) { pct ->
+                setProgress(workDataOf(KEY_PROGRESS to pct))
             }
 
-            // 2. Fallback to Cloud Download (Encrypted)
-            if (sourceFile == null) {
-                val tempEncryptedFile = File.createTempFile("enc_", ".tmp", applicationContext.cacheDir)
-                downloadToFile(fullUrl, tempEncryptedFile) { pct ->
-                    setProgress(workDataOf(KEY_PROGRESS to pct))
-                }
-
-                // Decrypt
-                val roomKey = settingsRepository.roomKeyFlow.first()
-                if (roomKey.isNullOrEmpty()) {
-                    return Result.failure()
-                }
-
-                val cryptoManager = CryptoManager(roomKey)
-                val tempDecrypted = File.createTempFile("dec_", ".tmp", applicationContext.cacheDir)
-                
-                Log.d(TAG, "Decrypting file...")
-                tempEncryptedFile.inputStream().use { input ->
-                    tempDecrypted.outputStream().use { output ->
-                        cryptoManager.decryptFile(input, output)
-                    }
-                }
-                tempEncryptedFile.delete()
-                sourceFile = tempDecrypted
+            val roomKey = settingsRepository.roomKeyFlow.first()
+            if (roomKey.isNullOrEmpty()) {
+                return Result.failure()
             }
 
-            // 3. Save to Public Directory
-            if (sourceFile == null || !sourceFile.exists()) {
-                 return Result.failure()
+            val cryptoManager = CryptoManager(roomKey)
+            val tempDecrypted = File.createTempFile("dec_", ".tmp", applicationContext.cacheDir)
+
+            Log.d(TAG, "Decrypting file...")
+            tempEncryptedFile.inputStream().use { input ->
+                tempDecrypted.outputStream().use { output ->
+                    cryptoManager.decryptFile(input, output)
+                }
             }
-            
-            processDownloadedFile(sourceFile, fileName, mimeType, messageId, transferId)
+            tempEncryptedFile.delete()
+
+            processDownloadedFile(tempDecrypted, fileName, mimeType, messageId, transferId)
 
         } catch (e: Exception) {
             Log.e(TAG, "Download failed", e)
