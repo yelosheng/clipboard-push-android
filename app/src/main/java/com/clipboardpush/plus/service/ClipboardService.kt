@@ -526,12 +526,15 @@ class ClipboardService : Service() {
         }
         
         if (content.isNotEmpty()) {
-            // Generate deterministic ID for deduplication
-            // If timestamp is available, use it + content hash
-            val messageId = if (!timestamp.isNullOrEmpty()) {
-                "text_${timestamp}_${content.hashCode()}"
-            } else {
-                System.currentTimeMillis().toString()
+            // Prefer the server-assigned id so the socket and FCM channels dedup
+            // as one message (FcmService uses the same data["id"]). Fall back to a
+            // deterministic id for older servers that don't inject one.
+            val messageId = data.optString("id").ifEmpty {
+                if (!timestamp.isNullOrEmpty()) {
+                    "text_${timestamp}_${content.hashCode()}"
+                } else {
+                    System.currentTimeMillis().toString()
+                }
             }
             
             // Save & Notify
