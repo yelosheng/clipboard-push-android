@@ -35,6 +35,18 @@ class FcmService : FirebaseMessagingService() {
         Log.d(TAG, "FCM message received: $data")
 
         val type = data["type"] ?: return
+
+        // 文件场景：服务器发来的唤醒信号 —— 拉起前台服务，由它走正常重连，再走原有下载流程
+        if (type == "wake") {
+            Log.d(TAG, "FCM wake received -> starting ClipboardService")
+            // 必须带 ACTION_START，否则 onStartCommand 不会调 startForeground() -> 系统会崩溃
+            val intent = android.content.Intent(applicationContext, ClipboardService::class.java).apply {
+                action = ClipboardService.ACTION_START
+            }
+            androidx.core.content.ContextCompat.startForegroundService(applicationContext, intent)
+            return
+        }
+
         if (type != "clipboard_push") return
 
         var content = data["content"] ?: return
