@@ -135,6 +135,11 @@ object RelayRepository {
                     }
                     joinData.put("device_name", friendlyName)
                     joinData.put("joined_at_ms", System.currentTimeMillis())
+
+                    // FCM token（后台保活双通道）：让服务器知道本端 token
+                    com.clipboardpush.plus.service.FcmTokenHolder.token?.let {
+                        joinData.put("fcm_token", it)
+                    }
                     
                     val netObj = JSONObject()
                     netObj.put("private_ip", networkInfo?.ip ?: "0.0.0.0")
@@ -386,6 +391,24 @@ object RelayRepository {
     }
 
     private var isEvicted = false
+
+    /** 上报/更新 FCM token —— token 刷新且已连接时即时通知服务器（否则下次 join 会带上） */
+    fun registerFcmToken(token: String) {
+        if (socket?.connected() == true && currentRoomId.isNotEmpty() && currentClientId.isNotEmpty()) {
+            try {
+                val payload = JSONObject().apply {
+                    put("room", currentRoomId)
+                    put("client_id", currentClientId)
+                    put("fcm_token", token)
+                    put("client_type", "app")
+                }
+                socket?.emit("register_fcm_token", payload)
+                Log.d(TAG, "Sent register_fcm_token")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to send register_fcm_token", e)
+            }
+        }
+    }
 
     fun sendClipboardSync(roomId: String, content: String, clientId: String, isEncrypted: Boolean = false) {
         if (isEvicted) {

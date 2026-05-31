@@ -23,6 +23,11 @@ class ClipboardManApp : Application() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannels()
+        // 取 FCM token 存入 holder，join 时随 payload 上报给服务器
+        com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+            .addOnSuccessListener { token ->
+                com.clipboardpush.plus.service.FcmTokenHolder.token = token
+            }
     }
 
     private fun createNotificationChannels() {

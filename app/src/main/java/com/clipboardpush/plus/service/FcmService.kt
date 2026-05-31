@@ -26,6 +26,8 @@ class FcmService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         Log.d(TAG, "FCM token refreshed")
         FcmTokenHolder.token = token
+        // 若当前已连接，立即上报新 token；否则下次 join 会携带
+        com.clipboardpush.plus.data.repository.RelayRepository.registerFcmToken(token)
     }
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
