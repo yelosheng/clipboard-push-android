@@ -97,6 +97,12 @@
             </intent-filter>
         </service>
 
+        <!-- 连接看门狗接收器：AlarmManager 定时唤醒，检查连接是否已成僵尸并强制重连。
+             这是唯一不依赖本进程线程的自检途径（进程被厂商 ROM 冻结时线程全停）。 -->
+        <receiver
+            android:name=".service.ConnectionWatchdogReceiver"
+            android:exported="false" />
+
         <!-- WorkManager 前台服务 (Android 14+ 需要声明 foregroundServiceType) -->
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"

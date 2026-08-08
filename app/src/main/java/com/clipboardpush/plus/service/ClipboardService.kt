@@ -24,6 +24,7 @@ import com.clipboardpush.plus.data.repository.RelayRepository
 import com.clipboardpush.plus.data.repository.SettingsRepository
 import com.clipboardpush.plus.util.FileUtil
 import com.clipboardpush.plus.util.NotificationHelper
+import com.clipboardpush.plus.util.ReconnectBackoff
 import com.clipboardpush.plus.worker.DownloadWorker
 import com.clipboardpush.plus.worker.UploadWorker
 import kotlinx.coroutines.*
@@ -39,6 +40,9 @@ class ClipboardService : Service() {
         private const val TAG = "ClipboardService"
         const val ACTION_START = "com.clipboardpush.plus.action.START"
         const val ACTION_STOP = "com.clipboardpush.plus.action.STOP"
+
+        /** 每次重连尝试后留给握手的时间，取值小于 connectRelay() 的 15s 超时。 */
+        private const val CONNECT_SETTLE_MS = 12_000L
 
         /**
          * 实时对等节点数量，由服务更新。
@@ -89,6 +93,7 @@ class ClipboardService : Service() {
     fun getPeers(): List<String> = currentPeers
 
     fun reconnect() {
+        userStopped = false
         startJob?.cancel()
         startJob = serviceScope.launch {
             serverAddress = settingsRepository.serverAddressFlow.first()
@@ -166,6 +171,19 @@ class ClipboardService : Service() {
     private var useHttps = false
     private var roomId: String? = null
 
+    // 断线自愈。EVENT_DISCONNECT 会 stopHeartbeat()，而心跳是 reconnectNeeded 的唯一发射源，
+    // 所以断线后 reconnect() 是不可达的；socket.io 内部的重连定时器又跑在本进程线程上，
+    // 会被厂商 ROM（ColorOS 等）的冻结机制掐断。因此必须有这条独立的重连循环。
+    private var autoReconnectJob: Job? = null
+    private var reconnectAttempt = 0
+
+    /**
+     * 用户主动断开时置位。stopService() 里的 disconnect() 也会发出 connectionStatus=false，
+     * 没有这个守卫的话自愈循环会把用户刚断开的连接立刻重连回去。
+     */
+    @Volatile
+    private var userStopped = false
+
     private val messageHistory = mutableListOf<PushMessage>()
     private val maxMessages = 100
 
@@ -207,6 +225,13 @@ class ClipboardService : Service() {
                 serviceScope.launch(Dispatchers.IO) {
                     delay(1000)
                     sendNetworkUpdate()
+                    // 网络恢复是最可靠的抗冻结唤醒信号：系统为了投递这个回调会强制解冻进程。
+                    // 连接不可信时必须借这个时机立刻重连，而不是等退避计时器——它可能正被冻着。
+                    // 用 connectionTrustworthy() 而非 currentState，僵尸态下后者是 CONNECTED。
+                    if (!roomId.isNullOrBlank() && !connectionTrustworthy()) {
+                        Log.w(TAG, "Network available but connection not trustworthy -> immediate reconnect")
+                        scheduleAutoReconnect(immediate = true)
+                    }
                 }
             }
             
@@ -263,6 +288,9 @@ class ClipboardService : Service() {
             try {
                 relayRepository.connectionStatus.collect { isConnected ->
                     updateState(if (isConnected) ConnectionState.CONNECTED else ConnectionState.DISCONNECTED)
+                    // 断线后必须由这里驱动重连：心跳（reconnectNeeded 的唯一来源）
+                    // 已经在 EVENT_DISCONNECT 里被停掉了。
+                    if (isConnected) cancelAutoReconnect() else scheduleAutoReconnect()
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error observing connection status", e)
@@ -384,7 +412,8 @@ class ClipboardService : Service() {
     private var connectionTimeoutJob: Job? = null
 
     private fun startService() {
-        
+        userStopped = false
+
         // Cancel previous start attempt if running
         startJob?.cancel()
         
@@ -397,11 +426,15 @@ class ClipboardService : Service() {
             // Check active state safely
             if (isActive.not()) return@launch
 
-            // Debounce: If config is same and we are connected/connecting, do nothing
-            if (newServerAddress == serverAddress && 
-                newRoomId == roomId && 
+            // Debounce: 配置没变且连接确实还活着，就什么都不做。
+            // 注意必须带 isLivenessStale() 判断：僵尸连接下 currentState 恰好停在 CONNECTED，
+            // 只看状态的话，看门狗/FCM/切前台发来的 ACTION_START 会被这里全部吃掉，
+            // 于是永远没人重连——这正是"通知显示已连接、服务器上却查无此机"的成因。
+            if (newServerAddress == serverAddress &&
+                newRoomId == roomId &&
                 newUseHttps == useHttps &&
-                (currentState == ConnectionState.CONNECTED || currentState == ConnectionState.CONNECTING)) {
+                (currentState == ConnectionState.CONNECTED || currentState == ConnectionState.CONNECTING) &&
+                !relayRepository.isLivenessStale()) {
                 return@launch
             }
             
@@ -453,11 +486,15 @@ class ClipboardService : Service() {
             }
 
             acquireWakeLocks()
+            ConnectionWatchdog.schedule(this@ClipboardService)
             connectRelay()
         }
     }
 
     private fun stopService() {
+        userStopped = true
+        cancelAutoReconnect()
+        ConnectionWatchdog.cancel(this)
         releaseWakeLocks()
         relayRepository.disconnect()
         apiService = null
@@ -491,6 +528,58 @@ class ClipboardService : Service() {
                 }
             }
         }
+    }
+
+    /**
+     * 断线后持续重连，直到连上或房间配置被清空。
+     *
+     * 每轮先退避等待、再重连，然后留一段 [CONNECT_SETTLE_MS] 让本次握手跑完，
+     * 避免在 socket 还在连的时候就推倒重来。
+     *
+     * @param immediate 网络刚恢复这类"现在正是好时机"的场景，跳过首次退避并重置计数。
+     */
+    /**
+     * 连接是否可信。**不能只看 [currentState]**：僵尸连接下它恰好停在 CONNECTED，
+     * 而服务器早已把会话踢掉，必须再用存活时间戳交叉验证。
+     */
+    private fun connectionTrustworthy(): Boolean =
+        currentState == ConnectionState.CONNECTED && !relayRepository.isLivenessStale()
+
+    private fun scheduleAutoReconnect(immediate: Boolean = false) {
+        if (userStopped) return
+        if (!immediate && autoReconnectJob?.isActive == true) return
+        autoReconnectJob?.cancel()
+        if (immediate) reconnectAttempt = 0
+
+        autoReconnectJob = serviceScope.launch {
+            while (isActive && !connectionTrustworthy()) {
+                if (roomId.isNullOrBlank() || serverAddress.isBlank()) {
+                    Log.d(TAG, "Auto-reconnect: no room/server configured, stopping")
+                    break
+                }
+
+                val waitMs = if (immediate && reconnectAttempt == 0) {
+                    0L
+                } else {
+                    ReconnectBackoff.delayForAttempt(reconnectAttempt)
+                }
+                if (waitMs > 0) delay(waitMs)
+                if (!isActive || connectionTrustworthy()) break
+
+                reconnectAttempt++
+                Log.w(TAG, "Auto-reconnect attempt #$reconnectAttempt (waited ${waitMs}ms)")
+                connectRelay()
+
+                delay(CONNECT_SETTLE_MS)
+            }
+            Log.d(TAG, "Auto-reconnect loop exited (state=$currentState)")
+        }
+    }
+
+    private fun cancelAutoReconnect() {
+        autoReconnectJob?.cancel()
+        autoReconnectJob = null
+        reconnectAttempt = 0
     }
 
     private var clientId = ""

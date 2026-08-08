@@ -106,8 +106,12 @@ class MainActivity : ComponentActivity() {
             // 不再从 Service 内存同步消息历史
             // ViewModel 通过 messageRepository.messagesFlow.collect 持续观察，更可靠
 
-            // 自动重连：如果启用了自动连接且当前是断开状态，则重新连接
-            if (currentState == ConnectionState.DISCONNECTED) {
+            // 自动重连：断开时要重连；此外还要处理"僵尸连接"——状态停在 CONNECTED、
+            // 通知显示已连接，但服务器早已把这个会话踢掉。只判断 DISCONNECTED 的话
+            // 僵尸态会被整个跳过，用户就只能靠心跳下一轮（最长 23s）才恢复。
+            if (currentState == ConnectionState.DISCONNECTED ||
+                com.clipboardpush.plus.data.repository.RelayRepository.isLivenessStale()
+            ) {
                 checkAndAutoReconnect()
             }
         }

@@ -52,6 +52,25 @@ object RelayRepository {
     private var heartbeatJob: Job? = null
     @Volatile private var pongReceived = false
 
+    /**
+     * 上一次拿到"连接确实活着"的证明（建连成功或收到 server_pong）的时刻。
+     * 进程被厂商 ROM 冻结时所有心跳都停摆，解冻后靠这个时间戳才能识别出
+     * "状态机还停在 CONNECTED，但这条连接早就死了"。
+     */
+    @Volatile
+    var lastProofOfLifeAtMs: Long = 0L
+        private set
+
+    /**
+     * 这条连接是否已不可信（socket 已断，或距上次存活证明太久）。
+     * 供外部唤醒源（看门狗、FCM、切前台）判断要不要强制重连——
+     * 不能只看 currentState，僵尸态下它恰好是 CONNECTED。
+     */
+    fun isLivenessStale(nowMs: Long = System.currentTimeMillis()): Boolean {
+        if (socket?.connected() != true) return true
+        return com.clipboardpush.plus.util.ConnectionLiveness.isStale(lastProofOfLifeAtMs, nowMs)
+    }
+
     private fun startHeartbeat() {
         heartbeatJob?.cancel()
         heartbeatJob = heartbeatScope.launch {
@@ -108,6 +127,7 @@ object RelayRepository {
             
             socket?.on(Socket.EVENT_CONNECT) {
                 Log.d("RelayRepository", "Connected to Relay")
+                lastProofOfLifeAtMs = System.currentTimeMillis()
                 _connectionStatus.tryEmit(true)
                 startHeartbeat()
                 // Join Room with V4 PeerMeta
@@ -169,6 +189,7 @@ object RelayRepository {
             
             socket?.on("server_pong") {
                 pongReceived = true
+                lastProofOfLifeAtMs = System.currentTimeMillis()
                 Log.d(TAG, "server_pong received")
             }
 
@@ -380,6 +401,7 @@ object RelayRepository {
 
     fun disconnect() {
         stopHeartbeat()
+        lastProofOfLifeAtMs = 0L
         socket?.disconnect()
         socket?.off()
         socket = null

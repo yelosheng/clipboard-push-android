@@ -13,8 +13,8 @@ android {
         applicationId = "com.clipboardpush.plus"
         minSdk = 26
         targetSdk = 35
-        versionCode = 17
-        versionName = "1.1.18"
+        versionCode = 19
+        versionName = "1.1.20"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
