@@ -7,14 +7,14 @@ plugins {
 
 android {
     namespace = "com.clipboardpush.plus"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.clipboardpush.plus"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 21
-        versionName = "1.1.22"
+        targetSdk = 36
+        versionCode = 22
+        versionName = "1.1.23"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
