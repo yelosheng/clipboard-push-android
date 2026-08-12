@@ -64,9 +64,9 @@ class QuickPushActivity : ComponentActivity() {
             delay(300)
 
             try {
-                // Peer guard: check if any peers are online before pushing
-                val currentPeerCount = com.clipboardpush.plus.service.ClipboardService.latestPeerCount
-                if (currentPeerCount <= 0) {
+                // Peer guard: 用「可送达」而非「在线」——对端可能 socket 已断但仍可被 FCM 唤醒
+                val reachableCount = com.clipboardpush.plus.service.ClipboardService.latestReachablePeerCount
+                if (reachableCount <= 0) {
                     Toast.makeText(this@QuickPushActivity, getString(R.string.toast_no_peers), Toast.LENGTH_SHORT).show()
                     finish()
                     return@launch

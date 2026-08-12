@@ -44,13 +44,19 @@ class ClipboardService : Service() {
         /** 每次重连尝试后留给握手的时间，取值小于 connectRelay() 的 15s 超时。 */
         private const val CONNECT_SETTLE_MS = 12_000L
 
+        /** 常驻通知重画周期，用于刷新「最后确认」时刻。 */
+        private const val NOTIFICATION_TICK_MS = 60_000L
+
         /**
-         * 实时对等节点数量，由服务更新。
+         * 可送达的对端数量 = 真正在线 + 虽离线但能被 FCM 唤醒。由服务更新。
          * 供无绑定的轻量 Activity（QuickPushActivity、ShareReceiverActivity）直接读取，
          * 避免依赖 SharedFlow.replayCache 的过期数据。
+         *
+         * 用于「现在能不能发送」。**不要**拿它决定通知颜色——亮绿灯必须以真正在线为准，
+         * 否则对端明明没上线也会显示绿色。
          */
         @Volatile
-        var latestPeerCount: Int = 0
+        var latestReachablePeerCount: Int = 0
             private set
 
         /** Tracks concurrent upload count; drives fileUploadActive for AppBar animation. */
@@ -87,8 +93,13 @@ class ClipboardService : Service() {
         return currentState
     }
 
+    /** 真正在线的对端数量。决定通知颜色（绿 vs 黄）与「目标设备」显示。 */
     private var currentPeerCount = 0
     private var currentPeers: List<String> = emptyList()
+
+    /** 可送达数量 = 在线 + FCM 可唤醒。只用于判断「能不能发送」。 */
+    private var currentReachablePeerCount = 0
+
     fun getPeerCount(): Int = currentPeerCount
     fun getPeers(): List<String> = currentPeers
 
@@ -117,8 +128,9 @@ class ClipboardService : Service() {
 
     fun sendClipboardText(text: String) {
         serviceScope.launch {
-             // Peer guard: skip if no peers online (auto-sync protection)
-             if (currentPeerCount <= 0) {
+             // Peer guard: 用「可送达」而非「在线」——对端可能 socket 已断但仍可被 FCM 唤醒，
+             // 那种情况照样该发，否则正好掐死冻结场景。
+             if (currentReachablePeerCount <= 0) {
                  return@launch
              }
              roomId?.let { id ->
@@ -176,6 +188,7 @@ class ClipboardService : Service() {
     // 会被厂商 ROM（ColorOS 等）的冻结机制掐断。因此必须有这条独立的重连循环。
     private var autoReconnectJob: Job? = null
     private var reconnectAttempt = 0
+    private var notificationTickerJob: Job? = null
 
     /**
      * 用户主动断开时置位。stopService() 里的 disconnect() 也会发出 connectionStatus=false，
@@ -301,11 +314,10 @@ class ClipboardService : Service() {
             try {
                 relayRepository.peerCount.collect { count ->
                     currentPeerCount = count
-                    latestPeerCount = count
                     onPeerCountChanged?.invoke(count)
                     // Update notification to reflect peer count change (Yellow -> Green)
                     if (currentState == ConnectionState.CONNECTED) {
-                        NotificationHelper.updateServiceNotification(this@ClipboardService, currentState, serverAddress, count, currentPeers)
+                        refreshNotification()
                     }
                 }
             } catch (e: Exception) {
@@ -315,11 +327,22 @@ class ClipboardService : Service() {
 
         serviceScope.launch {
             try {
+                relayRepository.reachablePeerCount.collect { count ->
+                    currentReachablePeerCount = count
+                    latestReachablePeerCount = count
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error observing reachable peer count", e)
+            }
+        }
+
+        serviceScope.launch {
+            try {
                 relayRepository.peers.collect { peers ->
                     currentPeers = peers
                     onPeersChanged?.invoke(roomId, peers)
                     if (currentState == ConnectionState.CONNECTED) {
-                        NotificationHelper.updateServiceNotification(this@ClipboardService, currentState, serverAddress, currentPeerCount, peers)
+                        refreshNotification()
                     }
                     // Show one-time tip notification when a peer comes online for the first time ever
                     if (peers.isNotEmpty()) {
@@ -396,8 +419,13 @@ class ClipboardService : Service() {
 
     override fun onDestroy() {
         Log.d(TAG, "Service destroyed")
+        // 这里**不能**调 stopService()：它会取消看门狗闹钟，而看门狗的全部意义恰恰是
+        // 在服务被系统回收之后还能把它重新拉起来。只有用户主动停止（ACTION_STOP）或
+        // 被服务器踢出房间时才该取消闹钟——那两条路径仍然走 stopService()。
         releaseWakeLocks()
-        stopService()
+        stopNotificationTicker()
+        cancelAutoReconnect()
+        relayRepository.disconnect()
         serviceScope.cancel()
         LocalFileServer.stopServer()
         try {
@@ -471,7 +499,7 @@ class ClipboardService : Service() {
                 this@ClipboardService,
                 ConnectionState.CONNECTING,
                 serverAddress,
-                currentPeerCount,
+                currentReachablePeerCount,
                 currentPeers
             )
 
@@ -487,6 +515,7 @@ class ClipboardService : Service() {
 
             acquireWakeLocks()
             ConnectionWatchdog.schedule(this@ClipboardService)
+            startNotificationTicker()
             connectRelay()
         }
     }
@@ -494,6 +523,7 @@ class ClipboardService : Service() {
     private fun stopService() {
         userStopped = true
         cancelAutoReconnect()
+        stopNotificationTicker()
         ConnectionWatchdog.cancel(this)
         releaseWakeLocks()
         relayRepository.disconnect()
@@ -889,6 +919,44 @@ class ClipboardService : Service() {
         }
     }
 
+    /**
+     * 用当前状态重画常驻通知。
+     *
+     * 时间戳取自 [RelayRepository.lastProofOfLifeAtMs]——通知上那句「最后确认 HH:mm」
+     * 就来自这里。颜色在进程被冻结后无法自我修正，但这个时刻是既成事实，永远不会变成谎话。
+     */
+    private fun refreshNotification() {
+        NotificationHelper.updateServiceNotification(
+            this,
+            currentState,
+            serverAddress,
+            currentReachablePeerCount,
+            currentPeers,
+            relayRepository.lastProofOfLifeAtMs
+        )
+    }
+
+    /**
+     * 连接正常时每分钟重画一次通知，让「最后确认」跟上心跳。
+     *
+     * 少了这个，时间戳会停在最后一次状态变化的时刻——那反而更误导人：连接明明好好的，
+     * 却显示成几小时前确认的。
+     */
+    private fun startNotificationTicker() {
+        if (notificationTickerJob?.isActive == true) return
+        notificationTickerJob = serviceScope.launch {
+            while (isActive) {
+                delay(NOTIFICATION_TICK_MS)
+                if (currentState == ConnectionState.CONNECTED) refreshNotification()
+            }
+        }
+    }
+
+    private fun stopNotificationTicker() {
+        notificationTickerJob?.cancel()
+        notificationTickerJob = null
+    }
+
     private fun updateState(state: ConnectionState) {
         Log.d(TAG, "State: $state")
         currentState = state
@@ -897,7 +965,7 @@ class ClipboardService : Service() {
             connectionTimeoutJob?.cancel()
             connectionTimeoutJob = null
         }
-        NotificationHelper.updateServiceNotification(this, state, serverAddress, currentPeerCount, currentPeers)
+        refreshNotification()
         onStateChanged?.invoke(state)
     }
 

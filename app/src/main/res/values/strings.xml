@@ -9,6 +9,9 @@
     <string name="state_disconnected">Disconnected</string>
     <string name="state_error">Connection Error</string>
     <string name="state_server_connected">Server connected</string>
+    <!-- %1$s is a clock time (HH:mm). Shows when the connection was last verified, so a
+         stale notification left behind by a frozen app is obvious at a glance. -->
+    <string name="state_server_connected_verified">Server connected · last checked %1$s</string>
     <string name="state_pc_offline">PC not online</string>
     <string name="peer_offline_label">Offline</string>
 

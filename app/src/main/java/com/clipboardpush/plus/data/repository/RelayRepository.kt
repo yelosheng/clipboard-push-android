@@ -45,6 +45,14 @@ object RelayRepository {
     private val _peers = MutableSharedFlow<List<String>>(replay = 1)
     val peers = _peers.asSharedFlow()
 
+    /**
+     * 真正在线的对端 + 虽然 socket 离线但能被 FCM 唤醒的对端。
+     * 只用于「现在能不能发送」的判断，**不要**用它决定通知颜色——
+     * 亮绿灯必须以真正在线（[peerCount]）为准。
+     */
+    private val _reachablePeerCount = MutableSharedFlow<Int>(replay = 1)
+    val reachablePeerCount = _reachablePeerCount.asSharedFlow()
+
     private val _reconnectNeeded = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val reconnectNeeded: SharedFlow<Unit> = _reconnectNeeded.asSharedFlow()
 
@@ -321,23 +329,35 @@ object RelayRepository {
                              return@on
                          }
 
-                         // Parse peers array, filter out self
+                         // Parse peers array, filter out self.
+                         //
+                         // 服务器会把「有持久 FCM token 但 socket 已离线」的设备也塞进 peers，
+                         // 标记 offline=true —— 目的是让发送方不要以"房间里没人"为由拒发。
+                         // 但它们不是真正在线的对端：以前把它们一并计入，导致 PC 明明没上线
+                         // 通知却亮绿灯。这里按 offline 标志拆成两类：
+                         //   onlinePeers      —— 真正在线，决定绿灯与「目标设备」显示
+                         //   reachableCount   —— 在线 + FCM 可唤醒，决定「能不能发」
                          val peersArray = data.optJSONArray("peers")
-                         val peerNames = mutableListOf<String>()
+                         val onlinePeers = mutableListOf<String>()
+                         var offlineReachable = 0
                          if (peersArray != null) {
                              for (i in 0 until peersArray.length()) {
                                  val peer = peersArray.getJSONObject(i)
                                  val cid = peer.optString("client_id", "")
-                                 if (cid.isNotEmpty() && cid != currentClientId) {
+                                 if (cid.isEmpty() || cid == currentClientId) continue
+
+                                 if (peer.optBoolean("offline", false)) {
+                                     offlineReachable++
+                                 } else {
                                      // Use device_name if available, otherwise client_id
-                                     val displayName = peer.optString("device_name", cid)
-                                     peerNames.add(displayName)
+                                     onlinePeers.add(peer.optString("device_name", cid))
                                  }
                              }
                          }
 
-                         _peerCount.tryEmit(peerNames.size)
-                         _peers.tryEmit(peerNames)
+                         _peerCount.tryEmit(onlinePeers.size)
+                         _peers.tryEmit(onlinePeers)
+                         _reachablePeerCount.tryEmit(onlinePeers.size + offlineReachable)
 
                          _events.tryEmit(RelayEvent.RoomStateChanged(data))
                     }
@@ -382,8 +402,13 @@ object RelayRepository {
                                 }
                             }
                         }
+                        // room_stats 只含真实 socket 在线的 client，没有 offline 标志。
+                        // 服务器总是紧接着再发一条 room_state_changed（两者成对发出），
+                        // 那条带 device_name 和 offline 信息，会覆盖这里的值。
+                        // 这里一并写 reachable，只是为了它不出现「从未被赋值」的空档。
                         _peerCount.tryEmit(clientList.size)
                         _peers.tryEmit(clientList)
+                        _reachablePeerCount.tryEmit(clientList.size)
                     }
                 } catch (e: Exception) {
                     Log.e("Relay", "Error processing room_stats", e)

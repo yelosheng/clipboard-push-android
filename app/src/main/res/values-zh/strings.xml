@@ -9,6 +9,9 @@
     <string name="state_disconnected">未连接</string>
     <string name="state_error">连接错误</string>
     <string name="state_server_connected">服务器已连接</string>
+    <!-- %1$s 是 HH:mm 时刻。显示连接最后一次被确认的时间，
+         这样进程被冻结留下的过期通知一眼就能看出来。 -->
+    <string name="state_server_connected_verified">服务器已连接 · 最后确认 %1$s</string>
     <string name="state_pc_offline">PC 客户端未上线</string>
     <string name="peer_offline_label">未上线</string>
 

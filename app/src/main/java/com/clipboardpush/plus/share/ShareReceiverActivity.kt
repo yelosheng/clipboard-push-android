@@ -101,9 +101,9 @@ class ShareReceiverActivity : ComponentActivity() {
      * 处理文本分享 - 使用 Relay API
      */
     private suspend fun handleTextShare(intent: Intent) {
-        // Peer guard: check if any peers are online before sharing
-        val currentPeerCount = com.clipboardpush.plus.service.ClipboardService.latestPeerCount
-        if (currentPeerCount <= 0) {
+        // Peer guard: 用「可送达」而非「在线」——对端可能 socket 已断但仍可被 FCM 唤醒
+        val reachableCount = com.clipboardpush.plus.service.ClipboardService.latestReachablePeerCount
+        if (reachableCount <= 0) {
             showError(getString(R.string.toast_no_peers))
             return
         }

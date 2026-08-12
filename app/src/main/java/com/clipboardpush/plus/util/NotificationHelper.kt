@@ -35,12 +35,27 @@ object NotificationHelper {
         context: Context,
         state: ConnectionState,
         serverAddress: String,
-        peerCount: Int = 0,
-        peers: List<String> = emptyList()
+        /** 可送达数 = 在线 + FCM 可唤醒。只决定推送按钮是否可用，**不决定颜色**。 */
+        reachablePeerCount: Int = 0,
+        /** 真正在线的对端。决定颜色（绿/黄）与「目标设备」文案。 */
+        peers: List<String> = emptyList(),
+        lastVerifiedAtMs: Long = 0L
     ): Notification {
-        // Line 1: server connection status
+        // Line 1: server connection status.
+        //
+        // CONNECTED 时附上「最后确认」时刻。进程被厂商 ROM 冻结时没有任何线程能来重画这条
+        // 通知，于是它会一直停在冻结前那一刻的样子——绿色看起来还连着，其实早断了。
+        // 颜色本身无法自我修正，但「最后确认 07:15」这句话永远为真：用户扫一眼就知道
+        // 这份状态是几点的快照，还作不作数。
         val line1 = when (state) {
-            ConnectionState.CONNECTED -> context.getString(R.string.state_server_connected)
+            ConnectionState.CONNECTED -> if (lastVerifiedAtMs > 0L) {
+                context.getString(
+                    R.string.state_server_connected_verified,
+                    formatClockTime(lastVerifiedAtMs)
+                )
+            } else {
+                context.getString(R.string.state_server_connected)
+            }
             ConnectionState.CONNECTING -> context.getString(R.string.state_connecting)
             ConnectionState.DISCONNECTED -> context.getString(R.string.state_disconnected)
             ConnectionState.ERROR -> context.getString(R.string.state_error)
@@ -112,9 +127,12 @@ object NotificationHelper {
         }
 
         // Push button: enabled only when peers are online
-        val hasPeers = peers.isNotEmpty()
-        remoteViews.setFloat(R.id.btn_push, "setAlpha", if (hasPeers) 1f else 0.38f)
-        if (hasPeers) {
+        // 推送按钮按「可送达」启用，而不是按「在线」：对端 socket 断了但仍能被 FCM 唤醒时，
+        // 推送是有意义的，不该禁用。所以会出现「黄灯 + 按钮可用」的组合——这是正确的，
+        // 黄灯表示没有真正在线的对端，按钮可用表示还有 FCM 这条路。
+        val canPush = state == ConnectionState.CONNECTED && reachablePeerCount > 0
+        remoteViews.setFloat(R.id.btn_push, "setAlpha", if (canPush) 1f else 0.38f)
+        if (canPush) {
             remoteViews.setOnClickPendingIntent(R.id.btn_push, pushPendingIntent)
         }
 
@@ -130,6 +148,11 @@ object NotificationHelper {
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
     }
+
+    /** 把时间戳格式化成本地习惯的 HH:mm。 */
+    private fun formatClockTime(timestampMs: Long): String =
+        java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+            .format(java.util.Date(timestampMs))
 
     private fun bitmapFromVector(context: Context, vectorResId: Int, color: Int): Bitmap? {
         return try {
@@ -161,10 +184,13 @@ object NotificationHelper {
         context: Context,
         state: ConnectionState,
         serverAddress: String,
-        peerCount: Int = 0,
-        peers: List<String> = emptyList()
+        reachablePeerCount: Int = 0,
+        peers: List<String> = emptyList(),
+        lastVerifiedAtMs: Long = 0L
     ) {
-        val notification = buildServiceNotification(context, state, serverAddress, peerCount, peers)
+        val notification = buildServiceNotification(
+            context, state, serverAddress, reachablePeerCount, peers, lastVerifiedAtMs
+        )
         val notificationManager = context.getSystemService(NotificationManager::class.java)
         notificationManager.notify(SERVICE_NOTIFICATION_ID, notification)
     }
