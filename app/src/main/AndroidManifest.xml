@@ -12,6 +12,18 @@
 
     <!-- 前台服务权限 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- ClipboardService 用 connectedDevice：它维持的是与一台配对 PC 的长连接。
+         **不能用 dataSync**——从 targetSdk 35 起，dataSync 前台服务每 24 小时累计
+         只能跑 6 小时，超额后 startForeground() 直接抛
+         ForegroundServiceStartNotAllowedException，而且只有用户手动把 app 切到
+         前台才会重置配额。看门狗和 FCM 唤醒在那种状态下全部失效。 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- connectedDevice 的前置条件：必须声明 CHANGE_NETWORK_STATE / CHANGE_WIFI_STATE /
+         CHANGE_WIFI_MULTICAST_STATE / NFC / TRANSMIT_IR 之一，否则 startForeground()
+         会抛 SecurityException。这里取 CHANGE_NETWORK_STATE（普通权限，无需运行时授权）。 -->
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <!-- 仍然需要：UploadWorker / DownloadWorker 走 WorkManager 的前台任务，
+         它们是真正的短时数据传输，dataSync 才是正确类型，也跑不满 6 小时配额。 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <!-- 通知权限 (Android 13+) -->
@@ -82,11 +94,13 @@
             </intent-filter>
         </activity>
 
-        <!-- 前台服务 -->
+        <!-- 前台服务：维持与配对 PC 的长连接，故为 connectedDevice 而非 dataSync。
+             官方定义："与需要蓝牙、NFC、IR、USB 或网络连接的外部设备交互"。
+             关键差别是 connectedDevice 没有运行时长上限，dataSync 有 6 小时/24 小时。 -->
         <service
             android:name=".service.ClipboardService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="connectedDevice" />
 
         <!-- FCM 推送服务（后台保活双通道：app 被冻结/杀死时仍可收文本/被唤醒） -->
         <service

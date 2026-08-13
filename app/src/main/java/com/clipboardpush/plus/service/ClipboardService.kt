@@ -1,5 +1,6 @@
 package com.clipboardpush.plus.service
 
+import android.app.Notification
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -11,6 +12,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
@@ -503,21 +505,76 @@ class ClipboardService : Service() {
                 currentPeers
             )
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(
-                    NotificationHelper.getServiceNotificationId(),
-                    notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-                )
-            } else {
-                startForeground(NotificationHelper.getServiceNotificationId(), notification)
-            }
+            if (!startForegroundSafely(notification)) return@launch
 
             acquireWakeLocks()
             ConnectionWatchdog.schedule(this@ClipboardService)
             startNotificationTicker()
             connectRelay()
         }
+    }
+
+    /**
+     * 进入前台。**必须捕获异常**——`startForeground()` 会被系统拒绝的场景不止一种
+     * （前台服务类型配额耗尽、后台启动限制等），而未捕获的
+     * [android.app.ForegroundServiceStartNotAllowedException] 会直接把进程崩掉。
+     * 偏偏调用方常常是 FCM 唤醒或看门狗闹钟这类后台路径，崩在那里用户根本看不见，
+     * 只会觉得"又莫名其妙断了"。
+     *
+     * 失败时必须 [stopSelf]：本服务是被 `startForegroundService()` 拉起来的，
+     * 若 5 秒内既没进前台也没停掉，系统会抛 ForegroundServiceDidNotStartInTimeException。
+     *
+     * @return true 表示确实进入前台，调用方可以继续；false 表示已被系统拒绝并已自行停止。
+     */
+    private fun startForegroundSafely(notification: Notification): Boolean = try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NotificationHelper.getServiceNotificationId(),
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+            )
+        } else {
+            startForeground(NotificationHelper.getServiceNotificationId(), notification)
+        }
+        true
+    } catch (e: Exception) {
+        Log.e(TAG, "startForeground was rejected by the system; giving up this attempt", e)
+        updateState(ConnectionState.ERROR)
+        stopSelf()
+        false
+    }
+
+    /**
+     * 前台服务超时回调（Android 15 新增，Android 16 起改用带类型的重载）。
+     *
+     * `connectedDevice` 没有运行时长上限，正常永远不会走到这里；留作兜底——万一
+     * 类型被改回带配额的类型、或系统将来给更多类型加上限制，**收到回调后必须在
+     * 几秒内把服务停掉**，否则系统抛 ForegroundServiceDidNotStopInTimeException 崩溃。
+     */
+    @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
+    override fun onTimeout(startId: Int) {
+        Log.w(TAG, "FGS timeout (startId=$startId) — stopping before the system force-crashes us")
+        stopForTimeout()
+    }
+
+    @RequiresApi(Build.VERSION_CODES.BAKLAVA)
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Log.w(TAG, "FGS timeout (startId=$startId, type=$fgsType) — stopping before the system force-crashes us")
+        stopForTimeout()
+    }
+
+    /**
+     * 超时专用的收尾，**刻意不同于** [stopService]：不置 `userStopped`，也不取消看门狗闹钟。
+     * 超时是系统强制的，不是用户的意思，所以要留着闹钟——配额恢复后它还得把服务拉回来。
+     */
+    private fun stopForTimeout() {
+        cancelAutoReconnect()
+        stopNotificationTicker()
+        releaseWakeLocks()
+        relayRepository.disconnect()
+        updateState(ConnectionState.DISCONNECTED)
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     private fun stopService() {
